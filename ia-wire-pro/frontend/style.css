@@ -1,0 +1,336 @@
+/* IA Wire Pro - UI (S22 Plus friendly) */
+:root{
+  --bg:#070B12;
+  --navy:#0A1628;
+  --navy2:#0C1A2F;
+  --text:#E6EEF9;
+  --muted:#A7B2C6;
+  --orange:#FF8C42;
+  --cyan:#00D9FF;
+  --gold:#FFC857;
+  --stroke: rgba(255,255,255,.08);
+  --shadow: 0 18px 40px rgba(0,0,0,.55);
+  --radius: 26px;
+}
+
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  background: radial-gradient(1200px 900px at 60% -10%, rgba(0,217,255,.14), transparent 55%),
+              radial-gradient(900px 700px at 10% 15%, rgba(255,140,66,.10), transparent 60%),
+              linear-gradient(180deg, #05070C, var(--bg));
+  color:var(--text);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a{ color:inherit; }
+
+.app{
+  width:min(430px, 100%);
+  margin:0 auto;
+  padding:18px 16px 28px;
+}
+
+.topbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin:4px 2px 14px;
+}
+
+.brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  opacity:.92;
+  font-weight:700;
+  letter-spacing:.2px;
+}
+
+.badge{
+  font-size:12px;
+  color:rgba(255,255,255,.72);
+  padding:6px 10px;
+  border:1px solid var(--stroke);
+  background: rgba(255,255,255,.04);
+  border-radius:999px;
+  backdrop-filter: blur(8px);
+}
+
+.icon-btn{
+  width:40px; height:40px;
+  border-radius:999px;
+  border:1px solid var(--stroke);
+  background: rgba(255,255,255,.04);
+  display:grid; place-items:center;
+  box-shadow: 0 10px 20px rgba(0,0,0,.25);
+  cursor:pointer;
+}
+.icon-btn:active{ transform: translateY(1px); }
+
+.card{
+  position:relative;
+  border-radius: var(--radius);
+  padding:16px;
+  margin:14px 0;
+  background:
+    linear-gradient(180deg, rgba(12,26,47,.92), rgba(10,22,40,.92)) padding-box,
+    linear-gradient(135deg, rgba(255,140,66,.9), rgba(0,217,255,.9)) border-box;
+  border:2px solid transparent;
+  box-shadow: var(--shadow);
+  overflow:hidden;
+}
+
+.card::before{
+  content:"";
+  position:absolute; inset:-2px;
+  background: radial-gradient(700px 240px at 60% 0%, rgba(0,217,255,.12), transparent 60%),
+              radial-gradient(700px 240px at 10% 30%, rgba(255,140,66,.10), transparent 65%);
+  pointer-events:none;
+}
+
+.card-inner{ position:relative; z-index:1; }
+
+.hero{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height: 250px;
+  text-align:center;
+  padding:22px 14px 18px;
+}
+
+.hero .bolt{
+  font-size:54px;
+  color: var(--gold);
+  filter: drop-shadow(0 10px 14px rgba(0,0,0,.35));
+  margin-bottom:10px;
+}
+
+.hero .title{
+  font-weight:900;
+  font-size:44px;
+  letter-spacing:.8px;
+  line-height:1;
+  margin: 0 0 8px;
+}
+
+.hero .title .ai{
+  background: linear-gradient(180deg, var(--orange), #ffb37a);
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+}
+.hero .title .wire{
+  background: linear-gradient(180deg, #8FE9FF, var(--cyan));
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+}
+
+.hero .subtitle{
+  margin: 10px 0 0;
+  font-size: 22px;
+  line-height: 1.25;
+  color: rgba(231,241,255,.62);
+  font-weight: 600;
+}
+
+.section-title{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  font-size:28px;
+  font-weight:900;
+  letter-spacing:.2px;
+  margin: 6px 0 14px;
+}
+
+.section-title .camera{
+  width:34px; height:34px;
+  border-radius:12px;
+  display:grid; place-items:center;
+  border:1px solid var(--stroke);
+  background: rgba(255,255,255,.05);
+  box-shadow: 0 12px 22px rgba(0,0,0,.25);
+}
+
+.section-title span{
+  background: linear-gradient(180deg, var(--orange), #ffb37a);
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+}
+
+.upload{
+  border-radius: 20px;
+  border: 2px dashed rgba(255,140,66,.45);
+  background: rgba(255,255,255,.03);
+  padding: 22px 16px;
+  min-height: 210px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:16px;
+}
+
+.upload .plug{
+  width:86px; height:86px;
+  border-radius: 22px;
+  display:grid; place-items:center;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.08);
+  box-shadow: 0 20px 30px rgba(0,0,0,.30);
+  font-size:44px;
+  filter: grayscale(.15);
+}
+
+.upload .hint{
+  font-size: 28px;
+  font-weight: 900;
+  color: rgba(231,241,255,.90);
+  letter-spacing:.2px;
+}
+
+.upload .subhint{
+  margin-top:-6px;
+  font-size: 14px;
+  color: rgba(231,241,255,.55);
+}
+
+.btn{
+  width:100%;
+  border:none;
+  border-radius: 18px;
+  padding: 14px 16px;
+  font-weight: 800;
+  font-size: 16px;
+  cursor:pointer;
+  background: rgba(255,255,255,.06);
+  color: var(--text);
+  border:1px solid rgba(255,255,255,.10);
+}
+.btn:active{ transform: translateY(1px); }
+
+.btn-primary{
+  background: linear-gradient(135deg, rgba(255,140,66,.95), rgba(0,217,255,.95));
+  color: #061018;
+  border: none;
+  box-shadow: 0 16px 30px rgba(0,0,0,.35);
+}
+
+.footer-space{ height: 14px; }
+
+/* Mobile fine tuning (S22 Plus) */
+@media (max-width: 430px){
+  .app{ padding:16px 14px 24px; }
+  .hero{ min-height: 235px; }
+  .hero .title{ font-size: 42px; }
+  .hero .subtitle{ font-size: 21px; }
+  .section-title{ font-size: 27px; }
+}
+/* ====== PHONE FRAME (S22 Plus style) ====== */
+:root{
+  --bg:#070B12;
+  --phoneW: 412px;         /* S22 Plus feel */
+  --phoneH: 915px;
+  --radius: 28px;
+}
+
+html, body { height: 100%; }
+
+body{
+  margin: 0;
+  background: radial-gradient(1200px 800px at 50% -20%, #0f213e 0%, var(--bg) 55%, #04060b 100%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  color: #fff;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+/* Contenitore “telefono” */
+.phone{
+  width: var(--phoneW);
+  height: min(var(--phoneH), calc(100vh - 40px));
+  border-radius: var(--radius);
+  overflow: hidden;
+  position: relative;
+
+  /* cornice */
+  box-shadow:
+    0 20px 60px rgba(0,0,0,.65),
+    0 0 0 10px rgba(255,255,255,.06),
+    0 0 0 1px rgba(255,255,255,.08) inset;
+
+  background: #0A1628;
+}
+
+/* “notch” semplice (opzionale ma bellissimo) */
+.phone::before{
+  content:"";
+  position:absolute;
+  top:10px;
+  left:50%;
+  transform:translateX(-50%);
+  width: 140px;
+  height: 24px;
+  border-radius: 14px;
+  background: rgba(0,0,0,.35);
+  border: 1px solid rgba(255,255,255,.08);
+  z-index: 5;
+}
+
+/* area interna scrollabile se serve */
+.phone > *{
+  position: relative;
+  z-index: 2;
+}
+/* ====== RESPONSIVE: si adatta al dispositivo ====== */
+
+/* Su schermi piccoli (telefono vero): niente cornice, full screen */
+@media (max-width: 480px) {
+  body {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .phone {
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .phone::before { display: none; } /* togli notch finto */
+}
+
+/* Su schermi medi (tablet / finestra stretta): scala senza tagliare */
+@media (min-width: 481px) and (max-width: 900px) {
+  .phone {
+    width: min(420px, 92vw);
+    height: min(900px, calc(100vh - 40px));
+  }
+}
+
+/* Su schermi grandi (PC): telefono “pulito” e centrato */
+@media (min-width: 901px) {
+  .phone {
+    width: 412px;
+    height: min(915px, calc(100vh - 40px));
+  }
+}
+@media (min-width: 768px) {
+    body {
+        background: #0A1628;
+    }
+
+    .app-container {
+        margin-top: 40px;
+    }
+}
