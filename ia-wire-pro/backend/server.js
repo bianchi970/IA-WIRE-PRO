@@ -178,9 +178,10 @@ Ogni risposta deve indicare:
 // =========================
 // SERVE FRONTEND (per Render)
 // =========================
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/index.html'));
+app.get("/", (req, res) => {
+  res.send("IA Wire Pro Backend attivo");
 });
+
 
 // =========================
 // START SERVER
@@ -196,3 +197,4 @@ app.listen(PORT, () => {
 ╚══════════════════════════════════════╝
   `);
 });
+Fix route wildcard
