@@ -69,14 +69,15 @@ app.post("/api/chat", async (req, res) => {
     });
 
     const result = await anthropic.messages.create({
-      model: process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022",
-      max_tokens: 1200,
-      system: systemPrompt,
-      messages: [
-        ...safeHistory,
-        { role: "user", content: userContent },
-      ],
-    });
+  model: process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-latest",
+  max_tokens: 1200,
+  system: systemPrompt,
+  messages: [
+    ...safeHistory,
+    { role: "user", content: userContent },
+  ],
+});
+
 
     const reply = result?.content?.[0]?.text || "Nessuna risposta dall'AI";
     res.json({ reply });
