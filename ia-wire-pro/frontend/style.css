@@ -334,3 +334,15 @@ body{
         margin-top: 40px;
     }
 }
+html, body { height: 100%; }
+
+.phone{
+  min-height: 100vh;
+  width: min(420px, 95vw);
+  margin: 0 auto;
+}
+
+@media (min-width: 900px){
+  .phone{ width: 520px; }
+}
+
