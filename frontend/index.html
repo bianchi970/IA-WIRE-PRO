@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Assistente Tecnico Virtuale</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="app">
+    <!-- HEADER -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">⚡</div>
+        <div class="titles">
+          <div class="title">Assistente Tecnico Virtuale</div>
+          <div class="subtitle">IA Wire Pro • Visione + Diagnosi</div>
+        </div>
+      </div>
+
+      <div class="status-pill" id="statusPill">Pronto</div>
+    </header>
+
+    <!-- MAIN -->
+    <main class="main">
+      <section class="card">
+        <div class="card-head">
+          <h2>Analisi Tecnica test</h2>
+          <p>Carica una foto (quadro, caldaia, domotica, citofono, ecc.) e descrivi cosa succede.</p>
+        </div>
+
+        <!-- UPLOAD -->
+        <div class="upload">
+          <input id="imageInput" type="file" accept="image/*" />
+
+          <label class="upload-box" for="imageInput">
+            <div class="upload-icon">📷</div>
+            <div class="upload-text">
+              <div class="upload-title">Carica Foto</div>
+              <div class="upload-sub">JPG/PNG • consigliato ravvicinato e ben illuminato</div>
+            </div>
+          </label>
+
+          <div class="preview-wrap" id="previewWrap" hidden>
+            <img id="previewImg" alt="Anteprima" />
+            <button class="btn ghost" id="removeImageBtn" type="button">Rimuovi</button>
+          </div>
+        </div>
+
+        <!-- CHAT -->
+        <div class="chat" id="chat">
+          <div class="msg ai">
+            <div class="bubble">
+Ciao! 👋
+1) Scrivi il problema in modo pratico (cosa succede + quando).
+2) Se puoi, carica una foto nitida.
+
+Io rispondo sempre con:
+• Osservazioni (fatti)
+• Ipotesi (con livello di certezza)
+• Verifiche consigliate (passo passo)
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- COMPOSER -->
+    <footer class="composer">
+      <form id="chatForm" class="composer-inner">
+        <textarea
+          id="textInput"
+          placeholder="Scrivi qui il problema (es. ‘salta il differenziale quando accendo forno’)..."
+          rows="1"
+        ></textarea>
+
+        <button class="btn primary" id="sendBtn" type="submit">Invia</button>
+      </form>
+
+      <div class="hint">
+        Suggerimento: aggiungi marca/modello e cosa hai già verificato ✅
+      </div>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
