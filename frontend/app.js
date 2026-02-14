@@ -144,9 +144,17 @@
 
   // ====== API ENDPOINTS ======
   const candidateEndpoints = () => {
-    const origin = window.location.origin;
-    return [`${origin}/api/chat`, `http://localhost:3000/api/chat`];
-  };
+  // In produzione (Render) usa solo same-origin
+  if (location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+    return [`${location.origin}/api/chat`];
+  }
+  // In locale puoi tenere il fallback
+  return [
+    `${location.origin}/api/chat`,
+    `http://localhost:3000/api/chat`,
+  ];
+};
+
 
   const postToChatApi = async (payload, imageBlob, signal) => {
     const formData = new FormData();
