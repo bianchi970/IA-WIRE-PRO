@@ -11,7 +11,6 @@ const app = express();
 /* =========================
    CONFIG
 ========================= */
-
 const PORT = process.env.PORT || 3000;
 const FRONTEND_DIR = path.join(__dirname, "../frontend");
 
@@ -19,13 +18,13 @@ const JSON_LIMIT = "12mb";
 const MULTIPART_FILE_MAX = 5 * 1024 * 1024; // 5MB
 const HISTORY_MAX = 6;
 
-// 🔥 HARD CODE MODEL (niente env, niente newline)
-const MODEL = "claude-3-haiku-20240307";
+// ✅ TRIM anti-newline (RISOLUTIVO)
+const ANTHROPIC_API_KEY = (process.env.ANTHROPIC_API_KEY || "").trim();
+const MODEL = (process.env.ANTHROPIC_MODEL || "claude-3-haiku-20240307").trim();
 
 /* =========================
    MIDDLEWARE
 ========================= */
-
 app.use(cors());
 app.use(express.json({ limit: JSON_LIMIT }));
 app.use(express.urlencoded({ extended: true, limit: JSON_LIMIT }));
@@ -44,25 +43,21 @@ app.use((req, res, next) => {
 /* =========================
    HELPERS
 ========================= */
-
 function normalizeHistory(history) {
   const safe = Array.isArray(history) ? history.slice(-HISTORY_MAX) : [];
   return safe
     .filter((m) => m && (m.role === "user" || m.role === "assistant"))
     .map((m) => ({
       role: m.role,
-      content: typeof m.content === "string"
-        ? m.content
-        : String(m.content ?? "")
+      content: typeof m.content === "string" ? m.content : String(m.content ?? ""),
     }));
 }
 
 function extractReplyText(result) {
   if (!result || !Array.isArray(result.content)) return "Nessuna risposta";
-
   return result.content
-    .filter(b => b.type === "text")
-    .map(b => b.text)
+    .filter((b) => b.type === "text")
+    .map((b) => b.text)
     .join("\n")
     .trim();
 }
@@ -74,24 +69,23 @@ function bytesToMB(bytes) {
 /* =========================
    ROUTES
 ========================= */
-
 app.get("/api/health", (req, res) => {
   res.json({
     status: "OK",
-    anthropicConfigured: !!process.env.ANTHROPIC_API_KEY,
+    anthropicConfigured: !!ANTHROPIC_API_KEY,
     model: MODEL,
     jsonLimit: JSON_LIMIT,
-    multipartMaxMB: bytesToMB(MULTIPART_FILE_MAX)
+    multipartMaxMB: bytesToMB(MULTIPART_FILE_MAX),
   });
 });
 
 app.post("/api/chat", upload.single("image"), async (req, res) => {
   try {
-    if (!process.env.ANTHROPIC_API_KEY) {
+    if (!ANTHROPIC_API_KEY) {
       return res.status(500).json({ error: "ANTHROPIC_API_KEY mancante" });
     }
 
-    const message = (req.body?.message || "").toString();
+    const message = (req.body?.message || "").toString().trim();
     if (!message) {
       return res.status(400).json({ error: "Campo 'message' obbligatorio" });
     }
@@ -118,21 +112,18 @@ app.post("/api/chat", upload.single("image"), async (req, res) => {
 
     userContent.push({ type: "text", text: message });
 
-    const anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-    });
+    // ✅ Log di conferma (poi lo possiamo togliere)
+    console.log("MODEL_USED:", JSON.stringify(MODEL));
+
+    const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
     const result = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 1000,
-      messages: [
-        ...normalizeHistory(history),
-        { role: "user", content: userContent },
-      ],
+      messages: [...normalizeHistory(history), { role: "user", content: userContent }],
     });
 
     return res.json({ reply: extractReplyText(result) });
-
   } catch (err) {
     console.error("❌ Errore /api/chat:", err);
     return res.status(500).json({
@@ -149,8 +140,7 @@ app.get("/", (req, res) => {
 /* =========================
    START
 ========================= */
-
 app.listen(PORT, () => {
   console.log("🚀 IA Wire Pro avviato");
-  console.log("Modello:", MODEL);
+  console.log("MODEL_USED:", JSON.stringify(MODEL));
 });
