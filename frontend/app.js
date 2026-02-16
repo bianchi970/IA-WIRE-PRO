@@ -1,10 +1,10 @@
-/* IA Wire Pro - app.js (V1 stable, ASCII-safe)
-   - Stable composer
-   - Image compression (1200px, JPEG 0.7)
-   - Preview + remove
-   - UI states: Ready / Analyzing / Processing / Error
-   - Chat bubbles + autoscroll
-   - MULTIPART upload: /api/chat (message + image)
+/* IA Wire Pro - app.js (V1 stable, ITA)
+   - Composer stabile (ENTER senza requestSubmit)
+   - Compressione immagini (1200px, JPEG 0.7)
+   - Anteprima + rimuovi
+   - Stati UI: Pronto / Analisi / Elaborazione / Errore
+   - Bolle chat + autoscroll
+   - Upload MULTIPART: /api/chat (message + image)
    - Fallback endpoints: same-origin + localhost:3000
 */
 
@@ -58,7 +58,7 @@
     return { wrapper, bubble };
   };
 
-  const addTyping = (label = "Working...") => {
+  const addTyping = (label = "Sto lavorando...") => {
     const { bubble } = addMessage("ai", label);
     if (bubble) bubble.dataset.typing = "1";
     return bubble;
@@ -89,7 +89,7 @@
     new Promise((resolve, reject) => {
       const r = new FileReader();
       r.onload = () => resolve(r.result);
-      r.onerror = () => reject(new Error("FileReader error"));
+      r.onerror = () => reject(new Error("Errore FileReader"));
       r.readAsDataURL(file);
     });
 
@@ -97,7 +97,7 @@
     new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("Image load error"));
+      img.onerror = () => reject(new Error("Errore caricamento immagine"));
       img.src = src;
     });
 
@@ -131,7 +131,7 @@
       canvas.toBlob((b) => resolve(b), "image/jpeg", quality);
     });
 
-    if (!blob) throw new Error("Compression failed");
+    if (!blob) throw new Error("Compressione fallita");
     return { blob, previewUrl: canvas.toDataURL("image/jpeg", 0.82) };
   };
 
@@ -144,24 +144,23 @@
 
   // ====== API ENDPOINTS ======
   const candidateEndpoints = () => {
-  // In produzione (Render) usa solo same-origin
-  if (location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
-    return [`${location.origin}/api/chat`];
-  }
-  // In locale puoi tenere il fallback
-  return [
-    `${location.origin}/api/chat`,
-    `http://localhost:3000/api/chat`,
-  ];
-};
-
+    // In produzione (Render) usa solo same-origin
+    if (location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+      return [`${location.origin}/api/chat`];
+    }
+    // In locale: fallback
+    return [
+      `${location.origin}/api/chat`,
+      `http://localhost:3000/api/chat`,
+    ];
+  };
 
   const postToChatApi = async (payload, imageBlob, signal) => {
     const formData = new FormData();
     formData.append("message", payload.text || "");
     if (payload.history) formData.append("history", JSON.stringify(payload.history));
     if (payload.mode) formData.append("mode", payload.mode);
-    if (imageBlob) formData.append("image", imageBlob, "photo.jpg");
+    if (imageBlob) formData.append("image", imageBlob, "photo.jpg"); // campo: "image"
 
     let lastErr = null;
 
@@ -190,12 +189,12 @@
       }
     }
 
-    throw lastErr || new Error("Network error");
+    throw lastErr || new Error("Errore di rete");
   };
 
   const ensureStructuredAnswer = (text) => {
     const t = (text || "").trim();
-    if (!t) return "Empty reply from server.";
+    if (!t) return "Risposta vuota dal server.";
 
     const hasSections = /OSSERVAZIONE|ANALISI|VERIFICHE|CERTEZZA|POSSIBILI/i.test(t);
     if (hasSections) return t;
@@ -205,23 +204,26 @@
       t,
       "",
       "LIVELLO DI CERTEZZA:",
-      "Da verificare (non strutturato).",
+      "Da verificare (risposta non strutturata).",
       "",
       "VERIFICHE CONSIGLIATE:",
-      "1) Aggiungi una foto piu ravvicinata e nitida.",
-      "2) Scrivi marca/modello e cosa hai gia provato.",
+      "1) Aggiungi una foto più ravvicinata e nitida.",
+      "2) Scrivi marca/modello e cosa hai già provato.",
     ].join("\n");
   };
 
   // ====== EVENTS ======
   if (textInput) {
     textInput.addEventListener("input", autoResize);
+
+    // ENTER invia (senza requestSubmit) | SHIFT+ENTER va a capo
     textInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        chatForm?.requestSubmit();
+        sendBtn?.click();
       }
     });
+
     autoResize();
   }
 
@@ -230,7 +232,7 @@
       const file = e.target.files?.[0];
       if (!file) return;
 
-      setStatus("Analyzing image...");
+      setStatus("Analisi immagine...");
       setBusy(true);
 
       try {
@@ -240,14 +242,14 @@
         if (previewImg) previewImg.src = previewUrl;
         if (previewWrap) previewWrap.hidden = false;
 
-        setStatus("Ready");
+        setStatus("Pronto");
       } catch (err) {
         console.error(err);
         clearImage();
-        setStatus("Error");
-        addMessage("ai", "Cannot read/compress the photo. Try another image.");
+        setStatus("Errore");
+        addMessage("ai", "Non riesco a leggere/comprimere la foto. Prova con un’altra immagine.");
         await sleep(650);
-        setStatus("Ready");
+        setStatus("Pronto");
       } finally {
         setBusy(false);
       }
@@ -257,56 +259,72 @@
   if (removeImageBtn) {
     removeImageBtn.addEventListener("click", () => {
       clearImage();
-      setStatus("Ready");
+      setStatus("Pronto");
     });
   }
 
   if (chatForm) {
-    chatForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
+    // blocca submit classico
+    chatForm.addEventListener("submit", (e) => e.preventDefault());
 
+    // invio con bottone (gestione centralizzata)
+    sendBtn?.addEventListener("click", async () => {
       const text = (textInput?.value || "").trim();
       if (!text && !selectedBlob) return;
 
+      // Mostra subito il messaggio utente
       if (text) addMessage("user", text);
 
-      if (textInput) {
-        textInput.value = "";
-        autoResize();
-      }
+      // Salva testo in caso di errore (così non “sparisce”)
+      const pendingText = text;
 
       setBusy(true);
-      setStatus(selectedBlob ? "Analyzing..." : "Processing...");
+      setStatus(selectedBlob ? "Analisi..." : "Elaborazione...");
 
       removeTyping();
-      addTyping(selectedBlob ? "Analyzing the photo..." : "Replying...");
+      addTyping(selectedBlob ? "Sto analizzando la foto..." : "Sto rispondendo...");
 
       if (abortCtrl) abortCtrl.abort();
       abortCtrl = new AbortController();
 
       try {
         const { data } = await postToChatApi({ text, history: [] }, selectedBlob, abortCtrl.signal);
+
         removeTyping();
         addMessage("ai", ensureStructuredAnswer(data.reply || ""));
+
+        // ✅ svuota input SOLO a invio riuscito
+        if (textInput) {
+          textInput.value = "";
+          autoResize();
+        }
+
         clearImage();
-        setStatus("Ready");
+        setStatus("Pronto");
       } catch (err) {
         console.error(err);
         removeTyping();
 
-        const msg = String(err?.message || err || "Error");
-        if (msg.includes("HTTP 413")) addMessage("ai", "Photo too large. Reduce it and retry (target < 4-5MB).");
-        else if (msg.includes("HTTP 400")) addMessage("ai", "Bad request. Check that 'message' is sent correctly.");
-        else addMessage("ai", "Error: " + msg);
+        const msg = String(err?.message || err || "Errore");
 
-        setStatus("Error");
+        // ✅ ripristina testo se errore
+        if (textInput && pendingText) {
+          textInput.value = pendingText;
+          autoResize();
+        }
+
+        if (msg.includes("HTTP 413")) addMessage("ai", "Foto troppo grande. Riducila e riprova (obiettivo < 4-5MB).");
+        else if (msg.includes("HTTP 400")) addMessage("ai", "Richiesta non valida. Controlla che il campo 'message' venga inviato correttamente.");
+        else addMessage("ai", "Errore: " + msg);
+
+        setStatus("Errore");
         await sleep(750);
-        setStatus("Ready");
+        setStatus("Pronto");
       } finally {
         setBusy(false);
       }
     });
   }
 
-  setStatus("Ready");
+  setStatus("Pronto");
 })();

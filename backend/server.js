@@ -93,6 +93,26 @@ function shortErr(err) {
 }
 
 /* =========================
+   ROUTING (C)
+========================= */
+function choosePrimaryProvider(message, hasImage) {
+  if (hasImage) return "anthropic";
+
+  const m = (message || "").toLowerCase();
+  const longText = m.length > 600;
+
+  const keywords = [
+    "calcola", "calcolare", "formula", "passaggi", "risultato",
+    "caduta di tensione", "cei", "norma", "dimensionamento",
+    "selettività", "corrente", "potenza", "kw", "mm2", "mm²",
+    "magnetotermico", "differenziale", "sezione", "cavo", "v", "a"
+  ];
+
+  const isTechnical = keywords.some(k => m.includes(k));
+  return (longText || isTechnical) ? "openai" : "anthropic";
+}
+
+/* =========================
    ROUTES
 ========================= */
 app.get("/api/health", (req, res) => {
@@ -108,7 +128,7 @@ app.get("/api/health", (req, res) => {
 });
 
 /* =========================
-   CHAT (Claude) + fallback OpenAI + optional DB save
+   CHAT (Routing C) + fallback + optional DB save
 ========================= */
 app.post("/api/chat", upload.single("image"), async (req, res) => {
   try {
@@ -132,8 +152,9 @@ app.post("/api/chat", upload.single("image"), async (req, res) => {
 
     // Prepara contenuto utente (testo + immagine opzionale) per Claude
     const userContent = [];
+    const hasImage = !!req.file?.buffer;
 
-    if (req.file?.buffer) {
+    if (hasImage) {
       userContent.push({
         type: "image",
         source: {
@@ -148,45 +169,29 @@ app.post("/api/chat", upload.single("image"), async (req, res) => {
 
     const normalizedHistory = normalizeHistory(history);
 
-    // -------------------------
-    // 1) PROVA CLAUDE
-    // -------------------------
+    // ✅ ROUTING C: scegli primario
+    const primary = choosePrimaryProvider(message, hasImage);
+    console.log("ROUTING_PRIMARY:", primary);
+
     let replyText = null;
     let providerUsed = null;
 
-    if (anthropic) {
-      try {
-        console.log("MODEL_USED (Claude):", JSON.stringify(MODEL));
-
-        const result = await anthropic.messages.create({
-          model: MODEL,
-          max_tokens: 1000,
-          messages: [...normalizedHistory, { role: "user", content: userContent }],
-        });
-
-        replyText = extractReplyText(result);
-        providerUsed = "anthropic";
-      } catch (claudeErr) {
-        console.warn("⚠ Claude failed, trying OpenAI fallback:", shortErr(claudeErr));
-      }
-    } else {
-      console.warn("⚠ Anthropic non configurato, provo OpenAI direttamente.");
+    async function callAnthropic() {
+      if (!anthropic) throw new Error("Anthropic non configurato");
+      console.log("MODEL_USED (Claude):", JSON.stringify(MODEL));
+      const result = await anthropic.messages.create({
+        model: MODEL,
+        max_tokens: 1000,
+        messages: [...normalizedHistory, { role: "user", content: userContent }],
+      });
+      return extractReplyText(result);
     }
 
-    // -------------------------
-    // 2) FALLBACK OPENAI
-    // -------------------------
-    if (!replyText) {
-      if (!openai) {
-        return res.status(500).json({
-          error: "Nessun provider disponibile (manca ANTHROPIC_API_KEY e/o OPENAI_API_KEY)",
-        });
-      }
-
+    async function callOpenAI() {
+      if (!openai) throw new Error("OpenAI non configurato");
       console.log("MODEL_USED (OpenAI):", JSON.stringify(OPENAI_MODEL));
 
-      // OpenAI: niente immagine in questo fallback (per ora).
-      // Se vuoi anche vision su OpenAI lo facciamo dopo, ma intanto fallback sicuro.
+      // OpenAI: testo-only (per ora). L'immagine resta su Claude.
       const oaMessages = [
         ...normalizedHistory.map((m) => ({ role: m.role, content: m.content })),
         { role: "user", content: message },
@@ -197,8 +202,39 @@ app.post("/api/chat", upload.single("image"), async (req, res) => {
         messages: oaMessages,
       });
 
-      replyText = completion?.choices?.[0]?.message?.content?.trim() || "Nessuna risposta";
-      providerUsed = "openai";
+      return completion?.choices?.[0]?.message?.content?.trim() || "Nessuna risposta";
+    }
+
+    // 1) PRIMARY
+    try {
+      if (primary === "openai") {
+        replyText = await callOpenAI();
+        providerUsed = "openai";
+      } else {
+        replyText = await callAnthropic();
+        providerUsed = "anthropic";
+      }
+    } catch (primaryErr) {
+      console.warn("⚠ Primary failed:", shortErr(primaryErr));
+    }
+
+    // 2) FALLBACK
+    if (!replyText) {
+      try {
+        if (primary === "openai") {
+          replyText = await callAnthropic();
+          providerUsed = "anthropic";
+        } else {
+          replyText = await callOpenAI();
+          providerUsed = "openai";
+        }
+      } catch (fallbackErr) {
+        console.error("❌ Fallback failed:", shortErr(fallbackErr));
+        return res.status(500).json({
+          error: "Entrambi i provider falliscono",
+          details: fallbackErr?.message || String(fallbackErr),
+        });
+      }
     }
 
     // ✅ Se conversation_id valido, salva user + assistant nel DB
@@ -221,7 +257,7 @@ app.post("/api/chat", upload.single("image"), async (req, res) => {
       }
     }
 
-    return res.json({ reply: replyText, provider: providerUsed });
+    return res.json({ reply: replyText, provider: providerUsed, primary });
   } catch (err) {
     console.error("❌ Errore /api/chat:", shortErr(err));
     return res.status(500).json({
