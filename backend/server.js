@@ -130,12 +130,131 @@ app.get("/api/health", (req, res) => {
 /* =========================
    CHAT (Routing C) + fallback + optional DB save
 ========================= */
+// Aggiungi in alto se non c'è già:
+const fs = require("fs/promises");
+
+// (Consigliato) Inizializza i client UNA SOLA VOLTA (fuori dalle route)
+const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+
+// System prompt ITA (mettilo dove tieni i prompt)
+const SYSTEM_PROMPT = `
+Sei un assistente tecnico professionale multi-settore (elettrico, idraulico, termico, domotica, solare, VoIP).
+
+REGOLE OBBLIGATORIE:
+- Rispondi sempre e solo in italiano (mai inglese).
+- Non dare mai diagnosi certe con dati insufficienti.
+- Se mancano info, chiedi dettagli tecnici specifici.
+- Struttura sempre la risposta così:
+
+OSSERVAZIONE:
+ANALISI:
+LIVELLO DI CERTEZZA:
+VERIFICHE CONSIGLIATE:
+`;
+
+// =====================
+// POST /api/chat (MULTIPART)
+// =====================
 app.post("/api/chat", upload.single("image"), async (req, res) => {
   try {
     const message = (req.body?.message || "").toString().trim();
-    if (!message) {
-      return res.status(400).json({ error: "Campo 'message' obbligatorio" });
+    if (!message && !req.file) {
+      return res.status(400).json({ error: "Serve 'message' oppure una 'image'." });
     }
+
+    // ----- prepara immagine (se presente) -----
+    let imagePart = null; // { type:"image_url", image_url:{ url:"data:image/jpeg;base64,..." } }
+
+    if (req.file) {
+      let buf = req.file.buffer;
+
+      // Se multer salva su disco (req.file.path), leggi da path
+      if (!buf && req.file.path) {
+        buf = await fs.readFile(req.file.path);
+      }
+
+      if (buf) {
+        const mime = req.file.mimetype || "image/jpeg";
+        const b64 = buf.toString("base64");
+        const dataUrl = `data:${mime};base64,${b64}`;
+        imagePart = { type: "image_url", image_url: { url: dataUrl } };
+      }
+    }
+
+    // ----- costruisci contenuto utente -----
+    const userContent = imagePart
+      ? [
+          { type: "text", text: message || "Analizza la foto e dimmi cosa vedi." },
+          imagePart,
+        ]
+      : message;
+
+    // =====================
+    // 1) PRIMARY: OPENAI
+    // =====================
+    try {
+      // ✅ NOTA: il modello va QUI, NON negli headers
+      const resp = await openai.chat.completions.create({
+        model: OPENAI_MODEL || "gpt-4o-mini",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: userContent },
+        ],
+        temperature: 0.2,
+      });
+
+      const reply = resp?.choices?.[0]?.message?.content?.trim() || "";
+      return res.json({ provider: "openai", reply });
+    } catch (errOpenAI) {
+      console.error("❌ OpenAI primary failed:", errOpenAI?.message || errOpenAI);
+    }
+
+    // =====================
+    // 2) FALLBACK: ANTHROPIC
+    // =====================
+    const aResp = await anthropic.messages.create({
+      model: MODEL || "claude-3-haiku-20240307",
+      max_tokens: 800,
+      system: SYSTEM_PROMPT,
+      messages: [
+        {
+          role: "user",
+          content: Array.isArray(userContent)
+            ? userContent.map((p) => {
+                // Anthropic accetta "text" e "image" (base64)
+                if (p.type === "text") return { type: "text", text: p.text };
+
+                // Convertiamo image_url data:... in image base64 per Claude
+                const url = p.image_url?.url || "";
+                const m = url.match(/^data:(.+);base64,(.+)$/);
+                if (m) {
+                  return {
+                    type: "image",
+                    source: { type: "base64", media_type: m[1], data: m[2] },
+                  };
+                }
+                return { type: "text", text: "(Immagine non valida)" };
+              })
+            : [{ type: "text", text: userContent }],
+        },
+      ],
+    });
+
+    const reply =
+      (aResp?.content || [])
+        .filter((c) => c.type === "text")
+        .map((c) => c.text)
+        .join("\n")
+        .trim() || "";
+
+    return res.json({ provider: "anthropic", reply });
+  } catch (err) {
+    console.error("❌ /api/chat fatal:", err);
+    return res.status(500).json({ error: "Errore server /api/chat", details: String(err?.message || err) });
+  }
+});
+
 
     // history (opzionale)
     let history = [];
