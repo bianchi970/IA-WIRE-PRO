@@ -5,6 +5,7 @@
    - Stati UI: Pronto / Analisi / Elaborazione / Errore
    - Bolle chat + autoscroll
    - Upload MULTIPART: /api/chat (message + image)
+   - Persistenza conversazione: conversation_id (localStorage) + reload messaggi da DB
    - Fallback endpoints: same-origin + localhost:3000
 */
 
@@ -26,6 +27,9 @@
   // ====== STATE ======
   let selectedBlob = null;
   let abortCtrl = null;
+
+  // ✅ Persistenza conversation_id
+  let conversationId = localStorage.getItem("conversation_id") || null;
 
   // ====== UTIL ======
   const setStatus = (label) => {
@@ -56,6 +60,11 @@
 
     chat.scrollTo({ top: chat.scrollHeight, behavior: "smooth" });
     return { wrapper, bubble };
+  };
+
+  const clearChatUi = () => {
+    if (!chat) return;
+    chat.innerHTML = "";
   };
 
   const addTyping = (label = "Sto lavorando...") => {
@@ -143,16 +152,18 @@
   };
 
   // ====== API ENDPOINTS ======
-  const candidateEndpoints = () => {
-    // In produzione (Render) usa solo same-origin
-    if (location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
-      return [`${location.origin}/api/chat`];
-    }
-    // In locale: fallback
-    return [
-      `${location.origin}/api/chat`,
-      `http://localhost:3000/api/chat`,
-    ];
+  const isProdSameOrigin = () =>
+    location.hostname !== "localhost" && location.hostname !== "127.0.0.1";
+
+  const candidateChatEndpoints = () => {
+    if (isProdSameOrigin()) return [`${location.origin}/api/chat`];
+    return [`${location.origin}/api/chat`, `http://localhost:3000/api/chat`];
+  };
+
+  const candidateMessagesEndpoints = (convId) => {
+    const path = `/api/conversations/${encodeURIComponent(convId)}/messages`;
+    if (isProdSameOrigin()) return [`${location.origin}${path}`];
+    return [`${location.origin}${path}`, `http://localhost:3000${path}`];
   };
 
   const postToChatApi = async (payload, imageBlob, signal) => {
@@ -160,11 +171,15 @@
     formData.append("message", payload.text || "");
     if (payload.history) formData.append("history", JSON.stringify(payload.history));
     if (payload.mode) formData.append("mode", payload.mode);
+
+    // ✅ conversation_id (persistenza)
+    if (payload.conversation_id) formData.append("conversation_id", String(payload.conversation_id));
+
     if (imageBlob) formData.append("image", imageBlob, "photo.jpg"); // campo: "image"
 
     let lastErr = null;
 
-    for (const url of candidateEndpoints()) {
+    for (const url of candidateChatEndpoints()) {
       try {
         const res = await fetch(url, { method: "POST", body: formData, signal });
         const ct = res.headers.get("content-type") || "";
@@ -192,6 +207,22 @@
     throw lastErr || new Error("Errore di rete");
   };
 
+  const getConversationMessages = async (convId) => {
+    let lastErr = null;
+    for (const url of candidateMessagesEndpoints(convId)) {
+      try {
+        const res = await fetch(url, { method: "GET" });
+        const ct = res.headers.get("content-type") || "";
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = ct.includes("application/json") ? await res.json() : [];
+        return data;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error("Impossibile caricare messaggi");
+  };
+
   const ensureStructuredAnswer = (text) => {
     const t = (text || "").trim();
     if (!t) return "Risposta vuota dal server.";
@@ -210,6 +241,44 @@
       "1) Aggiungi una foto più ravvicinata e nitida.",
       "2) Scrivi marca/modello e cosa hai già provato.",
     ].join("\n");
+  };
+
+  // ✅ Render messaggi ricaricati dal DB (formati diversi gestiti)
+  const renderLoadedMessages = (raw) => {
+    const arr =
+      Array.isArray(raw) ? raw :
+      Array.isArray(raw?.messages) ? raw.messages :
+      Array.isArray(raw?.rows) ? raw.rows :
+      [];
+
+    if (!arr.length) return;
+
+    clearChatUi();
+
+    for (const m of arr) {
+      const role = (m.role || m.sender || m.type || "").toLowerCase();
+      const content =
+        m.content ?? m.text ?? m.message ?? m.body ?? "";
+
+      if (role.includes("assistant") || role === "ai") addMessage("ai", ensureStructuredAnswer(String(content)));
+      else addMessage("user", String(content));
+    }
+  };
+
+  // ✅ Load conversazione al refresh
+  const loadConversationOnStart = async () => {
+    if (!conversationId) return;
+    try {
+      setStatus("Carico chat...");
+      const data = await getConversationMessages(conversationId);
+      renderLoadedMessages(data);
+      setStatus("Pronto");
+    } catch (e) {
+      // Se la conversazione non esiste più o ID invalido, riparti pulito
+      console.warn("Load conversation failed:", e?.message || e);
+      // Non cancelliamo subito l'ID: lo cancelliamo solo se proprio non esiste/404
+      setStatus("Pronto");
+    }
   };
 
   // ====== EVENTS ======
@@ -288,7 +357,18 @@
       abortCtrl = new AbortController();
 
       try {
-        const { data } = await postToChatApi({ text, history: [] }, selectedBlob, abortCtrl.signal);
+        const { data } = await postToChatApi(
+          { text, history: [], conversation_id: conversationId },
+          selectedBlob,
+          abortCtrl.signal
+        );
+
+        // ✅ Aggancia e salva conversation_id dal backend (nomi diversi gestiti)
+        const newConvId = data?.conversation_id ?? data?.conversationId ?? data?.id ?? null;
+        if (newConvId) {
+          conversationId = String(newConvId);
+          localStorage.setItem("conversation_id", conversationId);
+        }
 
         removeTyping();
         addMessage("ai", ensureStructuredAnswer(data.reply || ""));
@@ -327,4 +407,7 @@
   }
 
   setStatus("Pronto");
+
+  // ✅ al caricamento pagina: prova a ricaricare la conversazione
+  loadConversationOnStart();
 })();
