@@ -371,7 +371,8 @@
         }
 
         removeTyping();
-        addMessage("ai", ensureStructuredAnswer(data.reply || ""));
+        addMessage("ai", ensureStructuredAnswer(data.answer || data.reply || ""));
+
 
         // ✅ svuota input SOLO a invio riuscito
         if (textInput) {
