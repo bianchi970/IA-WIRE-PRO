@@ -1,5 +1,5 @@
 /**
- * IA WIRE PRO - server.js (Stable)
+ * IA WIRE PRO - server.js (NASA Stable)
  * Node + Express + (Anthropic / OpenAI) + Multer + Static Frontend
  */
 
@@ -34,6 +34,9 @@ const ANTHROPIC_MODEL = (process.env.ANTHROPIC_MODEL || "claude-3-haiku-20240307
 const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || "").trim();
 const OPENAI_MODEL = (process.env.OPENAI_MODEL || "gpt-4o-mini").trim();
 
+// Modalità formato (sempre consigliata)
+const STRICT_FORMAT = String(process.env.STRICT_FORMAT || "1").trim() !== "0";
+
 // =========================
 // MIDDLEWARE
 // =========================
@@ -61,10 +64,8 @@ const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 // =========================
 function pickProvider(providerRequested) {
   const p = String(providerRequested || "").toLowerCase().trim();
-
   if (p === "anthropic" || p === "claude") return "anthropic";
   if (p === "openai" || p === "gpt") return "openai";
-
   if (openai) return "openai";
   if (anthropic) return "anthropic";
   return "none";
@@ -102,6 +103,84 @@ function parseHistory(raw) {
   return [];
 }
 
+// Forza struttura IA Wire Pro se il modello non la rispetta
+function ensureWireFormat(text) {
+  const t = String(text || "").trim();
+  if (!t) return "OSSERVAZIONI:\n- (risposta vuota)\n\nIPOTESI:\n- Non verificabile\n\nLIVELLO DI CERTEZZA:\n- Non verificabile\n\nRISCHI / SICUREZZA:\n- Verifica alimentazioni e isolamento prima di intervenire.\n\nVERIFICHE CONSIGLIATE:\n1) Fornisci una foto più ravvicinata e nitida.\n2) Indica marca/modello e cosa hai già verificato.\n\nPROSSIMO PASSO:\n- Inviami un dettaglio del componente principale.";
+
+  // Se già contiene le sezioni principali, la lasciamo
+  const hasObs = /OSSERVAZIONI\s*:/i.test(t);
+  const hasHyp = /IPOTESI\s*:/i.test(t);
+  const hasCert = /LIVELLO DI CERTEZZA\s*:/i.test(t);
+  const hasChecks = /VERIFICHE CONSIGLIATE\s*:/i.test(t);
+
+  if (hasObs && hasHyp && hasCert && hasChecks) return t;
+
+  // Altrimenti incapsula in formato Wire Pro
+  return [
+    "OSSERVAZIONI:",
+    "- " + t.replace(/\n+/g, "\n- "),
+    "",
+    "IPOTESI:",
+    "- Probabile: serve conferma con misure/foto aggiuntive.",
+    "",
+    "LIVELLO DI CERTEZZA:",
+    "- Probabile (dati incompleti).",
+    "",
+    "RISCHI / SICUREZZA:",
+    "- Prima di intervenire: togli alimentazione, verifica assenza tensione, usa DPI adeguati.",
+    "",
+    "VERIFICHE CONSIGLIATE:",
+    "1) Invia una foto più ravvicinata dei raccordi/valvole e del manometro (leggibile).",
+    "2) Indica pressione letta, temperatura, e cosa succede quando apri/chiudi le valvole.",
+    "3) Se impianto termico: indica caldaia/pompa/modello e presenza vaso espansione/valvola sicurezza.",
+    "",
+    "PROSSIMO PASSO:",
+    "- Rispondi alle 3 verifiche sopra o carica un secondo scatto con zoom sul manometro."
+  ].join("\n");
+}
+
+// Prompt “NASA” (struttura obbligatoria + affidabilità)
+function buildSystemPrompt() {
+  return [
+    "SEI: IA WIRE PRO (Assistente Tecnico Virtuale).",
+    "OBIETTIVO: aiutare in modo tecnico, prudente e verificabile.",
+    "",
+    "REGOLE DI AFFIDABILITÀ (OBBLIGATORIE):",
+    "1) Non dare mai una diagnosi certa con dati incompleti.",
+    "2) Se mancano informazioni, fai domande mirate e proponi verifiche misurabili.",
+    "3) Dichiara SEMPRE un livello di certezza tra: Confermato / Probabile / Non verificabile.",
+    "4) Evidenzia SEMPRE rischi e sicurezza (elettrico, gas, pressione, acqua calda, tagli, ecc.).",
+    "5) Se vedi più interpretazioni possibili, elenca ipotesi in ordine di probabilità.",
+    "6) Se l’utente è operativo sul campo: dai passi brevi, sequenziali, senza saltare.",
+    "",
+    "FORMATO RISPOSTA (OBBLIGATORIO, SEMPRE):",
+    "OSSERVAZIONI:",
+    "- ...",
+    "",
+    "IPOTESI:",
+    "- (Confermato/Probabile/Non verificabile) ...",
+    "",
+    "LIVELLO DI CERTEZZA:",
+    "- Confermato | Probabile | Non verificabile",
+    "",
+    "RISCHI / SICUREZZA:",
+    "- ...",
+    "",
+    "VERIFICHE CONSIGLIATE:",
+    "1) ...",
+    "2) ...",
+    "3) ...",
+    "",
+    "PROSSIMO PASSO:",
+    "- una sola azione concreta da fare adesso.",
+    "",
+    "NOTE:",
+    "- Se l’utente ha inviato una foto: descrivi cosa si vede (fatti) prima delle ipotesi.",
+    "- Evita “potrebbe essere tutto”: scegli 2-3 ipotesi realistiche e spiega come discriminare."
+  ].join("\n");
+}
+
 // =========================
 // ROUTES
 // =========================
@@ -111,6 +190,7 @@ app.get("/health", (req, res) => {
     time: new Date().toISOString(),
     signature: "ROCCO-CHAT-V2",
     runningFile: "backend/server.js",
+    strictFormat: STRICT_FORMAT,
     providers: {
       anthropicConfigured: Boolean(anthropic),
       openaiConfigured: Boolean(openai),
@@ -121,8 +201,6 @@ app.get("/health", (req, res) => {
     },
   });
 });
-
-
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(FRONTEND_DIR, "index.html"));
@@ -145,15 +223,10 @@ app.get("/", (req, res) => {
  */
 app.post("/api/chat", upload.single("image"), async (req, res) => {
   try {
-    // LOG minimali: se non li vedi su Render, stai eseguendo un file diverso
-    console.log("📥 /api/chat content-type:", req.headers["content-type"]);
-    console.log("📥 /api/chat body keys:", Object.keys(req.body || {}));
-    console.log("📥 /api/chat has file:", !!req.file, req.file ? req.file.fieldname : "(no-file)");
-
     const body = req.body || {};
 
     // Message: sempre stringa
-    let message = String(body.message || "").trim();
+    let message = String(body.message || body.text || "").trim();
 
     // History: robusto
     const history = parseHistory(body.history);
@@ -161,28 +234,31 @@ app.post("/api/chat", upload.single("image"), async (req, res) => {
     // Provider: stringa/null
     const provider = body.provider || null;
 
-    // Immagine: può arrivare da multer (file) oppure da JSON (imageBase64)
+    // Immagine: multer (file) oppure JSON (imageBase64)
     let imageBase64 = null;
 
-    // 1) file binario
     if (req.file && req.file.buffer) {
       const base64 = req.file.buffer.toString("base64");
       imageBase64 = "data:" + req.file.mimetype + ";base64," + base64;
     }
 
-    // 2) base64 dal body (fallback)
     if (!imageBase64) {
-      // accetta varianti nome campo
       const rawB64 = body.imageBase64 || body.image_base64 || body.image || null;
       if (rawB64) imageBase64 = String(rawB64);
     }
 
-    // Se c'è immagine ma message vuoto, mettiamo un prompt minimo
-    if (!message && imageBase64) message = "Analizza l'immagine e dimmi cosa vedi.";
+    if (!message && imageBase64) message = "Analizza l'immagine e descrivi cosa vedi in modo tecnico.";
 
-    // Guardia 400: serve almeno testo o immagine
     if (!message && !imageBase64) {
-      return res.status(400).json({ error: "Manca 'message' o immagine." });
+      return res.status(400).json({
+        error: "Manca 'message' o immagine.",
+        signature: "ROCCO-CHAT-V2",
+        debug: {
+          contentType: req.headers["content-type"],
+          bodyKeys: Object.keys(req.body || {}),
+          hasFile: !!req.file,
+        },
+      });
     }
 
     const chosen = pickProvider(provider);
@@ -193,11 +269,7 @@ app.post("/api/chat", upload.single("image"), async (req, res) => {
     }
 
     const shortHistory = safeSliceHistory(history);
-
-    const systemPrompt =
-      "Sei IA WIRE PRO, un assistente tecnico. " +
-      "Prima di concludere, fai verifiche e indica il livello di certezza (confermato/probabile/non verificabile). " +
-      "Se mancano dati, fai domande mirate. Priorità assoluta: sicurezza.";
+    const systemPrompt = buildSystemPrompt();
 
     // =========================
     // OPENAI
@@ -211,7 +283,6 @@ app.post("/api/chat", upload.single("image"), async (req, res) => {
 
       if (imageBase64) {
         const img = normalizeBase64Image(imageBase64);
-        // img potrebbe essere null se base64 invalido
         if (img && img.mime && img.b64) {
           messages.push({
             role: "user",
@@ -221,17 +292,17 @@ app.post("/api/chat", upload.single("image"), async (req, res) => {
             ],
           });
         } else {
-          // fallback solo testo
           messages.push({ role: "user", content: message });
         }
       } else {
         messages.push({ role: "user", content: message });
       }
 
+      // “NASA”: più deterministico
       const completion = await openai.chat.completions.create({
         model: OPENAI_MODEL,
         messages: messages,
-        temperature: 0.2,
+        temperature: 0.1,
       });
 
       let answer = "Nessuna risposta.";
@@ -241,7 +312,15 @@ app.post("/api/chat", upload.single("image"), async (req, res) => {
         }
       } catch (_) {}
 
-      return res.json({ ok: true, provider: "openai", model: OPENAI_MODEL, answer: answer });
+      if (STRICT_FORMAT) answer = ensureWireFormat(answer);
+
+      return res.json({
+        ok: true,
+        provider: "openai",
+        model: OPENAI_MODEL,
+        answer: answer,
+        signature: "ROCCO-CHAT-V2",
+      });
     }
 
     // =========================
@@ -273,20 +352,28 @@ app.post("/api/chat", upload.single("image"), async (req, res) => {
 
       const resp = await anthropic.messages.create({
         model: ANTHROPIC_MODEL,
-        max_tokens: 800,
-        temperature: 0.2,
+        max_tokens: 900,
+        temperature: 0.1,
         system: systemPrompt,
         messages: msgs,
       });
 
       const blocks = Array.isArray(resp && resp.content) ? resp.content : [];
-      const answer = blocks
+      let answer = blocks
         .filter((b) => b && b.type === "text")
         .map((b) => b.text)
         .join("\n")
         .trim() || "Nessuna risposta.";
 
-      return res.json({ ok: true, provider: "anthropic", model: ANTHROPIC_MODEL, answer: answer });
+      if (STRICT_FORMAT) answer = ensureWireFormat(answer);
+
+      return res.json({
+        ok: true,
+        provider: "anthropic",
+        model: ANTHROPIC_MODEL,
+        answer: answer,
+        signature: "ROCCO-CHAT-V2",
+      });
     }
 
     return res.status(500).json({ error: "Provider non gestito." });
@@ -294,7 +381,8 @@ app.post("/api/chat", upload.single("image"), async (req, res) => {
     console.error("❌ /api/chat error:", err);
     return res.status(500).json({
       error: "Errore interno /api/chat",
-      details: (err && err.message) ? err.message : String(err),
+      details: err && err.message ? err.message : String(err),
+      signature: "ROCCO-CHAT-V2",
     });
   }
 });
@@ -311,7 +399,7 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     });
   } catch (err) {
     console.error("❌ /api/upload error:", err);
-    res.status(500).json({ error: "Errore upload", details: (err && err.message) ? err.message : String(err) });
+    res.status(500).json({ error: "Errore upload", details: err && err.message ? err.message : String(err) });
   }
 });
 
@@ -324,7 +412,7 @@ app.use((req, res, next) => {
 // Error handler
 app.use((err, req, res, next) => {
   console.error("❌ Express error:", err);
-  res.status(500).json({ error: "Errore server", details: (err && err.message) ? err.message : String(err) });
+  res.status(500).json({ error: "Errore server", details: err && err.message ? err.message : String(err) });
 });
 
 // =========================
@@ -338,6 +426,7 @@ app.listen(PORT, () => {
       "╠══════════════════════════════════════╣\n" +
       "║  Porta: " + String(PORT).padEnd(29) + "║\n" +
       "║  Frontend: " + String(FRONTEND_DIR).padEnd(26) + "║\n" +
+      "║  StrictFormat: " + String(STRICT_FORMAT ? "ON" : "OFF").padEnd(21) + "║\n" +
       "║  OpenAI: " + String(OPENAI_API_KEY ? "✅ Configurata" : "❌ Mancante").padEnd(27) + "║\n" +
       "║  Anthropic: " + String(ANTHROPIC_API_KEY ? "✅ Configurata" : "❌ Mancante").padEnd(24) + "║\n" +
       "╚══════════════════════════════════════╝\n"
