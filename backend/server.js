@@ -109,6 +109,8 @@ app.get("/health", (req, res) => {
   res.json({
     ok: true,
     time: new Date().toISOString(),
+    signature: "ROCCO-CHAT-V2",
+    runningFile: "backend/server.js",
     providers: {
       anthropicConfigured: Boolean(anthropic),
       openaiConfigured: Boolean(openai),
@@ -119,6 +121,8 @@ app.get("/health", (req, res) => {
     },
   });
 });
+
+
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(FRONTEND_DIR, "index.html"));

@@ -1,233 +1,261 @@
-/* IA Wire Pro - app.js (V1 stable, ITA)
-   - Composer stabile (ENTER senza requestSubmit)
-   - Compressione immagini (1200px, JPEG 0.7)
-   - Anteprima + rimuovi
-   - Stati UI: Pronto / Analisi / Elaborazione / Errore
-   - Bolle chat + autoscroll
-   - Upload MULTIPART: /api/chat (message + image)
-   - Persistenza conversazione: conversation_id (localStorage) + reload messaggi da DB
-   - Fallback endpoints: same-origin + localhost:3000
+/* IA Wire Pro - app.js (V1 stable, ITA) - compatibile (no ?., no ??, no replaceAll)
+   FIX 400: se invii solo foto, forza message="Analizza la foto"
 */
 
-(() => {
+(function () {
   "use strict";
 
   // ====== DOM ======
-  const chat = document.getElementById("chat");
-  const chatForm = document.getElementById("chatForm");
-  const textInput = document.getElementById("textInput");
-  const sendBtn = document.getElementById("sendBtn");
-  const statusPill = document.getElementById("statusPill");
+  var chat = document.getElementById("chat");
+  var chatForm = document.getElementById("chatForm");
+  var textInput = document.getElementById("textInput");
+  var sendBtn = document.getElementById("sendBtn");
+  var statusPill = document.getElementById("statusPill");
 
-  const imageInput = document.getElementById("imageInput");
-  const previewWrap = document.getElementById("previewWrap");
-  const previewImg = document.getElementById("previewImg");
-  const removeImageBtn = document.getElementById("removeImageBtn");
+  var imageInput = document.getElementById("imageInput");
+  var previewWrap = document.getElementById("previewWrap");
+  var previewImg = document.getElementById("previewImg");
+  var removeImageBtn = document.getElementById("removeImageBtn");
 
   // ====== STATE ======
-  let selectedBlob = null;
-  let abortCtrl = null;
+  var selectedBlob = null;
+  var abortCtrl = null;
 
-  // ✅ Persistenza conversation_id
-  let conversationId = localStorage.getItem("conversation_id") || null;
+  // Persistenza conversation_id
+  var conversationId = localStorage.getItem("conversation_id") || null;
 
   // ====== UTIL ======
-  const setStatus = (label) => {
+  function setStatus(label) {
     if (!statusPill) return;
     statusPill.textContent = label;
-  };
+  }
 
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  function sleep(ms) {
+    return new Promise(function (r) { setTimeout(r, ms); });
+  }
 
-  const escapeHtml = (s) =>
-    String(s ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;");
+  function escapeHtml(s) {
+    var str = String(s == null ? "" : s);
+    // sostituti “compatibili”
+    str = str.replace(/&/g, "&amp;");
+    str = str.replace(/</g, "&lt;");
+    str = str.replace(/>/g, "&gt;");
+    return str;
+  }
 
-  const addMessage = (role, text) => {
+  function addMessage(role, text) {
     if (!chat) return { wrapper: null, bubble: null };
 
-    const wrapper = document.createElement("div");
-    wrapper.className = `msg ${role}`;
+    var wrapper = document.createElement("div");
+    wrapper.className = "msg " + role;
 
-    const bubble = document.createElement("div");
+    var bubble = document.createElement("div");
     bubble.className = "bubble";
     bubble.innerHTML = escapeHtml(text);
 
     wrapper.appendChild(bubble);
     chat.appendChild(wrapper);
 
-    chat.scrollTo({ top: chat.scrollHeight, behavior: "smooth" });
-    return { wrapper, bubble };
-  };
-
-  const clearChatUi = () => {
-    if (!chat) return;
-    chat.innerHTML = "";
-  };
-
-  const addTyping = (label = "Sto lavorando...") => {
-    const { bubble } = addMessage("ai", label);
-    if (bubble) bubble.dataset.typing = "1";
-    return bubble;
-  };
-
-  const removeTyping = () => {
-    if (!chat) return;
-    chat.querySelectorAll(".bubble[data-typing='1']").forEach((n) => {
-      n.closest(".msg")?.remove();
-    });
-  };
-
-  const autoResize = () => {
-    if (!textInput) return;
-    textInput.style.height = "auto";
-    const max = 140;
-    textInput.style.height = Math.min(textInput.scrollHeight, max) + "px";
-  };
-
-  const setBusy = (busy) => {
-    if (sendBtn) sendBtn.disabled = !!busy;
-    if (textInput) textInput.disabled = !!busy;
-    if (imageInput) imageInput.disabled = !!busy;
-  };
-
-  // ====== IMAGE COMPRESSION ======
-  const fileToDataUrl = (file) =>
-    new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(r.result);
-      r.onerror = () => reject(new Error("Errore FileReader"));
-      r.readAsDataURL(file);
-    });
-
-  const loadImage = (src) =>
-    new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("Errore caricamento immagine"));
-      img.src = src;
-    });
-
-  const compressImageFile = async (file, opts = {}) => {
-    const maxSize = opts.maxSize ?? 1200;
-    const quality = opts.quality ?? 0.7;
-
-    const dataUrl = await fileToDataUrl(file);
-    const img = await loadImage(dataUrl);
-
-    let { width, height } = img;
-
-    if (width > height && width > maxSize) {
-      height = Math.round(height * (maxSize / width));
-      width = maxSize;
-    } else if (height >= width && height > maxSize) {
-      width = Math.round(width * (maxSize / height));
-      height = maxSize;
+    // autoscroll
+    try {
+      chat.scrollTo({ top: chat.scrollHeight, behavior: "smooth" });
+    } catch (e) {
+      chat.scrollTop = chat.scrollHeight;
     }
 
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
+    return { wrapper: wrapper, bubble: bubble };
+  }
 
-    const ctx = canvas.getContext("2d", { alpha: false });
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, width, height);
-    ctx.drawImage(img, 0, 0, width, height);
+  function clearChatUi() {
+    if (!chat) return;
+    chat.innerHTML = "";
+  }
 
-    const blob = await new Promise((resolve) => {
-      canvas.toBlob((b) => resolve(b), "image/jpeg", quality);
+  function addTyping(label) {
+    var t = label || "Sto lavorando...";
+    var r = addMessage("ai", t);
+    if (r.bubble) r.bubble.setAttribute("data-typing", "1");
+    return r.bubble;
+  }
+
+  function removeTyping() {
+    if (!chat) return;
+    var nodes = chat.querySelectorAll(".bubble[data-typing='1']");
+    for (var i = 0; i < nodes.length; i++) {
+      var bubble = nodes[i];
+      var msg = bubble.closest ? bubble.closest(".msg") : bubble.parentNode;
+      if (msg && msg.parentNode) msg.parentNode.removeChild(msg);
+    }
+  }
+
+  function autoResize() {
+    if (!textInput) return;
+    textInput.style.height = "auto";
+    var max = 140;
+    var h = textInput.scrollHeight;
+    textInput.style.height = (h > max ? max : h) + "px";
+  }
+
+  function setBusy(busy) {
+    var b = !!busy;
+    if (sendBtn) sendBtn.disabled = b;
+    if (textInput) textInput.disabled = b;
+    if (imageInput) imageInput.disabled = b;
+  }
+
+  // ====== IMAGE COMPRESSION ======
+  function fileToDataUrl(file) {
+    return new Promise(function (resolve, reject) {
+      var r = new FileReader();
+      r.onload = function () { resolve(r.result); };
+      r.onerror = function () { reject(new Error("Errore FileReader")); };
+      r.readAsDataURL(file);
     });
+  }
 
-    if (!blob) throw new Error("Compressione fallita");
-    return { blob, previewUrl: canvas.toDataURL("image/jpeg", 0.82) };
-  };
+  function loadImage(src) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      img.onload = function () { resolve(img); };
+      img.onerror = function () { reject(new Error("Errore caricamento immagine")); };
+      img.src = src;
+    });
+  }
 
-  const clearImage = () => {
+  function compressImageFile(file, opts) {
+    opts = opts || {};
+    var maxSize = (opts.maxSize != null ? opts.maxSize : 1200);
+    var quality = (opts.quality != null ? opts.quality : 0.7);
+
+    return fileToDataUrl(file)
+      .then(function (dataUrl) {
+        return loadImage(dataUrl).then(function (img) {
+          var width = img.width;
+          var height = img.height;
+
+          if (width > height && width > maxSize) {
+            height = Math.round(height * (maxSize / width));
+            width = maxSize;
+          } else if (height >= width && height > maxSize) {
+            width = Math.round(width * (maxSize / height));
+            height = maxSize;
+          }
+
+          var canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+
+          var ctx = canvas.getContext("2d", { alpha: false });
+          ctx.fillStyle = "#000";
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+
+          return new Promise(function (resolve, reject) {
+            canvas.toBlob(function (b) {
+              if (!b) return reject(new Error("Compressione fallita"));
+              resolve({ blob: b, previewUrl: canvas.toDataURL("image/jpeg", 0.82) });
+            }, "image/jpeg", quality);
+          });
+        });
+      });
+  }
+
+  function clearImage() {
     selectedBlob = null;
     if (imageInput) imageInput.value = "";
     if (previewWrap) previewWrap.hidden = true;
     if (previewImg) previewImg.src = "";
-  };
+  }
 
   // ====== API ENDPOINTS ======
-  const isProdSameOrigin = () =>
-    location.hostname !== "localhost" && location.hostname !== "127.0.0.1";
+  function isProdSameOrigin() {
+    return location.hostname !== "localhost" && location.hostname !== "127.0.0.1";
+  }
 
-  const candidateChatEndpoints = () => {
-    if (isProdSameOrigin()) return [`${location.origin}/api/chat`];
-    return [`${location.origin}/api/chat`, `http://localhost:3000/api/chat`];
-  };
+  function candidateChatEndpoints() {
+    if (isProdSameOrigin()) return [location.origin + "/api/chat"];
+    return [location.origin + "/api/chat", "http://localhost:3000/api/chat"];
+  }
 
-  const candidateMessagesEndpoints = (convId) => {
-    const path = `/api/conversations/${encodeURIComponent(convId)}/messages`;
-    if (isProdSameOrigin()) return [`${location.origin}${path}`];
-    return [`${location.origin}${path}`, `http://localhost:3000${path}`];
-  };
+  function candidateMessagesEndpoints(convId) {
+    var path = "/api/conversations/" + encodeURIComponent(convId) + "/messages";
+    if (isProdSameOrigin()) return [location.origin + path];
+    return [location.origin + path, "http://localhost:3000" + path];
+  }
 
-  const postToChatApi = async (payload, imageBlob, signal) => {
-    const formData = new FormData();
-    formData.append("message", payload.text || "");
-    if (payload.history) formData.append("history", JSON.stringify(payload.history));
-    if (payload.mode) formData.append("mode", payload.mode);
+  function postToChatApi(payload, imageBlob, signal) {
+    var formData = new FormData();
 
-    // ✅ conversation_id (persistenza)
-    if (payload.conversation_id) formData.append("conversation_id", String(payload.conversation_id));
+    var rawMsg = ((payload && (payload.message || payload.text)) || "").trim();
+    var safeMsg = rawMsg || (imageBlob ? "Analizza la foto" : "");
+    formData.append("message", safeMsg);
 
-    if (imageBlob) formData.append("image", imageBlob, "photo.jpg"); // campo: "image"
+    if (payload && payload.history) formData.append("history", JSON.stringify(payload.history));
+    if (payload && payload.mode) formData.append("mode", payload.mode);
+    if (payload && payload.conversation_id) formData.append("conversation_id", String(payload.conversation_id));
 
-    let lastErr = null;
+    if (imageBlob) formData.append("image", imageBlob, "photo.jpg");
 
-    for (const url of candidateChatEndpoints()) {
-      try {
-        const res = await fetch(url, { method: "POST", body: formData, signal });
-        const ct = res.headers.get("content-type") || "";
+    var urls = candidateChatEndpoints();
+    var lastErr = null;
 
-        if (!res.ok) {
-          let details = "";
-          try {
-            details = ct.includes("application/json")
-              ? JSON.stringify(await res.json())
-              : await res.text();
-          } catch (_) {}
-          throw new Error(`HTTP ${res.status} ${details}`.trim());
-        }
+    function tryOne(i) {
+      if (i >= urls.length) return Promise.reject(lastErr || new Error("Errore di rete"));
+      var url = urls[i];
 
-        const data = ct.includes("application/json")
-          ? await res.json().catch(() => ({}))
-          : { reply: await res.text().catch(() => "") };
-
-        return { data, urlUsed: url };
-      } catch (e) {
-        lastErr = e;
-      }
+      return fetch(url, { method: "POST", body: formData, signal: signal })
+        .then(function (res) {
+          var ct = res.headers.get("content-type") || "";
+          if (!res.ok) {
+            return (ct.indexOf("application/json") >= 0 ? res.json().catch(function(){return {};}) : res.text().catch(function(){return "";}))
+              .then(function (details) {
+                var d = (typeof details === "string") ? details : JSON.stringify(details);
+                throw new Error(("HTTP " + res.status + " " + d).trim());
+              });
+          }
+          return (ct.indexOf("application/json") >= 0 ? res.json().catch(function(){return {};}) : res.text().catch(function(){return "";}))
+            .then(function (data) {
+              if (typeof data === "string") data = { reply: data };
+              return { data: data, urlUsed: url };
+            });
+        })
+        .catch(function (e) {
+          lastErr = e;
+          return tryOne(i + 1);
+        });
     }
 
-    throw lastErr || new Error("Errore di rete");
-  };
+    return tryOne(0);
+  }
 
-  const getConversationMessages = async (convId) => {
-    let lastErr = null;
-    for (const url of candidateMessagesEndpoints(convId)) {
-      try {
-        const res = await fetch(url, { method: "GET" });
-        const ct = res.headers.get("content-type") || "";
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = ct.includes("application/json") ? await res.json() : [];
-        return data;
-      } catch (e) {
-        lastErr = e;
-      }
+  function getConversationMessages(convId) {
+    var urls = candidateMessagesEndpoints(convId);
+    var lastErr = null;
+
+    function tryOne(i) {
+      if (i >= urls.length) return Promise.reject(lastErr || new Error("Impossibile caricare messaggi"));
+      var url = urls[i];
+
+      return fetch(url, { method: "GET" })
+        .then(function (res) {
+          var ct = res.headers.get("content-type") || "";
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          return (ct.indexOf("application/json") >= 0 ? res.json() : Promise.resolve([]));
+        })
+        .catch(function (e) {
+          lastErr = e;
+          return tryOne(i + 1);
+        });
     }
-    throw lastErr || new Error("Impossibile caricare messaggi");
-  };
 
-  const ensureStructuredAnswer = (text) => {
-    const t = (text || "").trim();
+    return tryOne(0);
+  }
+
+  function ensureStructuredAnswer(text) {
+    var t = (text || "").trim();
     if (!t) return "Risposta vuota dal server.";
 
-    const hasSections = /OSSERVAZIONE|ANALISI|VERIFICHE|CERTEZZA|POSSIBILI/i.test(t);
+    var hasSections = /OSSERVAZIONE|ANALISI|VERIFICHE|CERTEZZA|POSSIBILI/i.test(t);
     if (hasSections) return t;
 
     return [
@@ -239,176 +267,163 @@
       "",
       "VERIFICHE CONSIGLIATE:",
       "1) Aggiungi una foto più ravvicinata e nitida.",
-      "2) Scrivi marca/modello e cosa hai già provato.",
+      "2) Scrivi marca/modello e cosa hai già provato."
     ].join("\n");
-  };
+  }
 
-  // ✅ Render messaggi ricaricati dal DB (formati diversi gestiti)
-  const renderLoadedMessages = (raw) => {
-    const arr =
-      Array.isArray(raw) ? raw :
-      Array.isArray(raw?.messages) ? raw.messages :
-      Array.isArray(raw?.rows) ? raw.rows :
-      [];
+  function renderLoadedMessages(raw) {
+    var arr = [];
+    if (Array.isArray(raw)) arr = raw;
+    else if (raw && Array.isArray(raw.messages)) arr = raw.messages;
+    else if (raw && Array.isArray(raw.rows)) arr = raw.rows;
 
     if (!arr.length) return;
 
     clearChatUi();
 
-    for (const m of arr) {
-      const role = (m.role || m.sender || m.type || "").toLowerCase();
-      const content =
-        m.content ?? m.text ?? m.message ?? m.body ?? "";
+    for (var i = 0; i < arr.length; i++) {
+      var m = arr[i] || {};
+      var role = String(m.role || m.sender || m.type || "").toLowerCase();
+      var content = (m.content != null ? m.content :
+        m.text != null ? m.text :
+        m.message != null ? m.message :
+        m.body != null ? m.body : "");
 
-      if (role.includes("assistant") || role === "ai") addMessage("ai", ensureStructuredAnswer(String(content)));
+      if (role.indexOf("assistant") >= 0 || role === "ai") addMessage("ai", ensureStructuredAnswer(String(content)));
       else addMessage("user", String(content));
     }
-  };
+  }
 
-  // ✅ Load conversazione al refresh
-  const loadConversationOnStart = async () => {
+  function loadConversationOnStart() {
     if (!conversationId) return;
-    try {
-      setStatus("Carico chat...");
-      const data = await getConversationMessages(conversationId);
-      renderLoadedMessages(data);
-      setStatus("Pronto");
-    } catch (e) {
-      // Se la conversazione non esiste più o ID invalido, riparti pulito
-      console.warn("Load conversation failed:", e?.message || e);
-      // Non cancelliamo subito l'ID: lo cancelliamo solo se proprio non esiste/404
-      setStatus("Pronto");
-    }
-  };
+    setStatus("Carico chat...");
+    return getConversationMessages(conversationId)
+      .then(function (data) {
+        renderLoadedMessages(data);
+        setStatus("Pronto");
+      })
+      .catch(function (e) {
+        console.warn("Load conversation failed:", e && e.message ? e.message : e);
+        setStatus("Pronto");
+      });
+  }
 
   // ====== EVENTS ======
   if (textInput) {
     textInput.addEventListener("input", autoResize);
-
-    // ENTER invia (senza requestSubmit) | SHIFT+ENTER va a capo
-    textInput.addEventListener("keydown", (e) => {
+    textInput.addEventListener("keydown", function (e) {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        sendBtn?.click();
+        if (sendBtn) sendBtn.click();
       }
     });
-
     autoResize();
   }
 
   if (imageInput) {
-    imageInput.addEventListener("change", async (e) => {
-      const file = e.target.files?.[0];
+    imageInput.addEventListener("change", function (e) {
+      var file = e.target.files && e.target.files[0];
       if (!file) return;
 
       setStatus("Analisi immagine...");
       setBusy(true);
 
-      try {
-        const { blob, previewUrl } = await compressImageFile(file, { maxSize: 1200, quality: 0.7 });
-        selectedBlob = blob;
-
-        if (previewImg) previewImg.src = previewUrl;
-        if (previewWrap) previewWrap.hidden = false;
-
-        setStatus("Pronto");
-      } catch (err) {
-        console.error(err);
-        clearImage();
-        setStatus("Errore");
-        addMessage("ai", "Non riesco a leggere/comprimere la foto. Prova con un’altra immagine.");
-        await sleep(650);
-        setStatus("Pronto");
-      } finally {
-        setBusy(false);
-      }
+      compressImageFile(file, { maxSize: 1200, quality: 0.7 })
+        .then(function (r) {
+          selectedBlob = r.blob;
+          if (previewImg) previewImg.src = r.previewUrl;
+          if (previewWrap) previewWrap.hidden = false;
+          setStatus("Pronto");
+        })
+        .catch(function (err) {
+          console.error(err);
+          clearImage();
+          setStatus("Errore");
+          addMessage("ai", "Non riesco a leggere/comprimere la foto. Prova con un’altra immagine.");
+          return sleep(650).then(function () { setStatus("Pronto"); });
+        })
+        .finally(function () {
+          setBusy(false);
+        });
     });
   }
 
   if (removeImageBtn) {
-    removeImageBtn.addEventListener("click", () => {
+    removeImageBtn.addEventListener("click", function () {
       clearImage();
       setStatus("Pronto");
     });
   }
 
   if (chatForm) {
-    // blocca submit classico
-    chatForm.addEventListener("submit", (e) => e.preventDefault());
+    chatForm.addEventListener("submit", function (e) { e.preventDefault(); });
 
-    // invio con bottone (gestione centralizzata)
-    sendBtn?.addEventListener("click", async () => {
-      const text = (textInput?.value || "").trim();
-      if (!text && !selectedBlob) return;
+    if (sendBtn) {
+      sendBtn.addEventListener("click", function () {
+        var text = (textInput && textInput.value ? textInput.value : "").trim();
+        if (!text && !selectedBlob) return;
+        if (!text && selectedBlob) text = "Analizza la foto";
 
-      // Mostra subito il messaggio utente
-      if (text) addMessage("user", text);
+        if (selectedBlob && text === "Analizza la foto") addMessage("user", "📷 Foto inviata");
+        else addMessage("user", text);
 
-      // Salva testo in caso di errore (così non “sparisce”)
-      const pendingText = text;
+        var pendingText = text;
 
-      setBusy(true);
-      setStatus(selectedBlob ? "Analisi..." : "Elaborazione...");
-
-      removeTyping();
-      addTyping(selectedBlob ? "Sto analizzando la foto..." : "Sto rispondendo...");
-
-      if (abortCtrl) abortCtrl.abort();
-      abortCtrl = new AbortController();
-
-      try {
-        const { data } = await postToChatApi(
-          { text, history: [], conversation_id: conversationId },
-          selectedBlob,
-          abortCtrl.signal
-        );
-
-        // ✅ Aggancia e salva conversation_id dal backend (nomi diversi gestiti)
-        const newConvId = data?.conversation_id ?? data?.conversationId ?? data?.id ?? null;
-        if (newConvId) {
-          conversationId = String(newConvId);
-          localStorage.setItem("conversation_id", conversationId);
-        }
+        setBusy(true);
+        setStatus(selectedBlob ? "Analisi..." : "Elaborazione...");
 
         removeTyping();
-        addMessage("ai", ensureStructuredAnswer(data.answer || data.reply || ""));
+        addTyping(selectedBlob ? "Sto analizzando la foto..." : "Sto rispondendo...");
 
+        if (abortCtrl) abortCtrl.abort();
+        abortCtrl = new AbortController();
 
-        // ✅ svuota input SOLO a invio riuscito
-        if (textInput) {
-          textInput.value = "";
-          autoResize();
-        }
+        postToChatApi({ text: text, history: [], conversation_id: conversationId }, selectedBlob, abortCtrl.signal)
+          .then(function (r) {
+            var data = r.data || {};
 
-        clearImage();
-        setStatus("Pronto");
-      } catch (err) {
-        console.error(err);
-        removeTyping();
+            var newConvId = data.conversation_id || data.conversationId || data.id || null;
+            if (newConvId) {
+              conversationId = String(newConvId);
+              localStorage.setItem("conversation_id", conversationId);
+            }
 
-        const msg = String(err?.message || err || "Errore");
+            removeTyping();
+            addMessage("ai", ensureStructuredAnswer(data.answer || data.reply || ""));
 
-        // ✅ ripristina testo se errore
-        if (textInput && pendingText) {
-          textInput.value = pendingText;
-          autoResize();
-        }
+            if (textInput) {
+              textInput.value = "";
+              autoResize();
+            }
 
-        if (msg.includes("HTTP 413")) addMessage("ai", "Foto troppo grande. Riducila e riprova (obiettivo < 4-5MB).");
-        else if (msg.includes("HTTP 400")) addMessage("ai", "Richiesta non valida. Controlla che il campo 'message' venga inviato correttamente.");
-        else addMessage("ai", "Errore: " + msg);
+            clearImage();
+            setStatus("Pronto");
+          })
+          .catch(function (err) {
+            console.error(err);
+            removeTyping();
 
-        setStatus("Errore");
-        await sleep(750);
-        setStatus("Pronto");
-      } finally {
-        setBusy(false);
-      }
-    });
+            var msg = String((err && err.message) ? err.message : (err || "Errore"));
+
+            if (textInput && pendingText && pendingText !== "Analizza la foto") {
+              textInput.value = pendingText;
+              autoResize();
+            }
+
+            if (msg.indexOf("HTTP 413") >= 0) addMessage("ai", "Foto troppo grande. Riducila e riprova (obiettivo < 4-5MB).");
+            else if (msg.indexOf("HTTP 400") >= 0) addMessage("ai", "Richiesta non valida. Se persiste, è un mismatch di campi nel backend.");
+            else addMessage("ai", "Errore: " + msg);
+
+            setStatus("Errore");
+            return sleep(750).then(function () { setStatus("Pronto"); });
+          })
+          .finally(function () {
+            setBusy(false);
+          });
+      });
+    }
   }
 
   setStatus("Pronto");
-
-  // ✅ al caricamento pagina: prova a ricaricare la conversazione
   loadConversationOnStart();
 })();
