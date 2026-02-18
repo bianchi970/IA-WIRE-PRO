@@ -106,7 +106,8 @@ function parseHistory(raw) {
 // Forza struttura IA Wire Pro se il modello non la rispetta
 function ensureWireFormat(text) {
   const t = String(text || "").trim();
-  if (!t) return "OSSERVAZIONI:\n- (risposta vuota)\n\nIPOTESI:\n- Non verificabile\n\nLIVELLO DI CERTEZZA:\n- Non verificabile\n\nRISCHI / SICUREZZA:\n- Verifica alimentazioni e isolamento prima di intervenire.\n\nVERIFICHE CONSIGLIATE:\n1) Fornisci una foto più ravvicinata e nitida.\n2) Indica marca/modello e cosa hai già verificato.\n\nPROSSIMO PASSO:\n- Inviami un dettaglio del componente principale.";
+  if (!t)
+    return "OSSERVAZIONI:\n- (risposta vuota)\n\nIPOTESI:\n- Non verificabile\n\nLIVELLO DI CERTEZZA:\n- Non verificabile\n\nRISCHI / SICUREZZA:\n- Verifica alimentazioni e isolamento prima di intervenire.\n\nVERIFICHE CONSIGLIATE:\n1) Fornisci una foto più ravvicinata e nitida.\n2) Indica marca/modello e cosa hai già verificato.\n\nPROSSIMO PASSO:\n- Inviami un dettaglio del componente principale.";
 
   // Se già contiene le sezioni principali, la lasciamo
   const hasObs = /OSSERVAZIONI\s*:/i.test(t);
@@ -136,13 +137,45 @@ function ensureWireFormat(text) {
     "3) Se impianto termico: indica caldaia/pompa/modello e presenza vaso espansione/valvola sicurezza.",
     "",
     "PROSSIMO PASSO:",
-    "- Rispondi alle 3 verifiche sopra o carica un secondo scatto con zoom sul manometro."
+    "- Rispondi alle 3 verifiche sopra o carica un secondo scatto con zoom sul manometro.",
   ].join("\n");
 }
 
-// Prompt “NASA” (struttura obbligatoria + affidabilità)
+// =========================
+// STRATO 0: SICUREZZA (sempre attivo, tutte le versioni)
+// =========================
+const SAFETY_PROMPT = [
+  "[IA WIRE PRO — STRATO 0: SICUREZZA INTEGRATA V1]",
+  "",
+  "PRINCIPIO ASSOLUTO:",
+  "La sicurezza di persone e cose ha priorità assoluta. Non fornire mai istruzioni che aumentino il rischio o aggirino dispositivi/procedure di sicurezza.",
+  "",
+  "AZIONI VIETATE (NON SUGGERIRE MAI):",
+  "- Rimuovere o disconnettere il conduttore di protezione (terra).",
+  "- Bypassare/ponteggiare differenziali (RCD), magnetotermici o altri dispositivi di protezione.",
+  "- Suggerire lavori su parti sotto tensione o su impianti attivi senza procedure e strumenti idonei.",
+  "- Consigliare di aumentare il calibro di una protezione senza verifica tecnica completa (sezione, posa, lunghezza, coordinamento, potere d’interruzione, ecc.).",
+  "- Indicazioni operative su gas/pressione/alta temperatura senza evidenziare rischio e senza raccomandare tecnico abilitato quando necessario.",
+  "",
+  "REGOLE OPERATIVE OBBLIGATORIE:",
+  "- Se dai passi operativi: presumi impianto disalimentato e includi sempre verifica assenza tensione con strumento idoneo prima di toccare parti interne o conduttori.",
+  "- Se l’intervento è ad alto rischio (odore di bruciato, componenti fusi, impianti gas/pressione): fermati e indica intervento di tecnico qualificato.",
+  "",
+  "NO CERTEZZE SENZA VERIFICHE:",
+  "Non dire “è sicuramente… / va bene così / è corretto” senza dati di targa, misure, evidenza visiva o informazioni minime necessarie.",
+  "",
+  "PRUDENZA TECNICA:",
+  "Quando manca un parametro critico, inserisci la frase:",
+  "⚠ In assenza di dati certi, qualsiasi valutazione tecnica potrebbe risultare imprecisa ed errata.",
+  "Poi elenca i dati necessari e come reperirli in sicurezza.",
+  "Se indispensabili e non disponibili: “Senza tutti i dati necessari non è possibile fornire una risposta tecnica conclusiva.”",
+].join("\n");
+
+// Prompt “NASA” (struttura obbligatoria + affidabilità) + STRATO 0 SICUREZZA
 function buildSystemPrompt() {
   return [
+    SAFETY_PROMPT,
+    "",
     "SEI: IA WIRE PRO (Assistente Tecnico Virtuale).",
     "OBIETTIVO: aiutare in modo tecnico, prudente e verificabile.",
     "",
@@ -177,7 +210,7 @@ function buildSystemPrompt() {
     "",
     "NOTE:",
     "- Se l’utente ha inviato una foto: descrivi cosa si vede (fatti) prima delle ipotesi.",
-    "- Evita “potrebbe essere tutto”: scegli 2-3 ipotesi realistiche e spiega come discriminare."
+    "- Evita “potrebbe essere tutto”: scegli 2-3 ipotesi realistiche e spiega come discriminare.",
   ].join("\n");
 }
 
@@ -359,11 +392,12 @@ app.post("/api/chat", upload.single("image"), async (req, res) => {
       });
 
       const blocks = Array.isArray(resp && resp.content) ? resp.content : [];
-      let answer = blocks
-        .filter((b) => b && b.type === "text")
-        .map((b) => b.text)
-        .join("\n")
-        .trim() || "Nessuna risposta.";
+      let answer =
+        blocks
+          .filter((b) => b && b.type === "text")
+          .map((b) => b.text)
+          .join("\n")
+          .trim() || "Nessuna risposta.";
 
       if (STRICT_FORMAT) answer = ensureWireFormat(answer);
 
@@ -424,11 +458,21 @@ app.listen(PORT, () => {
       "╔══════════════════════════════════════╗\n" +
       "║   🔌 IA WIRE PRO - Backend Attivo    ║\n" +
       "╠══════════════════════════════════════╣\n" +
-      "║  Porta: " + String(PORT).padEnd(29) + "║\n" +
-      "║  Frontend: " + String(FRONTEND_DIR).padEnd(26) + "║\n" +
-      "║  StrictFormat: " + String(STRICT_FORMAT ? "ON" : "OFF").padEnd(21) + "║\n" +
-      "║  OpenAI: " + String(OPENAI_API_KEY ? "✅ Configurata" : "❌ Mancante").padEnd(27) + "║\n" +
-      "║  Anthropic: " + String(ANTHROPIC_API_KEY ? "✅ Configurata" : "❌ Mancante").padEnd(24) + "║\n" +
+      "║  Porta: " +
+      String(PORT).padEnd(29) +
+      "║\n" +
+      "║  Frontend: " +
+      String(FRONTEND_DIR).padEnd(26) +
+      "║\n" +
+      "║  StrictFormat: " +
+      String(STRICT_FORMAT ? "ON" : "OFF").padEnd(21) +
+      "║\n" +
+      "║  OpenAI: " +
+      String(OPENAI_API_KEY ? "✅ Configurata" : "❌ Mancante").padEnd(27) +
+      "║\n" +
+      "║  Anthropic: " +
+      String(ANTHROPIC_API_KEY ? "✅ Configurata" : "❌ Mancante").padEnd(24) +
+      "║\n" +
       "╚══════════════════════════════════════╝\n"
   );
 });
