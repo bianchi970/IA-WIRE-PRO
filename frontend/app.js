@@ -1,5 +1,9 @@
+console.log('BRIDGE LIVE');
 /* IA Wire Pro - app.js (V1 stable, ITA) - compatibile (no ?., no ??, no replaceAll)
-   FIX 400: se invii solo foto, forza message="Analizza la foto"
+   TECH MODE: compressione più nitida per quadri elettrici (1800px, 0.85)
+   FIX 400: se invii solo foto, forza message tecnico
+   DEBUG RAG: mostra RAG ON/OFF (status + console)
+   HISTORY: invia ultimi 6 messaggi al backend
 */
 
 (function () {
@@ -24,6 +28,9 @@
   // Persistenza conversation_id
   var conversationId = localStorage.getItem("conversation_id") || null;
 
+  // ✅ History locale (ultimi messaggi) per backend
+  var conversationHistory = []; // {role:"user"|"assistant", content:"..."}
+
   // ====== UTIL ======
   function setStatus(label) {
     if (!statusPill) return;
@@ -36,7 +43,6 @@
 
   function escapeHtml(s) {
     var str = String(s == null ? "" : s);
-    // sostituti “compatibili”
     str = str.replace(/&/g, "&amp;");
     str = str.replace(/</g, "&lt;");
     str = str.replace(/>/g, "&gt;");
@@ -103,7 +109,43 @@
     if (imageInput) imageInput.disabled = b;
   }
 
-  // ====== IMAGE COMPRESSION ======
+  // ✅ History helpers
+  function pushHistory(role, content) {
+    var r = String(role || "").toLowerCase();
+    if (r !== "user" && r !== "assistant") r = "user";
+    conversationHistory.push({ role: r, content: String(content == null ? "" : content) });
+    // tieni gli ultimi 6
+    if (conversationHistory.length > 6) {
+      conversationHistory = conversationHistory.slice(conversationHistory.length - 6);
+    }
+  }
+
+  function resetHistoryFromLoadedMessages(raw) {
+    conversationHistory = [];
+    var arr = [];
+    if (Array.isArray(raw)) arr = raw;
+    else if (raw && Array.isArray(raw.items)) arr = raw.items;
+    else if (raw && Array.isArray(raw.messages)) arr = raw.messages;
+    else if (raw && Array.isArray(raw.rows)) arr = raw.rows;
+
+    for (var i = 0; i < arr.length; i++) {
+      var m = arr[i] || {};
+      var role = String(m.role || m.sender || m.type || "").toLowerCase();
+      var content = (m.content != null ? m.content :
+        m.text != null ? m.text :
+        m.message != null ? m.message :
+        m.body != null ? m.body : "");
+
+      if (role.indexOf("assistant") >= 0 || role === "ai") pushHistory("assistant", String(content));
+      else pushHistory("user", String(content));
+    }
+
+    if (conversationHistory.length > 6) {
+      conversationHistory = conversationHistory.slice(conversationHistory.length - 6);
+    }
+  }
+
+  // ====== IMAGE COMPRESSION (TECH MODE) ======
   function fileToDataUrl(file) {
     return new Promise(function (resolve, reject) {
       var r = new FileReader();
@@ -124,8 +166,10 @@
 
   function compressImageFile(file, opts) {
     opts = opts || {};
-    var maxSize = (opts.maxSize != null ? opts.maxSize : 1200);
-    var quality = (opts.quality != null ? opts.quality : 0.7);
+
+    // ✅ Quadro elettrico: più dettaglio per etichette/tasti TEST
+    var maxSize = (opts.maxSize != null ? opts.maxSize : 1800); // era 1200
+    var quality = (opts.quality != null ? opts.quality : 0.85); // era 0.7
 
     return fileToDataUrl(file)
       .then(function (dataUrl) {
@@ -146,14 +190,25 @@
           canvas.height = height;
 
           var ctx = canvas.getContext("2d", { alpha: false });
-          ctx.fillStyle = "#000";
+
+          // ✅ sfondo bianco = migliore leggibilità dei testi
+          ctx.fillStyle = "#fff";
           ctx.fillRect(0, 0, width, height);
+
           ctx.drawImage(img, 0, 0, width, height);
 
           return new Promise(function (resolve, reject) {
             canvas.toBlob(function (b) {
               if (!b) return reject(new Error("Compressione fallita"));
-              resolve({ blob: b, previewUrl: canvas.toDataURL("image/jpeg", 0.82) });
+
+              var previewUrl = "";
+              try {
+                previewUrl = canvas.toDataURL("image/jpeg", quality);
+              } catch (e) {
+                previewUrl = "";
+              }
+
+              resolve({ blob: b, previewUrl: previewUrl });
             }, "image/jpeg", quality);
           });
         });
@@ -187,14 +242,14 @@
     var formData = new FormData();
 
     var rawMsg = ((payload && (payload.message || payload.text)) || "").trim();
-    var safeMsg = rawMsg || (imageBlob ? "Analizza la foto" : "");
+    var safeMsg = rawMsg || (imageBlob ? "Analizza la foto in modo tecnico: elenca componenti (RCD/RCBO/MT), pettini, morsettiere, e indica cosa non è leggibile e che zoom serve." : "");
     formData.append("message", safeMsg);
 
     if (payload && payload.history) formData.append("history", JSON.stringify(payload.history));
     if (payload && payload.mode) formData.append("mode", payload.mode);
     if (payload && payload.conversation_id) formData.append("conversation_id", String(payload.conversation_id));
 
-    if (imageBlob) formData.append("image", imageBlob, "photo.jpg");
+    if (imageBlob) formData.append("image", imageBlob, "photo_" + Date.now() + ".jpg");
 
     var urls = candidateChatEndpoints();
     var lastErr = null;
@@ -255,15 +310,15 @@
     var t = (text || "").trim();
     if (!t) return "Risposta vuota dal server.";
 
-    var hasSections = /OSSERVAZIONE|ANALISI|VERIFICHE|CERTEZZA|POSSIBILI/i.test(t);
+    var hasSections = /OSSERVAZIONI|OSSERVAZIONE|IPOTESI|VERIFICHE|CERTEZZA|RISCHI/i.test(t);
     if (hasSections) return t;
 
     return [
-      "OSSERVAZIONE:",
-      t,
+      "OSSERVAZIONI:",
+      "- " + t,
       "",
       "LIVELLO DI CERTEZZA:",
-      "Da verificare (risposta non strutturata).",
+      "- Da verificare (risposta non strutturata).",
       "",
       "VERIFICHE CONSIGLIATE:",
       "1) Aggiungi una foto più ravvicinata e nitida.",
@@ -274,6 +329,7 @@
   function renderLoadedMessages(raw) {
     var arr = [];
     if (Array.isArray(raw)) arr = raw;
+    else if (raw && Array.isArray(raw.items)) arr = raw.items;
     else if (raw && Array.isArray(raw.messages)) arr = raw.messages;
     else if (raw && Array.isArray(raw.rows)) arr = raw.rows;
 
@@ -292,19 +348,31 @@
       if (role.indexOf("assistant") >= 0 || role === "ai") addMessage("ai", ensureStructuredAnswer(String(content)));
       else addMessage("user", String(content));
     }
+
+    resetHistoryFromLoadedMessages(raw);
   }
 
   function loadConversationOnStart() {
     if (!conversationId) return;
     setStatus("Carico chat...");
+    setBusy(true);
     return getConversationMessages(conversationId)
       .then(function (data) {
         renderLoadedMessages(data);
         setStatus("Pronto");
       })
       .catch(function (e) {
-        console.warn("Load conversation failed:", e && e.message ? e.message : e);
+        var msg = e && e.message ? e.message : String(e || "");
+        console.warn("Load conversation failed:", msg);
+        // conversation non trovata o DB error: pulisce localStorage per evitare loop
+        if (msg.indexOf("HTTP 404") >= 0 || msg.indexOf("HTTP 500") >= 0) {
+          conversationId = null;
+          localStorage.removeItem("conversation_id");
+        }
         setStatus("Pronto");
+      })
+      .finally(function () {
+        setBusy(false);
       });
   }
 
@@ -328,10 +396,10 @@
       setStatus("Analisi immagine...");
       setBusy(true);
 
-      compressImageFile(file, { maxSize: 1200, quality: 0.7 })
+      compressImageFile(file, { maxSize: 1800, quality: 0.85 })
         .then(function (r) {
           selectedBlob = r.blob;
-          if (previewImg) previewImg.src = r.previewUrl;
+          if (previewImg) previewImg.src = r.previewUrl || "";
           if (previewWrap) previewWrap.hidden = false;
           setStatus("Pronto");
         })
@@ -339,7 +407,7 @@
           console.error(err);
           clearImage();
           setStatus("Errore");
-          addMessage("ai", "Non riesco a leggere/comprimere la foto. Prova con un’altra immagine.");
+          addMessage("ai", "Non riesco a leggere/comprimere la foto. Prova con un’altra immagine (nitida e ravvicinata).");
           return sleep(650).then(function () { setStatus("Pronto"); });
         })
         .finally(function () {
@@ -362,10 +430,16 @@
       sendBtn.addEventListener("click", function () {
         var text = (textInput && textInput.value ? textInput.value : "").trim();
         if (!text && !selectedBlob) return;
-        if (!text && selectedBlob) text = "Analizza la foto";
 
-        if (selectedBlob && text === "Analizza la foto") addMessage("user", "📷 Foto inviata");
+        // ✅ se solo foto, messaggio tecnico
+        if (!text && selectedBlob) {
+          text = "Analizza la foto in modo tecnico: elenca componenti (RCD/RCBO/MT), pettini, morsettiere, e indica cosa non è leggibile e che zoom serve.";
+        }
+
+        if (selectedBlob && text.indexOf("Analizza la foto") === 0) addMessage("user", "📷 Foto inviata");
         else addMessage("user", text);
+
+        pushHistory("user", text);
 
         var pendingText = text;
 
@@ -378,7 +452,11 @@
         if (abortCtrl) abortCtrl.abort();
         abortCtrl = new AbortController();
 
-        postToChatApi({ text: text, history: [], conversation_id: conversationId }, selectedBlob, abortCtrl.signal)
+        postToChatApi(
+          { message: text, history: conversationHistory, conversation_id: conversationId },
+          selectedBlob,
+          abortCtrl.signal
+        )
           .then(function (r) {
             var data = r.data || {};
 
@@ -388,8 +466,19 @@
               localStorage.setItem("conversation_id", conversationId);
             }
 
+            // ✅ DEBUG RAG (status + console)
+            try { console.log("RAG:", data.rag); } catch (e) {}
+            if (data && data.rag && typeof data.rag.usedDbContext !== "undefined") {
+              setStatus(data.rag.usedDbContext ? "RAG: ON" : "RAG: OFF");
+              sleep(1200).then(function(){ setStatus("Pronto"); });
+            }
+
             removeTyping();
-            addMessage("ai", ensureStructuredAnswer(data.answer || data.reply || ""));
+
+            var ans = ensureStructuredAnswer(data.answer || data.reply || "");
+            addMessage("ai", ans);
+
+            pushHistory("assistant", ans);
 
             if (textInput) {
               textInput.value = "";
@@ -397,7 +486,9 @@
             }
 
             clearImage();
-            setStatus("Pronto");
+            if (!(data && data.rag && typeof data.rag.usedDbContext !== "undefined")) {
+              setStatus("Pronto");
+            }
           })
           .catch(function (err) {
             console.error(err);
@@ -405,7 +496,7 @@
 
             var msg = String((err && err.message) ? err.message : (err || "Errore"));
 
-            if (textInput && pendingText && pendingText !== "Analizza la foto") {
+            if (textInput && pendingText && pendingText.indexOf("Analizza la foto") !== 0) {
               textInput.value = pendingText;
               autoResize();
             }
