@@ -19,6 +19,9 @@ curl -X POST http://localhost:3000/api/chat \
   -H "Content-Type: application/json" \
   -d '{"message":"testo","user_id":"test"}'
 
+# Ingest doc_chunks (RAG manuale — idempotente, ri-eseguibile)
+cd backend && node ingest.js
+
 # Install backend dependencies
 cd backend && npm install
 ```
@@ -70,8 +73,14 @@ PostgreSQL full-text search (`plainto_tsquery('italian', ...)`) over `components
 ### certainty extraction
 `extractCertainty(answer)` parses `LIVELLO DI CERTEZZA:` from the answer text and maps to one of: `Confermato | Probabile | Non verificabile`. Saved in `messages.certainty`. Requires server restart to take effect after code changes.
 
+### RAG doc_chunks (FASE 4)
+`doc_chunks` table in PostgreSQL: columns `id, source, chunk_text, created_at`. Populated manually via `node backend/ingest.js` (idempotent — checks exact duplicates before inserting). `fetchDocChunks(query)` uses Italian FTS (`plainto_tsquery`) first; falls back to ILIKE on individual keywords (>3 chars) if FTS returns nothing. Top 3 chunks are formatted under `CONTESTO TECNICO DA MANUALE:` and injected as a separate system message (OpenAI) or appended to the system string (Anthropic). Response `rag` field now includes `usedDocChunks: boolean`. GIN index `idx_doc_chunks_fts` on `to_tsvector('italian', chunk_text)` for fast FTS.
+
+### Context window + auto-summary (FASE 3)
+`HISTORY_MAX` (default 10, env override) controls how many messages are sent to the AI. When `conversation_id` is available, `/api/chat` loads the last 10 messages directly from DB (ignoring the frontend-supplied `history`). `SUMMARY_THRESHOLD` (default 14, env override): when a conversation reaches this many messages, `generateContextSummary()` runs fire-and-forget after each AI response, calls the AI to summarise the conversation in 5-8 technical bullet points, and stores it in `conversations.summary`. On the next chat turn the summary is prepended to the system prompt as `CONTESTO CONVERSAZIONE PRECEDENTE:`.
+
 ### Frontend
-Pure ES5 vanilla JS (no `?.`, no `??`, no `replaceAll`) for maximum browser compatibility. Image compression via Canvas API: max 1800px, 0.85 JPEG quality. History capped at 6 messages sent to backend. `loadConversationOnStart()` fetches `/api/conversations/:id/messages` on page load and calls `setBusy(true)` to block input during restore.
+Pure ES5 vanilla JS (no `?.`, no `??`, no `replaceAll`) for maximum browser compatibility. Image compression via Canvas API: max 1800px, 0.85 JPEG quality. History capped at 10 messages sent to backend (fallback only — DB history takes priority server-side). `loadConversationOnStart()` fetches `/api/conversations/:id/messages` on page load and calls `setBusy(true)` to block input during restore.
 
 ## API Endpoints
 

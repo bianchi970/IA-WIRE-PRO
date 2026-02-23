@@ -33,7 +33,8 @@ const FRONTEND_DIR = path.join(__dirname, "../frontend");
 // Limiti prudenziali
 const JSON_LIMIT = process.env.JSON_LIMIT || "12mb";
 const MULTIPART_FILE_MAX = 5 * 1024 * 1024; // 5MB
-const HISTORY_MAX = Number(process.env.HISTORY_MAX || 6);
+const HISTORY_MAX = Number(process.env.HISTORY_MAX || 10);
+const SUMMARY_THRESHOLD = Number(process.env.SUMMARY_THRESHOLD || 14);
 
 // Provider keys + modelli (trim anti newline)
 const ANTHROPIC_API_KEY = (process.env.ANTHROPIC_API_KEY || "").trim();
@@ -235,6 +236,57 @@ function formatEncyclopediaContext(ctx) {
 }
 
 // =========================
+// DB HELPERS — Doc Chunks RAG (FASE 4)
+// =========================
+
+/**
+ * Cerca i top 3 chunk più pertinenti in doc_chunks.
+ * Strategia: FTS italiano → fallback ILIKE su singole parole chiave.
+ */
+async function fetchDocChunks(queryText) {
+  const q = String(queryText || "").trim().slice(0, 200);
+  if (!q || !pool) return [];
+  try {
+    // Tentativo 1: FTS italiano (plainto_tsquery)
+    const ftsRes = await pool.query(
+      `SELECT id, source, chunk_text FROM doc_chunks
+       WHERE to_tsvector('italian', chunk_text) @@ plainto_tsquery('italian', $1)
+       ORDER BY id DESC LIMIT 3`,
+      [q]
+    );
+    if (ftsRes.rows.length > 0) return ftsRes.rows;
+
+    // Tentativo 2: ILIKE su singole parole chiave (fallback per query brevi/straniere)
+    const words = q.split(/\s+/).filter(function (w) { return w.length > 3; }).slice(0, 3);
+    if (!words.length) return [];
+    const conditions = words.map(function (_, i) { return "chunk_text ILIKE $" + (i + 1); });
+    const params = words.map(function (w) { return "%" + w + "%"; });
+    const likeRes = await pool.query(
+      "SELECT id, source, chunk_text FROM doc_chunks WHERE " + conditions.join(" OR ") + " LIMIT 3",
+      params
+    );
+    return likeRes.rows || [];
+  } catch (e) {
+    console.warn("⚠️ fetchDocChunks failed:", (e && e.message) || e);
+    return [];
+  }
+}
+
+function formatDocChunks(chunks) {
+  if (!Array.isArray(chunks) || !chunks.length) return "";
+  const lines = ["CONTESTO TECNICO DA MANUALE:"];
+  for (var i = 0; i < chunks.length; i++) {
+    var c = chunks[i];
+    lines.push("");
+    lines.push("[fonte: " + (c.source || "manuale") + "]");
+    lines.push(String(c.chunk_text || "").trim());
+  }
+  lines.push("");
+  lines.push("ISTRUZIONE: usa questo contesto SOLO se pertinente alla domanda.");
+  return lines.join("\n");
+}
+
+// =========================
 // DB HELPERS — Conversations & Messages
 // =========================
 
@@ -312,6 +364,73 @@ async function convTouch(id) {
     await pool.query(`UPDATE conversations SET updated_at = NOW() WHERE id = $1`, [id]);
   } catch (e) {
     console.warn("⚠️ convTouch failed:", e?.message || e);
+  }
+}
+
+/**
+ * Genera un riassunto contestuale della conversazione (fire-and-forget).
+ * Si attiva solo quando il numero di messaggi supera SUMMARY_THRESHOLD.
+ */
+async function generateContextSummary(convId, provider) {
+  if (!pool || !convId) return;
+  try {
+    const countRes = await pool.query(
+      `SELECT COUNT(*) AS cnt FROM messages WHERE conversation_id = $1 AND role IN ('user','assistant')`,
+      [convId]
+    );
+    const cnt = parseInt(((countRes.rows[0] && countRes.rows[0].cnt) || "0"), 10);
+    if (cnt < SUMMARY_THRESHOLD) return;
+
+    const r = await pool.query(
+      `SELECT role, content FROM messages
+       WHERE conversation_id = $1 AND role IN ('user','assistant')
+       ORDER BY created_at ASC`,
+      [convId]
+    );
+    const msgs = r.rows || [];
+    if (!msgs.length) return;
+
+    const convText = msgs
+      .map(function (m) { return m.role.toUpperCase() + ": " + String(m.content || "").slice(0, 400); })
+      .join("\n");
+
+    const summaryPrompt =
+      "Sei un assistente tecnico. Riassumi in 5-8 punti le informazioni tecniche chiave di questa conversazione " +
+      "(componenti, problemi, diagnosi, misure, contesto). Sii conciso e tecnico. Non aggiungere premesse.\n\n" +
+      "CONVERSAZIONE:\n" + convText;
+
+    let summary = null;
+    const chosen = provider || (openai ? "openai" : anthropic ? "anthropic" : null);
+
+    if (chosen === "openai" && openai) {
+      const completion = await openai.chat.completions.create({
+        model: OPENAI_MODEL,
+        messages: [{ role: "user", content: summaryPrompt }],
+        temperature: 0.1,
+        max_tokens: 400,
+      });
+      summary = (completion && completion.choices && completion.choices[0] &&
+                 completion.choices[0].message && completion.choices[0].message.content) || null;
+    } else if (chosen === "anthropic" && anthropic) {
+      const resp = await anthropic.messages.create({
+        model: ANTHROPIC_MODEL,
+        max_tokens: 400,
+        temperature: 0.1,
+        messages: [{ role: "user", content: summaryPrompt }],
+      });
+      const blocks = Array.isArray(resp && resp.content ? resp.content : null) ? resp.content : [];
+      summary = blocks
+        .filter(function (b) { return b && b.type === "text"; })
+        .map(function (b) { return b.text; })
+        .join("\n").trim() || null;
+    }
+
+    if (summary) {
+      await pool.query(`UPDATE conversations SET summary = $1 WHERE id = $2`, [summary, convId]);
+      console.log("  \uD83D\uDCDD Summary aggiornato per conversation " + convId + " (" + cnt + " msg)");
+    }
+  } catch (e) {
+    console.warn("\u26A0\uFE0F generateContextSummary failed:", (e && e.message) || e);
   }
 }
 
@@ -785,6 +904,29 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       }
     }
 
+    // ===== LOAD HISTORY + SUMMARY FROM DB =====
+    let dbHistory = null;
+    let convSummary = null;
+    if (pool && convId) {
+      try {
+        const hRes = await pool.query(
+          `SELECT role, content FROM messages
+           WHERE conversation_id = $1 AND role IN ('user','assistant')
+           ORDER BY created_at DESC LIMIT $2`,
+          [convId, HISTORY_MAX]
+        );
+        dbHistory = (hRes.rows || []).reverse();
+
+        const sRes = await pool.query(
+          `SELECT summary FROM conversations WHERE id = $1`,
+          [convId]
+        );
+        convSummary = (sRes.rows[0] && sRes.rows[0].summary) || null;
+      } catch (e) {
+        console.warn("\u26A0\uFE0F Caricamento history/summary DB fallito:", (e && e.message) || e);
+      }
+    }
+
     // ===== ROCCO PLAN =====
     const plan = rocco.plan({
       message,
@@ -794,7 +936,10 @@ app.post("/api/chat", uploadAny, async (req, res) => {
 
     const ragContext = "";
 
-    const systemPrompt = rocco.buildSystemPrompt(plan, ragContext);
+    let systemPrompt = rocco.buildSystemPrompt(plan, ragContext);
+    if (convSummary) {
+      systemPrompt = "CONTESTO CONVERSAZIONE PRECEDENTE:\n" + convSummary + "\n\n" + systemPrompt;
+    }
     const userPayload = rocco.buildUserPayload(message, history);
 
     const chosen = pickProvider(provider);
@@ -804,7 +949,9 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       });
     }
 
-    const shortHistory = safeSliceHistory(history);
+    const shortHistory = dbHistory
+      ? dbHistory.map(function (m) { return { role: m.role, content: String(m.content || "") }; })
+      : safeSliceHistory(history);
 
     // DB Context (encyclopedia RAG)
     let dbContextText = "";
@@ -815,12 +962,22 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       console.warn("⚠️ DB context non disponibile:", e?.message || e);
     }
 
+    // Doc Chunks RAG (FASE 4)
+    let docChunksText = "";
+    try {
+      const chunks = await fetchDocChunks(message);
+      docChunksText = formatDocChunks(chunks);
+    } catch (e) {
+      console.warn("⚠️ Doc chunks non disponibili:", (e && e.message) || e);
+    }
+
     // OPENAI
     if (chosen === "openai") {
       if (!openai) return res.status(500).json({ error: "OPENAI non configurato (OPENAI_API_KEY mancante)." });
 
       const messages = [{ role: "system", content: systemPrompt }].concat(shortHistory);
       if (dbContextText) messages.push({ role: "system", content: dbContextText });
+      if (docChunksText) messages.push({ role: "system", content: docChunksText });
 
       if (imageBase64) {
         const img = normalizeBase64Image(imageBase64);
@@ -855,6 +1012,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
         certainty: extractCertainty(answer),
       });
       await convTouch(convId);
+      generateContextSummary(convId, "openai").catch(function () {});
 
       return res.json({
         ok: true,
@@ -863,7 +1021,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
         answer,
         conversation_id: convId,
         signature: "ROCCO-CHAT-V2",
-        rag: { usedDbContext: Boolean(dbContextText) },
+        rag: { usedDbContext: Boolean(dbContextText), usedDocChunks: Boolean(docChunksText) },
       });
     }
 
@@ -890,7 +1048,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
         model: ANTHROPIC_MODEL,
         max_tokens: 900,
         temperature: 0.1,
-        system: dbContextText ? systemPrompt + "\n\n" + dbContextText : systemPrompt,
+        system: [systemPrompt, dbContextText, docChunksText].filter(Boolean).join("\n\n"),
         messages: msgs,
       });
 
@@ -915,6 +1073,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
         certainty: extractCertainty(answer),
       });
       await convTouch(convId);
+      generateContextSummary(convId, "anthropic").catch(function () {});
 
       return res.json({
         ok: true,
@@ -923,7 +1082,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
         answer,
         conversation_id: convId,
         signature: "ROCCO-CHAT-V2",
-        rag: { usedDbContext: Boolean(dbContextText) },
+        rag: { usedDbContext: Boolean(dbContextText), usedDocChunks: Boolean(docChunksText) },
       });
     }
 

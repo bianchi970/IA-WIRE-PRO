@@ -26,6 +26,10 @@ async function runSchema(client) {
 const COLUMN_MIGRATIONS = [
   // --- conversations ---
   {
+    desc: "conversations: add summary",
+    sql: `ALTER TABLE conversations ADD COLUMN IF NOT EXISTS summary TEXT`,
+  },
+  {
     desc: "conversations: add updated_at",
     sql: `ALTER TABLE conversations
             ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT NOW()`,

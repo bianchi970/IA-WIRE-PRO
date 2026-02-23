@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS conversations (
   id          BIGSERIAL    PRIMARY KEY,
   title       TEXT,
   user_id     TEXT,
+  summary     TEXT,
   created_at  TIMESTAMP    NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMP    NOT NULL DEFAULT NOW(),
   is_archived BOOLEAN      NOT NULL DEFAULT FALSE
@@ -54,3 +55,18 @@ CREATE INDEX IF NOT EXISTS idx_messages_conversation_created
 
 CREATE INDEX IF NOT EXISTS idx_message_attachments_message_id
   ON message_attachments (message_id);
+
+-- ============================================================
+-- doc_chunks  (RAG base locale — FASE 4)
+-- Testi tecnici spezzati da manuali/PDF per retrieval semplice
+-- Popolare con: node backend/ingest.js
+-- ============================================================
+CREATE TABLE IF NOT EXISTS doc_chunks (
+  id         BIGSERIAL PRIMARY KEY,
+  source     TEXT      NOT NULL,
+  chunk_text TEXT      NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_doc_chunks_fts
+  ON doc_chunks USING gin(to_tsvector('italian', chunk_text));

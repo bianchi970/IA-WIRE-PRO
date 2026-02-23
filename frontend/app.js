@@ -3,7 +3,7 @@ console.log('BRIDGE LIVE');
    TECH MODE: compressione più nitida per quadri elettrici (1800px, 0.85)
    FIX 400: se invii solo foto, forza message tecnico
    DEBUG RAG: mostra RAG ON/OFF (status + console)
-   HISTORY: invia ultimi 6 messaggi al backend
+   HISTORY: invia ultimi 10 messaggi al backend (DB history ha priorità)
 */
 
 (function () {
@@ -118,9 +118,9 @@ console.log('BRIDGE LIVE');
     var r = String(role || "").toLowerCase();
     if (r !== "user" && r !== "assistant") r = "user";
     conversationHistory.push({ role: r, content: String(content == null ? "" : content) });
-    // tieni gli ultimi 6
-    if (conversationHistory.length > 6) {
-      conversationHistory = conversationHistory.slice(conversationHistory.length - 6);
+    // tieni gli ultimi 10
+    if (conversationHistory.length > 10) {
+      conversationHistory = conversationHistory.slice(conversationHistory.length - 10);
     }
   }
 
@@ -144,8 +144,8 @@ console.log('BRIDGE LIVE');
       else pushHistory("user", String(content));
     }
 
-    if (conversationHistory.length > 6) {
-      conversationHistory = conversationHistory.slice(conversationHistory.length - 6);
+    if (conversationHistory.length > 10) {
+      conversationHistory = conversationHistory.slice(conversationHistory.length - 10);
     }
   }
 
