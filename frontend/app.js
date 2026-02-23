@@ -35,6 +35,10 @@ console.log('BRIDGE LIVE');
   function setStatus(label) {
     if (!statusPill) return;
     statusPill.textContent = label;
+    statusPill.classList.remove("busy", "error");
+    var l = String(label || "").toLowerCase();
+    if (l.indexOf("errore") >= 0) statusPill.classList.add("error");
+    else if (l !== "pronto") statusPill.classList.add("busy");
   }
 
   function sleep(ms) {

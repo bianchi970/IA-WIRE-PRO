@@ -16,7 +16,7 @@
 }
 
 *{ box-sizing:border-box; }
-html, body{ height:100%; }
+html, body{ height:100%; overflow:hidden; }
 
 body{
   margin:0;
@@ -29,9 +29,11 @@ body{
 }
 
 .app{
-  min-height:100vh;
+  height:100vh;
+  height:100dvh; /* mobile: si adatta quando appare tastiera */
   display:flex;
   flex-direction:column;
+  overflow:hidden;
 }
 
 /* TOPBAR */
@@ -83,14 +85,25 @@ body{
   border:1px solid rgba(255,255,255,0.12);
   background: rgba(255,255,255,0.04);
   color: var(--text);
+  transition: color 0.2s, border-color 0.2s;
+}
+.status-pill.busy{
+  color: var(--cyan);
+  border-color: rgba(0,217,255,0.35);
+}
+.status-pill.error{
+  color: var(--orange);
+  border-color: rgba(255,140,66,0.35);
 }
 
 /* MAIN */
 .main{
   flex:1;
+  min-height:0; /* flex overflow fix: consente ai figli di scrollare */
   display:flex;
   justify-content:center;
   padding:14px;
+  overflow:hidden;
 }
 
 /* CARD */
@@ -103,7 +116,8 @@ body{
   overflow:hidden;
   display:flex;
   flex-direction:column;
-  min-height: calc(100vh - 140px);
+  min-height:0; /* rimuove calc hardcoded, si adatta al flex parent */
+  flex:1;
 }
 
 .card-head{
@@ -184,8 +198,9 @@ body{
 /* CHAT */
 .chat{
   flex:1;
+  min-height:0; /* obbligatorio per scroll in flex column */
   padding:14px 12px 12px 12px;
-  overflow:auto;
+  overflow-y:auto;
   display:flex;
   flex-direction:column;
   gap:10px;
@@ -213,6 +228,7 @@ body{
 
 /* COMPOSER */
 .composer{
+  flex-shrink:0; /* non si schiaccia mai */
   position:sticky;
   bottom:0;
   z-index:20;
@@ -286,6 +302,7 @@ body{
 
 /* RESPONSIVE */
 @media (max-width: 520px){
-  .card{ min-height: calc(100vh - 150px); }
+  .main{ padding:0; }
+  .card{ border-radius:0; border-left:none; border-right:none; }
   .bubble{ max-width: 92%; }
 }
