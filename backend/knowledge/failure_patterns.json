@@ -1,0 +1,179 @@
+{
+  "version": "1.0",
+  "description": "Pattern di guasto comuni negli impianti elettrici — IA Wire Pro",
+  "patterns": [
+    {
+      "id": "FP-01",
+      "symptom": "Il differenziale scatta quando si preme il pulsante o si eccita il relè per accendere le luci",
+      "likely_causes": [
+        "Il relè o il contattore genera un transiente di corrente che percorre in parte la terra, superando la soglia del differenziale",
+        "Condensatore di soppressione guasto o mancante sulla bobina del relè/contattore",
+        "Cavo di terra con perdita di isolamento a valle del relè",
+        "Differenziale troppo sensibile o degradato (soglia effettiva scesa sotto 30mA)"
+      ],
+      "confidence_logic": [
+        "CONFERMATO: se il differenziale scatta SOLO al momento dell'apertura/chiusura del relè e non in altri momenti",
+        "PROBABILE: se il differenziale scatta durante manovre di commutazione, non in modo casuale",
+        "NON VERIFICABILE: se il differenziale scatta in modo casuale senza correlazione temporale con manovre"
+      ],
+      "checks": [
+        "1) Collegare una lampada spia o tester sul circuito del relè per vedere esattamente quando scatta",
+        "2) Misurare la corrente di dispersione con pinza differenziale durante la manovra",
+        "3) Verificare la presenza di condensatori/varistori di soppressione sulla bobina del relè (se assenti: aggiungerli)",
+        "4) Disconnettere il cavo di terra dal relè e verificare se il problema persiste",
+        "5) Sostituire il differenziale con uno di tipo A o F se il carico è elettronico",
+        "6) Testare con differenziale temporizzato (tipo G) per escludere i transienti"
+      ],
+      "common_mistakes": [
+        "Sostituire il differenziale senza cercare la causa (il problema torna)",
+        "Installare un differenziale a soglia più alta (300mA) invece di 30mA perdendo la protezione personale",
+        "Bypassare il differenziale temporaneamente",
+        "Diagnosticare il guasto come 'dispersione sul cavo' senza verificare la correlazione temporale"
+      ],
+      "example_case": "Quadro automazione: ogni volta che il PLC attiva KM1 per accendere le luci esterne, il differenziale generale scatta. Causa: la bobina del contattore KM1 non ha il varistors di soppressione e genera un picco da 150mA per 5ms sulla terra. Soluzione: aggiunto varistors in parallelo alla bobina, problema risolto."
+    },
+    {
+      "id": "FP-02",
+      "symptom": "Presente 24V alla sorgente ma non al PLC — sospetta tensione flottante (ghost voltage)",
+      "likely_causes": [
+        "Tensione indotta da cavi paralleli ad alta tensione (capacità parassite tra cavi)",
+        "Resistenza di pull-up nel PLC che fa misurare una tensione anche a circuito aperto",
+        "Cavo interrotto ma la tensione è 'portata' da un'altra via (ponte accidentale)",
+        "Alimentatore con uscita non isolata che porta una tensione di comune sul conduttore 0V"
+      ],
+      "confidence_logic": [
+        "CONFERMATO tensione reale: se la tensione regge applicando un carico reale (es. lampada o resistenza 1kΩ collegata tra il punto e 0V)",
+        "CONFERMATO tensione flottante: se la tensione crolla o scompare applicando anche solo 1kΩ di carico",
+        "PROBABILE flottante: se la tensione è compresa tra 3V e 15V in un sistema 24V DC"
+      ],
+      "checks": [
+        "1) Misurare la tensione con multimetro tra il punto sospetto e 0V (GND comune)",
+        "2) Collegare una resistenza da 1kΩ (o una lampada spia) tra il punto e 0V",
+        "3) Rimisurare: se la tensione crolla → era flottante, se regge → è reale",
+        "4) Verificare il percorso del cavo: se scorre parallelo a cavi 230V per >50cm, è esposto a induzione",
+        "5) Misurare la resistenza del conduttore (con circuito disalimentato): deve essere <1Ω per cavo corto",
+        "6) Verificare che il 0V dell'alimentatore sia messo a terra in un solo punto"
+      ],
+      "common_mistakes": [
+        "Fidarsi della misura del multimetro a alta impedenza senza applicare un carico",
+        "Concludere che il PLC è guasto perché 'vede' un ingresso attivo senza verificare la sorgente",
+        "Non verificare il percorso fisico del cavo rispetto ad altri circuiti"
+      ],
+      "example_case": "Segnale di presenza da sensore ottico: il multimetro misura 8V sul morsetto d'ingresso del PLC anche a sensore non attivo. Con 1kΩ collegato: la tensione crolla a 0.3V. Causa: il cavo del sensore percorre lo stesso canalino del cavo 400V del motore per 3 metri. Soluzione: cavo schermato con schermo messo a terra su un solo lato."
+    },
+    {
+      "id": "FP-03",
+      "symptom": "Nessun differenziale visibile nel quadro esterno o di cantiere",
+      "likely_causes": [
+        "Il differenziale è installato nel quadro principale interno e il quadro esterno è solo derivazione",
+        "Il quadro esterno è stato installato senza differenziale in violazione della normativa",
+        "Il differenziale era presente ma è stato rimosso (es. dopo un guasto non risolto)",
+        "Il quadro è classificato come 'quadro di distribuzione' non 'quadro utente' (limite normativo diverso)"
+      ],
+      "confidence_logic": [
+        "CONFERMATO non a norma: se il quadro alimenta utenze con prese e nessun differenziale è presente in tutta la catena",
+        "PROBABILE a norma: se esiste un differenziale nel quadro principale che copre questa derivazione",
+        "NON VERIFICABILE: senza schema unifilare completo dell'impianto"
+      ],
+      "checks": [
+        "1) Tracciare la catena di alimentazione fino al contatore/quadro principale",
+        "2) Verificare se esiste un differenziale che copre anche questo quadro",
+        "3) Richiedere lo schema unifilare dell'impianto",
+        "4) Verificare la destinazione d'uso: le prese di corrente richiedono SEMPRE protezione differenziale 30mA",
+        "5) Verificare che il quadro sia chiuso a chiave se in zona accessibile al pubblico"
+      ],
+      "common_mistakes": [
+        "Assumere che il differenziale nel quadro principale copra tutti i quadri derivati",
+        "Non verificare lo schema completo dell'impianto",
+        "Accettare la situazione 'perché funziona da anni'"
+      ],
+      "example_case": "Quadro di cantiere con 4 prese 16A e una presa 32A, nessun differenziale visibile. Il quadro principale è a 50m con un differenziale 300mA (protezione antincendio, non personale). Non conforme: il CEI 64-8 richiede 30mA per protezione personale su ogni presa di cantiere. Soluzione: installare RCBO 30mA per ogni linea prese."
+    },
+    {
+      "id": "FP-04",
+      "symptom": "IP inadeguato: cassetta esterna non ermetica o pressacavi aperti",
+      "likely_causes": [
+        "Guarnizione perimetrale della porta degradata o mancante",
+        "Pressacavi non serrati o di dimensione errata rispetto al cavo",
+        "Fori di passaggio cavo ciechi non tappati",
+        "IP originale della cassetta insufficiente per l'ambiente (IP44 invece di IP65)"
+      ],
+      "confidence_logic": [
+        "CONFERMATO non a norma: se si verifica presenza di umidità, condensa o insetti all'interno",
+        "PROBABILE non conforme: se guarnizione non comprime uniformemente o pressacavi è visibilmente allentato",
+        "PROBABILE ok: se IP >65, guarnizione intatta e tutti i pressacavi serrati"
+      ],
+      "checks": [
+        "1) Ispezionare visivamente la guarnizione: deve essere elastica, senza crepe, compressa uniformemente alla chiusura",
+        "2) Verificare ogni pressacavo: tirare leggermente il cavo — non deve scorrere",
+        "3) Contare i fori non utilizzati: tutti devono avere tappi ciechi filettati",
+        "4) Verificare l'interno: presenza di condensa, tracce di umidità, insetti = infiltrazione in corso",
+        "5) Controllare la targhetta IP del box rispetto alle condizioni esterne (pioggia, sole, polvere)"
+      ],
+      "common_mistakes": [
+        "Installare componenti IP65 in una cassetta IP44",
+        "Lasciare fori di cablaggio aperti 'per ora'",
+        "Non sostituire le guarnizioni durante la manutenzione periodica",
+        "Usare pressacavi troppo grandi per il cavo (passante non bloccato)"
+      ],
+      "example_case": "Quadro pompa irrigazione interrata: lampada LED di segnalazione bruciata ogni estate. Ispezione: guarnizione secca e crepata, pressacavi del cavo 3×2.5mm² allentato. All'interno: tracce di ruggine su barra DIN e umidità visibile. Causa: infiltrazione acqua estiva con raggi UV che degradano le guarnizioni. Soluzione: sostituzione cassetta con IP67 + guarnizioni nuove + pressacavi con dado di bloccaggio."
+    },
+    {
+      "id": "FP-05",
+      "symptom": "Magnetotermico caldo al tatto dopo pochi minuti di funzionamento",
+      "likely_causes": [
+        "Morsetto allentato: resistenza di contatto elevata genera calore I²R",
+        "Cavo sottodimensionato per il carico: il cavo dissipa calore per resistenza ohmica",
+        "Sovraccarico continuato: corrente assorbita >80% di In in continuo",
+        "Magnetotermico difettoso con bimetallo degradato"
+      ],
+      "confidence_logic": [
+        "CONFERMATO morsetto allentato: se riserrando il morsetto il problema scompare",
+        "PROBABILE sovraccarico: se la corrente misurata con pinza è >In del magnetotermico",
+        "NON VERIFICABILE: senza misura di corrente e verifica del serraggio morsetti"
+      ],
+      "checks": [
+        "1) Con alimentazione tolta: verificare il serraggio di TUTTI i morsetti (superiori e inferiori)",
+        "2) Con alimentazione ripristinata: misurare la corrente con pinza amperometrica",
+        "3) Confrontare la corrente misurata con In del magnetotermico",
+        "4) Misurare la temperatura del morsetto e del cavo (infrarossi o tatto dopo 15 min)",
+        "5) Verificare la sezione del cavo (calibro) rispetto alla corrente assorbita"
+      ],
+      "common_mistakes": [
+        "Aumentare il calibro del magnetotermico senza cercare la causa",
+        "Non controllare anche i morsetti delle utenze (prese, morsettiere a valle)",
+        "Ignorare il problema 'tanto non scatta'"
+      ],
+      "example_case": "Linea forno: magnetotermico 32A caldo al tatto dopo 10 minuti. Corrente misurata: 28A (ok). Morsetto superiore del magnetotermico: cavo estratto con le dita senza forza. Il morsetto era serrato solo di 1 giro. Resistenza di contatto stimata: 0.05Ω × 28² = 39W di calore. Soluzione: riserraggio con cacciavite dinamometrico a 1.5Nm, problema risolto."
+    },
+    {
+      "id": "FP-06",
+      "symptom": "Utenza non si accende: tensione presente a monte, assente a valle del contattore",
+      "likely_causes": [
+        "Bobina del contattore non eccitata: verificare il circuito di controllo",
+        "Contattore non si chiude: bobina eccitata ma contatti di potenza non chiudono (usurati)",
+        "Fusibile del circuito di controllo bruciato",
+        "PLC non invia il segnale di abilitazione (verificare logica di controllo)"
+      ],
+      "confidence_logic": [
+        "CONFERMATO bobina non eccitata: se non c'è tensione tra A1 e A2 del contattore",
+        "CONFERMATO contatti di potenza guasti: se c'è tensione su A1-A2 ma non c'è tensione in uscita",
+        "PROBABILE problema nel circuito di controllo: se la bobina non si eccita e il circuito di controllo è complesso"
+      ],
+      "checks": [
+        "1) Misurare tensione a monte del contattore (L1/L2/L3 o L/N)",
+        "2) Misurare tensione bobina (A1-A2): se assente → problema nel circuito di controllo",
+        "3) Se bobina eccitata: misurare tensione uscita (T1/T2/T3 o T/N)",
+        "4) Se uscita assente con bobina eccitata: contatti di potenza guasti, sostituire contattore",
+        "5) Verificare fusibile del circuito di controllo (solitamente 1-2A)",
+        "6) Con PLC: verificare lo stato dell'uscita digitale nel programma"
+      ],
+      "common_mistakes": [
+        "Non misurare la tensione sulla bobina e concludere che il contattore è guasto",
+        "Sostituire il contattore senza verificare il circuito di controllo",
+        "Non verificare i fusibili del circuito di controllo"
+      ],
+      "example_case": "Pompa non si avvia: tensione 400V presente a monte di KM1. Tensione bobina A1-A2: 0V. PLC: uscita Q0.1 attiva ma tensione uscita 0V. Causa: relè di interfaccia RLY1 tra PLC e bobina ha la bobina bruciata (resistenza infinita misurata). Soluzione: sostituzione relè RLY1."
+    }
+  ]
+}

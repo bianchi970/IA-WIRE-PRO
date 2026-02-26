@@ -13,6 +13,8 @@ const multer = require("multer");
 const Anthropic = require("@anthropic-ai/sdk");
 const OpenAI = require("openai");
 const rocco = require("./rocco");
+const { fetchKnowledgeContext, getLoadedKnowledge } = require("./knowledge");
+const { analyzeTechnicalRequest, formatDiagnosticContext, formatOfflineAnswer, TEST_CASE } = require("./engine/diagnosticEngine");
 // ✅ DB pool (protetto: non deve mai far crashare il server)
 let pool = null;
 try {
@@ -20,6 +22,22 @@ try {
 } catch (e) {
   console.warn("⚠️ DB non disponibile, RAG DB disattivato:", e?.message || e);
 }
+
+// ✅ Knowledge base locale (lazy-loaded al primo uso in fetchKnowledgeContext)
+// Pre-caricamento a startup per validazione
+let _knowledgeCounts = { components: 0, patterns: 0, rules: 0, protocols: 0 };
+try {
+  const fs = require("fs");
+  const path = require("path");
+  const kDir = path.join(__dirname, "knowledge");
+  function _countItems(file, key) {
+    try { var d = JSON.parse(fs.readFileSync(path.join(kDir, file), "utf8")); return (d[key] || []).length; } catch (_) { return 0; }
+  }
+  _knowledgeCounts.components = _countItems("components.json", "items");
+  _knowledgeCounts.patterns   = _countItems("failure_patterns.json", "patterns");
+  _knowledgeCounts.rules      = _countItems("protection_rules.json", "rules");
+  _knowledgeCounts.protocols  = _countItems("safety_protocols.json", "protocols");
+} catch (_) {}
 
 // =========================
 // CONFIG
@@ -35,6 +53,7 @@ const JSON_LIMIT = process.env.JSON_LIMIT || "12mb";
 const MULTIPART_FILE_MAX = 5 * 1024 * 1024; // 5MB
 const HISTORY_MAX = Number(process.env.HISTORY_MAX || 10);
 const SUMMARY_THRESHOLD = Number(process.env.SUMMARY_THRESHOLD || 14);
+const PREFERRED_PROVIDER = (process.env.PREFERRED_PROVIDER || "openai").toLowerCase().trim();
 
 // Provider keys + modelli (trim anti newline)
 const ANTHROPIC_API_KEY = (process.env.ANTHROPIC_API_KEY || "").trim();
@@ -77,13 +96,24 @@ const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 // =========================
 // UTILS
 // =========================
-function pickProvider(providerRequested) {
-  const p = String(providerRequested || "").toLowerCase().trim();
-  if (p === "anthropic" || p === "claude") return "anthropic";
-  if (p === "openai" || p === "gpt") return "openai";
-  if (openai) return "openai";
-  if (anthropic) return "anthropic";
-  return "none";
+/**
+ * Ritorna la coda ordinata dei provider da tentare.
+ * Il primo ha priorità; il secondo è il fallback automatico.
+ */
+function buildProviderQueue(requested) {
+  const req = String(requested || "").toLowerCase().trim();
+  const available = [];
+  if (openai)    available.push("openai");
+  if (anthropic) available.push("anthropic");
+  if (!available.length) return [];
+  if (req === "openai"    || req === "gpt")    return reorder(available, "openai");
+  if (req === "anthropic" || req === "claude") return reorder(available, "anthropic");
+  return reorder(available, PREFERRED_PROVIDER);
+}
+
+function reorder(arr, first) {
+  if (!arr.includes(first)) return arr.slice();
+  return [first].concat(arr.filter(function (p) { return p !== first; }));
 }
 
 function safeSliceHistory(history) {
@@ -491,6 +521,23 @@ function ensureWireFormat(text) {
   ].join("\n");
 }
 
+// ============================================================
+// OFFLINE FALLBACK HELPER
+// Rileva errori di rete (DNS, timeout, connection reset)
+// ============================================================
+function isNetworkError(err) {
+  if (!err) return false;
+  var code = String(err.code || "");
+  var msg  = String(err.message || "").toLowerCase();
+  var NET_CODES = ["ENOTFOUND", "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN", "ENETUNREACH"];
+  if (NET_CODES.indexOf(code) >= 0) return true;
+  return msg.indexOf("enotfound") >= 0 ||
+         msg.indexOf("etimedout") >= 0 ||
+         msg.indexOf("econnreset") >= 0 ||
+         msg.indexOf("fetch failed") >= 0 ||
+         msg.indexOf("network") >= 0;
+}
+
 // =========================
 // STRATO 0: SICUREZZA
 // =========================
@@ -552,6 +599,75 @@ function buildSystemPrompt() {
     "PROSSIMO PASSO:",
     "- una sola azione concreta da fare adesso.",
   ].join("\n");
+}
+
+// =========================
+// AI CALL HELPERS (FASE 6)
+// =========================
+
+async function callOpenAI({ systemPrompt, shortHistory, imageBase64, message, dbContextText, docChunksText, knowledgeText, engineText }) {
+  if (!openai) throw new Error("OpenAI non configurato");
+  const messages = [{ role: "system", content: systemPrompt }].concat(shortHistory);
+  if (dbContextText) messages.push({ role: "system", content: dbContextText });
+  if (docChunksText) messages.push({ role: "system", content: docChunksText });
+  if (knowledgeText) messages.push({ role: "system", content: knowledgeText });
+  if (engineText) messages.push({ role: "system", content: engineText });
+
+  if (imageBase64) {
+    const img = normalizeBase64Image(imageBase64);
+    messages.push({
+      role: "user",
+      content: [
+        { type: "text", text: message },
+        { type: "image_url", image_url: { url: "data:" + img.mime + ";base64," + img.b64 } },
+      ],
+    });
+  } else {
+    messages.push({ role: "user", content: message });
+  }
+
+  const completion = await openai.chat.completions.create({
+    model: OPENAI_MODEL,
+    messages,
+    temperature: 0.1,
+  });
+  const answer = (completion && completion.choices && completion.choices[0] &&
+                  completion.choices[0].message && completion.choices[0].message.content) || "Nessuna risposta.";
+  return { answer, model: OPENAI_MODEL };
+}
+
+async function callAnthropic({ systemPrompt, shortHistory, imageBase64, message, dbContextText, docChunksText, knowledgeText, engineText }) {
+  if (!anthropic) throw new Error("Anthropic non configurato");
+  const msgs = shortHistory.slice();
+
+  if (imageBase64) {
+    const img = normalizeBase64Image(imageBase64);
+    msgs.push({
+      role: "user",
+      content: [
+        { type: "text", text: message },
+        { type: "image", source: { type: "base64", media_type: img.mime, data: img.b64 } },
+      ],
+    });
+  } else {
+    msgs.push({ role: "user", content: message });
+  }
+
+  const sysContent = [systemPrompt, dbContextText, docChunksText, knowledgeText, engineText].filter(Boolean).join("\n\n");
+  const resp = await anthropic.messages.create({
+    model: ANTHROPIC_MODEL,
+    max_tokens: 900,
+    temperature: 0.1,
+    system: sysContent,
+    messages: msgs,
+  });
+
+  const blocks = Array.isArray(resp && resp.content ? resp.content : null) ? resp.content : [];
+  const answer = blocks
+    .filter(function (b) { return b && b.type === "text"; })
+    .map(function (b) { return b.text; })
+    .join("\n").trim() || "Nessuna risposta.";
+  return { answer, model: ANTHROPIC_MODEL };
 }
 
 // =========================
@@ -942,13 +1058,6 @@ app.post("/api/chat", uploadAny, async (req, res) => {
     }
     const userPayload = rocco.buildUserPayload(message, history);
 
-    const chosen = pickProvider(provider);
-    if (chosen === "none") {
-      return res.status(500).json({
-        error: "Nessun provider configurato: manca OPENAI_API_KEY e/o ANTHROPIC_API_KEY in .env",
-      });
-    }
-
     const shortHistory = dbHistory
       ? dbHistory.map(function (m) { return { role: m.role, content: String(m.content || "") }; })
       : safeSliceHistory(history);
@@ -971,122 +1080,113 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       console.warn("⚠️ Doc chunks non disponibili:", (e && e.message) || e);
     }
 
-    // OPENAI
-    if (chosen === "openai") {
-      if (!openai) return res.status(500).json({ error: "OPENAI non configurato (OPENAI_API_KEY mancante)." });
-
-      const messages = [{ role: "system", content: systemPrompt }].concat(shortHistory);
-      if (dbContextText) messages.push({ role: "system", content: dbContextText });
-      if (docChunksText) messages.push({ role: "system", content: docChunksText });
-
-      if (imageBase64) {
-        const img = normalizeBase64Image(imageBase64);
-        messages.push({
-          role: "user",
-          content: [
-            { type: "text", text: message },
-            { type: "image_url", image_url: { url: "data:" + img.mime + ";base64," + img.b64 } },
-          ],
-        });
-      } else {
-        messages.push({ role: "user", content: message });
+    // ===== KNOWLEDGE BASE LOCALE + ROCCO ENGINE (FASE 7) =====
+    let knowledgeText = "";
+    let engineText = "";
+    let engineDiag = null;
+    try {
+      knowledgeText = fetchKnowledgeContext(message);
+    } catch (e) {
+      console.warn("⚠️ Knowledge context non disponibile:", (e && e.message) || e);
+    }
+    try {
+      const _kb = getLoadedKnowledge();
+      engineDiag = analyzeTechnicalRequest({ message, hasImage: !!imageBase64 }, {
+        failurePatterns: _kb.failurePatterns,
+        protectionRules: _kb.protectionRules,
+      });
+      engineText = formatDiagnosticContext(engineDiag);
+      // FASE 5 — Safety Lock: se condizione pericolosa, forza avviso in testa al system prompt
+      if (engineDiag && engineDiag.isDangerous && engineText) {
+        systemPrompt = "⚠️ SAFETY LOCK ATTIVATO: condizione pericolosa rilevata dal motore di pre-analisi.\n" +
+          "Priorità assoluta alla sicurezza. Indicare disconnessione immediata prima di qualsiasi test.\n\n" +
+          systemPrompt;
       }
+    } catch (e) {
+      console.warn("⚠️ Diagnostic engine non disponibile:", (e && e.message) || e);
+    }
 
-      const completion = await openai.chat.completions.create({
-        model: OPENAI_MODEL,
-        messages,
-        temperature: 0.1,
-      });
-
-      let answer = completion?.choices?.[0]?.message?.content || "Nessuna risposta.";
-      if (STRICT_FORMAT) answer = ensureWireFormat(answer);
-
-      // Salva risposta assistente + aggiorna conversation
-      await msgInsert({
-        conversation_id: convId,
-        role: "assistant",
-        content: answer,
-        content_format: "text",
-        provider: "openai",
-        model: OPENAI_MODEL,
-        certainty: extractCertainty(answer),
-      });
-      await convTouch(convId);
-      generateContextSummary(convId, "openai").catch(function () {});
-
-      return res.json({
-        ok: true,
-        provider: "openai",
-        model: OPENAI_MODEL,
-        answer,
-        conversation_id: convId,
-        signature: "ROCCO-CHAT-V2",
-        rag: { usedDbContext: Boolean(dbContextText), usedDocChunks: Boolean(docChunksText) },
+    // ===== ROUTING MULTI-IA + FALLBACK (FASE 6) =====
+    const queue = buildProviderQueue(provider);
+    if (!queue.length) {
+      return res.status(500).json({
+        error: "Nessun provider configurato: manca OPENAI_API_KEY e/o ANTHROPIC_API_KEY in .env",
       });
     }
 
-    // ANTHROPIC
-    if (chosen === "anthropic") {
-      if (!anthropic) return res.status(500).json({ error: "Anthropic non configurato (ANTHROPIC_API_KEY mancante)." });
+    const callParams = { systemPrompt, shortHistory, imageBase64, message, dbContextText, docChunksText, knowledgeText, engineText };
 
-      const msgs = shortHistory.slice();
+    let answer = null;
+    let usedProvider = null;
+    let usedModel = null;
+    let fallbackUsed = false;
+    let lastErr = null;
 
-      if (imageBase64) {
-        const img = normalizeBase64Image(imageBase64);
-        msgs.push({
-          role: "user",
-          content: [
-            { type: "text", text: message },
-            { type: "image", source: { type: "base64", media_type: img.mime, data: img.b64 } },
-          ],
-        });
-      } else {
-        msgs.push({ role: "user", content: message });
+    for (var qi = 0; qi < queue.length; qi++) {
+      var p = queue[qi];
+      if (qi > 0) {
+        fallbackUsed = true;
+        console.warn("  \u26A1 Fallback \u2192 " + p + " (primario fallito: " + ((lastErr && lastErr.message) || lastErr) + ")");
       }
-
-      const resp = await anthropic.messages.create({
-        model: ANTHROPIC_MODEL,
-        max_tokens: 900,
-        temperature: 0.1,
-        system: [systemPrompt, dbContextText, docChunksText].filter(Boolean).join("\n\n"),
-        messages: msgs,
-      });
-
-      const blocks = Array.isArray(resp?.content) ? resp.content : [];
-      let answer =
-        blocks
-          .filter((b) => b?.type === "text")
-          .map((b) => b.text)
-          .join("\n")
-          .trim() || "Nessuna risposta.";
-
-      if (STRICT_FORMAT) answer = ensureWireFormat(answer);
-
-      // Salva risposta assistente + aggiorna conversation
-      await msgInsert({
-        conversation_id: convId,
-        role: "assistant",
-        content: answer,
-        content_format: "text",
-        provider: "anthropic",
-        model: ANTHROPIC_MODEL,
-        certainty: extractCertainty(answer),
-      });
-      await convTouch(convId);
-      generateContextSummary(convId, "anthropic").catch(function () {});
-
-      return res.json({
-        ok: true,
-        provider: "anthropic",
-        model: ANTHROPIC_MODEL,
-        answer,
-        conversation_id: convId,
-        signature: "ROCCO-CHAT-V2",
-        rag: { usedDbContext: Boolean(dbContextText), usedDocChunks: Boolean(docChunksText) },
-      });
+      try {
+        var result = p === "openai"
+          ? await callOpenAI(callParams)
+          : await callAnthropic(callParams);
+        answer = result.answer;
+        usedProvider = p;
+        usedModel = result.model;
+        break;
+      } catch (err) {
+        lastErr = err;
+        console.warn("  \u26A0\uFE0F Provider " + p + " fallito:", (err && err.message) || err);
+      }
     }
 
-    return res.status(500).json({ error: "Provider non gestito." });
+    // ===== OFFLINE FALLBACK (C) =====
+    if (!answer) {
+      // Se il fallimento è di rete E abbiamo un'analisi engine → risposta locale
+      if (isNetworkError(lastErr) && engineDiag && engineDiag.isTechnical) {
+        console.warn("  🔌 LLM irraggiungibile — risposta offline da ROCCO engine.");
+        answer = formatOfflineAnswer(engineDiag, message);
+        usedProvider = "offline_engine";
+        usedModel    = "rocco-local-v2";
+      } else {
+        throw lastErr || new Error("Tutti i provider falliti");
+      }
+    }
+
+    if (STRICT_FORMAT && usedProvider !== "offline_engine") answer = ensureWireFormat(answer);
+
+    // Persistenza + summary
+    await msgInsert({
+      conversation_id: convId,
+      role: "assistant",
+      content: answer,
+      content_format: "text",
+      provider: usedProvider,
+      model: usedModel,
+      certainty: extractCertainty(answer),
+    });
+    await convTouch(convId);
+    generateContextSummary(convId, usedProvider).catch(function () {});
+
+    return res.json({
+      ok: true,
+      provider: usedProvider,
+      model: usedModel,
+      fallback_used: fallbackUsed,
+      answer,
+      conversation_id: convId,
+      signature: "ROCCO-CHAT-V2",
+      rag: { usedDbContext: Boolean(dbContextText), usedDocChunks: Boolean(docChunksText), usedKnowledge: Boolean(knowledgeText) },
+      engine: engineDiag ? {
+        active: true,
+        isTechnical: engineDiag.isTechnical,
+        isDangerous: engineDiag.isDangerous,
+        matchedPatterns: engineDiag.matchedPatterns,
+        matchedRules: engineDiag.matchedRules,
+      } : { active: false },
+    });
   } catch (err) {
     console.error("❌ /api/chat error:", err);
     return res.status(500).json({
@@ -1113,6 +1213,33 @@ app.post("/api/upload", uploadAny, async (req, res) => {
   } catch (err) {
     console.error("❌ /api/upload error:", err);
     res.status(500).json({ error: "Errore upload", details: err?.message ? err.message : String(err) });
+  }
+});
+
+// =========================
+// ROCCO ENGINE TEST ENDPOINT (FASE 6)
+// =========================
+
+// GET /api/engine/test — esegue una diagnosi di test con caso hardcoded
+app.get("/api/engine/test", (req, res) => {
+  try {
+    const input = { message: TEST_CASE.message, hasImage: TEST_CASE.hasImage };
+    const _kb = getLoadedKnowledge();
+    const diag = analyzeTechnicalRequest(input, { failurePatterns: _kb.failurePatterns, protectionRules: _kb.protectionRules });
+    const ctx = formatDiagnosticContext(diag);
+    const knCtx = fetchKnowledgeContext(TEST_CASE.message);
+
+    res.json({
+      ok: true,
+      test_input: TEST_CASE.message,
+      diagnostic: diag,
+      formatted_engine_context: ctx,
+      formatted_knowledge_context: knCtx,
+      counts: _knowledgeCounts,
+    });
+  } catch (err) {
+    console.error("❌ /api/engine/test error:", err);
+    res.status(500).json({ ok: false, error: err && err.message ? err.message : String(err) });
   }
 });
 
@@ -1165,5 +1292,14 @@ app.listen(PORT, () => {
       String(pool ? "✅ Agganciato" : "⚠️ Non disponibile").padEnd(30) +
       "║\n" +
       "╚══════════════════════════════════════╝\n"
+  );
+  // FASE 7 — Console Validation
+  console.log("ROCCO ENGINE: ACTIVE");
+  console.log(
+    "KNOWLEDGE ITEMS: " +
+    _knowledgeCounts.components + " components, " +
+    _knowledgeCounts.patterns + " failure_patterns, " +
+    _knowledgeCounts.rules + " protection_rules, " +
+    _knowledgeCounts.protocols + " safety_protocols"
   );
 });

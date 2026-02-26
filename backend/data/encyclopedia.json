@@ -1,0 +1,920 @@
+{
+  "components": [
+    {
+      "category": "protezione",
+      "name": "Differenziale tipo AC 2P 25A 30mA",
+      "type": "RCD",
+      "brand": "Legrand",
+      "model": "DX3 6000",
+      "technical_specs": {
+        "In": "25A", "Idn": "30mA", "tipo": "AC",
+        "poli": 2, "Icu": "6kA", "tensione": "230V"
+      },
+      "issues": [
+        {
+          "title": "Differenziale scatta appena richiuso",
+          "symptoms": [
+            "scatta immediatamente dopo riarmo",
+            "scatta anche senza carichi collegati"
+          ],
+          "probable_causes": [
+            "dispersione a terra sul cavo (isolamento danneggiato)",
+            "neutro e PE uniti a valle del quadro",
+            "RCD difettoso internamente"
+          ],
+          "tests": [
+            "scollegare tutti i carichi, riarmare a vuoto: se scatta ancora = guasto nel cablaggio o nel dispositivo",
+            "misurare isolamento cavi con megohmetro 500V: deve essere >1MΩ",
+            "verificare che N e PE non siano uniti a valle del punto equipotenziale"
+          ],
+          "fixes": [
+            "individuare e sostituire il tratto di cavo con isolamento danneggiato",
+            "separare N e PE se erroneamente uniti",
+            "sostituire il differenziale se scatta a vuoto con impianto scollegato"
+          ],
+          "certainty_logic": "Confermato solo dopo misura di isolamento con megohmetro e verifica a vuoto"
+        },
+        {
+          "title": "Differenziale non scatta premendo il tasto TEST",
+          "symptoms": [
+            "tasto TEST non provoca lo scatto",
+            "dispositivo rimane chiuso"
+          ],
+          "probable_causes": [
+            "dispositivo difettoso (circuito di test guasto)",
+            "alimentazione assente sulla linea (non controlla senza tensione)"
+          ],
+          "tests": [
+            "verificare presenza tensione in ingresso: 230V fase-neutro",
+            "premere TEST con carico collegato"
+          ],
+          "fixes": [
+            "sostituire il differenziale: un dispositivo che non risponde al TEST non offre protezione"
+          ],
+          "certainty_logic": "Non verificabile senza tensione presente — verificare prima l'alimentazione"
+        },
+        {
+          "title": "Differenziale scatta in modo intermittente sotto carico",
+          "symptoms": [
+            "scatta alcune volte al giorno senza causa apparente",
+            "non scatta sempre nelle stesse condizioni"
+          ],
+          "probable_causes": [
+            "corrente di dispersione cumulativa da più carichi (filtri EMC, variatori di frequenza, motori)",
+            "differenziale con soglia degradata (vecchio o umido)",
+            "disturbi transitorie sulla rete (scariche, TRIAC)"
+          ],
+          "tests": [
+            "misurare la corrente di dispersione cumulativa con pinza differenziale: deve essere <15mA (metà Idn)",
+            "verificare presenza di variatori di frequenza, UPS, inverter o filtri EMI sulla linea"
+          ],
+          "fixes": [
+            "sostituire con differenziale tipo A o F per carichi non lineari",
+            "distribuire i carichi su linee dedicate con propri differenziali",
+            "installare filtri di rete sui carichi generatori di correnti parassite"
+          ],
+          "certainty_logic": "Probabile se corrente di dispersione >10mA con tutti i carichi collegati"
+        }
+      ]
+    },
+    {
+      "category": "protezione",
+      "name": "Magnetotermico curva C 16A 1P+N",
+      "type": "MCB",
+      "brand": "ABB",
+      "model": "S201M C16",
+      "technical_specs": {
+        "In": "16A", "curva": "C", "poli": "1P+N",
+        "Icu": "10kA", "tensione": "230V"
+      },
+      "issues": [
+        {
+          "title": "Magnetotermico scatta ripetutamente sotto carico",
+          "symptoms": [
+            "scatta dopo pochi minuti di funzionamento",
+            "il carico è acceso e funziona regolarmente prima dello scatto"
+          ],
+          "probable_causes": [
+            "sovraccarico: corrente assorbita superiore a In",
+            "temperatura ambiente elevata (derating termico)",
+            "magnetotermico sottodimensionato per il carico"
+          ],
+          "tests": [
+            "misurare corrente con pinza amperometrica: deve essere <16A",
+            "verificare temperatura del dispositivo al tatto dopo 10 minuti di funzionamento"
+          ],
+          "fixes": [
+            "sostituire con taglia superiore se corrente misurata > In",
+            "ridurre il carico o distribuirlo su più linee",
+            "verificare che il cavo sia adeguato alla nuova taglia"
+          ],
+          "certainty_logic": "Confermato con misura diretta della corrente assorbita"
+        },
+        {
+          "title": "Magnetotermico caldo al tatto con odore di plastica",
+          "symptoms": [
+            "corpo del dispositivo molto caldo",
+            "odore di plastica surriscaldata",
+            "eventuale annerimento dei morsetti"
+          ],
+          "probable_causes": [
+            "morsetto allentato (resistenza di contatto elevata = effetto Joule)",
+            "cavo sottodimensionato rispetto alla corrente",
+            "contatti interni ossidati o degradati"
+          ],
+          "tests": [
+            "verificare coppia di serraggio morsetti (0.5-0.6 Nm per 2.5mm²)",
+            "misurare la caduta di tensione ai morsetti con corrente in transito: <50mV a pieno carico",
+            "misurare corrente assorbita con pinza"
+          ],
+          "fixes": [
+            "serrare i morsetti al valore corretto con cacciavite dinamometrico",
+            "sostituire il cavo se di sezione inadeguata",
+            "sostituire il magnetotermico se i contatti sono bruciati"
+          ],
+          "certainty_logic": "Probabile morsetto allentato: verificare prima di qualsiasi altra diagnosi"
+        },
+        {
+          "title": "Magnetotermico in posizione intermedia, non riarma",
+          "symptoms": [
+            "leva in posizione centrale (ne ON ne OFF)",
+            "impossibile portare in ON"
+          ],
+          "probable_causes": [
+            "cortocircuito ancora presente sulla linea",
+            "guasto meccanico interno del dispositivo"
+          ],
+          "tests": [
+            "scollegare il carico, portare leva su OFF fino a fine corsa, poi tentare riarmo",
+            "misurare continuità tra fase e neutro del carico: deve essere >infinito"
+          ],
+          "fixes": [
+            "eliminare il cortocircuito sul carico prima di riarmare",
+            "sostituire il dispositivo se non riarma anche con linea scollegata"
+          ],
+          "certainty_logic": "Cortocircuito presente finché non si misura isolamento >1MΩ sulla linea"
+        }
+      ]
+    },
+    {
+      "category": "protezione",
+      "name": "Interruttore differenziale magnetotermico 16A 30mA",
+      "type": "RCBO",
+      "brand": "Schneider Electric",
+      "model": "iC60N A9",
+      "technical_specs": {
+        "In": "16A", "Idn": "30mA", "tipo": "AC",
+        "curva": "C", "poli": "1P+N", "Icu": "6kA"
+      },
+      "issues": [
+        {
+          "title": "RCBO scatta solo di notte o a temperature basse",
+          "symptoms": [
+            "scatta nelle ore notturne",
+            "di giorno funziona regolarmente"
+          ],
+          "probable_causes": [
+            "corrente di dispersione da umidità condensata sui cavi (temperatura notturna)",
+            "carico notturno diverso (timer, riscaldamento) con dispersione"
+          ],
+          "tests": [
+            "misurare isolamento dei cavi la mattina presto con megohmetro: può essere <1MΩ se umido",
+            "verificare quali carichi sono attivi di notte"
+          ],
+          "fixes": [
+            "asciugare e sigillare i passaggi cavo esposti a umidità",
+            "sostituire tratti di cavo con isolamento degradato"
+          ],
+          "certainty_logic": "Probabile umidità: eseguire misura isolamento a freddo e a caldo per confermare"
+        },
+        {
+          "title": "RCBO in posizione intermedia dopo scatto differenziale",
+          "symptoms": [
+            "dopo uno scatto la leva è a metà",
+            "non riarma direttamente su ON"
+          ],
+          "probable_causes": [
+            "funzionamento normale del dispositivo dopo scatto differenziale"
+          ],
+          "tests": [
+            "portare leva su OFF fino a fine corsa, poi riarmare su ON"
+          ],
+          "fixes": [
+            "procedura standard: OFF completo poi ON — se si ripete, diagnosticare la causa dello scatto"
+          ],
+          "certainty_logic": "Comportamento atteso: non è un guasto ma una procedura di riarmo"
+        }
+      ]
+    },
+    {
+      "category": "comando",
+      "name": "Contattore trifase 25A",
+      "type": "contattore",
+      "brand": "Schneider Electric",
+      "model": "LC1D25",
+      "technical_specs": {
+        "Ie": "25A", "bobina": "24VAC/DC",
+        "poli": 3, "contatti_aus": "1NO+1NC",
+        "utilizzo": "AC-3", "frequenza": "50/60Hz"
+      },
+      "issues": [
+        {
+          "title": "Contattore ronza / vibra fortemente",
+          "symptoms": [
+            "rumore di ronzio continuo a frequenza 50Hz",
+            "vibrazione meccanica percepibile"
+          ],
+          "probable_causes": [
+            "tensione di alimentazione bobina bassa (<85% Ub)",
+            "spire di cortocircuito del nucleo danneggiate",
+            "nucleo magnetico sporco o ossidato"
+          ],
+          "tests": [
+            "misurare tensione sulla bobina durante il funzionamento: deve essere >0.85 × Ub nominale",
+            "verificare visivamente il nucleo magnetico: non deve presentare ossidazione o sbavature"
+          ],
+          "fixes": [
+            "verificare e correggere la caduta di tensione sul cablaggio della bobina",
+            "pulire il nucleo con panno secco",
+            "sostituire il contattore se le spire di cortocircuito sono bruciate"
+          ],
+          "certainty_logic": "Probabile tensione bobina bassa: misurare prima di smontare"
+        },
+        {
+          "title": "Contattore non attrae (bobina alimentata ma non chiude)",
+          "symptoms": [
+            "bobina ha tensione corretta",
+            "nucleo non si sposta, nessuna chiusura dei contatti"
+          ],
+          "probable_causes": [
+            "bobina interrotta (circuito aperto)",
+            "nucleo bloccato meccanicamente (corpo estraneo, corrosione)"
+          ],
+          "tests": [
+            "misurare resistenza bobina: valore fuori range o infinito indica circuito aperto",
+            "verificare libertà di movimento del nucleo a mano (con tensione assente)"
+          ],
+          "fixes": [
+            "sostituire la bobina o il contattore completo",
+            "rimuovere corpo estraneo e lubrificare parti meccaniche se inceppate"
+          ],
+          "certainty_logic": "Confermato guasto bobina se resistenza = infinito"
+        },
+        {
+          "title": "Contatti principali surriscaldati / anneriti",
+          "symptoms": [
+            "contatti anneriti visivamente",
+            "temperatura elevata al tatto sul corpo",
+            "tensione di caduta ai contatti elevata"
+          ],
+          "probable_causes": [
+            "corrente di carico superiore a Ie nominale",
+            "contatti usurati dopo molte manovre",
+            "morsetti allentati"
+          ],
+          "tests": [
+            "misurare corrente di carico con pinza: non deve superare Ie",
+            "misurare caduta di tensione ai contatti chiusi: deve essere <50mV"
+          ],
+          "fixes": [
+            "sostituire i contatti o il blocco contatti se anneriti",
+            "ridurre la corrente di carico",
+            "serrare i morsetti al valore corretto"
+          ],
+          "certainty_logic": "Probabile usura contatti con corrente al limite: misurare caduta di tensione per conferma"
+        }
+      ]
+    },
+    {
+      "category": "automazione",
+      "name": "PLC compatto 24VDC con I/O integrati",
+      "type": "PLC",
+      "brand": "Siemens",
+      "model": "S7-1200 CPU 1214C",
+      "technical_specs": {
+        "alimentazione": "24VDC", "DI": 14, "DQ": 10, "AI": 2,
+        "memoria_lavoro": "100KB", "protocollo": "Profinet/Ethernet",
+        "tensione_IO": "24VDC"
+      },
+      "issues": [
+        {
+          "title": "PLC va in STOP improvvisamente",
+          "symptoms": [
+            "LED STOP rosso acceso",
+            "programma si interrompe",
+            "LED ERROR eventualmente lampeggiante"
+          ],
+          "probable_causes": [
+            "errore nel programma (divisione per zero, accesso indirizzo non valido)",
+            "alimentazione 24V instabile o troppo bassa (<20V)",
+            "errore modulo I/O"
+          ],
+          "tests": [
+            "leggere il buffer diagnostico con TIA Portal (Online → Diagnostics Buffer)",
+            "misurare tensione 24VDC alimentazione: deve essere 20.4–28.8V"
+          ],
+          "fixes": [
+            "correggere il blocco di programma che genera l'errore secondo il diagnostics buffer",
+            "verificare e stabilizzare l'alimentazione 24V"
+          ],
+          "certainty_logic": "Confermato solo dopo lettura diagnostics buffer"
+        },
+        {
+          "title": "Comunicazione Profinet assente / intermittente",
+          "symptoms": [
+            "LED Link non acceso sulla porta Profinet",
+            "timeout di comunicazione con HMI o dispositivi remoti"
+          ],
+          "probable_causes": [
+            "indirizzo IP duplicato in rete",
+            "cavo Ethernet difettoso o non Cat5e",
+            "switch di rete non supporta Profinet (IGMP snooping problematico)"
+          ],
+          "tests": [
+            "verificare unicità indirizzi IP con ping da PC",
+            "sostituire cavo Ethernet con cavo certificato Cat5e o superiore",
+            "verificare LED link/activity sul port switch"
+          ],
+          "fixes": [
+            "assegnare indirizzo IP univoco tramite TIA Portal",
+            "sostituire il cavo",
+            "usare switch managed certificato Profinet"
+          ],
+          "certainty_logic": "Probabile IP duplicato o cavo difettoso: verificare in ordine"
+        }
+      ]
+    },
+    {
+      "category": "riscaldamento",
+      "name": "Caldaia murale a condensazione 24kW",
+      "type": "caldaia",
+      "brand": "Vaillant",
+      "model": "ecoTEC plus VC 246/5-5",
+      "technical_specs": {
+        "potenza_termica": "24kW", "rendimento": "109%",
+        "pressione_max": "3bar", "tensione": "230V 50Hz",
+        "tipo": "condensazione", "combustibile": "gas metano"
+      },
+      "issues": [
+        {
+          "title": "Codice errore F28 — mancata accensione",
+          "symptoms": [
+            "display mostra F28",
+            "bruciatore non si accende",
+            "si sente il click dell'elettrodo ma nessuna fiamma"
+          ],
+          "probable_causes": [
+            "pressione gas insufficiente (<17mbar per metano)",
+            "elettrovalvola gas difettosa",
+            "elettrodo di accensione o di ionizzazione sporco/posizionato male"
+          ],
+          "tests": [
+            "misurare pressione gas al punto di test caldaia: deve essere 17-25mbar (metano)",
+            "verificare visivamente elettrodo ionizzazione: distanza dalla fiamma 3-5mm, non deve essere carbonizzato"
+          ],
+          "fixes": [
+            "verificare apertura rubinetto gas e pressione di rete (chiamare distributore se bassa)",
+            "pulire o sostituire elettrodo ionizzazione",
+            "sostituire elettrovalvola se non si apre con tensione corretta"
+          ],
+          "certainty_logic": "Probabile gas o elettrodo: misurare pressione gas prima di intervenire su componentistica"
+        },
+        {
+          "title": "Codice errore F75 — sensore pressione acqua",
+          "symptoms": [
+            "display mostra F75",
+            "caldaia non parte",
+            "manometro mostra pressione normale (1-1.5bar)"
+          ],
+          "probable_causes": [
+            "pressostato acqua difettoso",
+            "aria nel circuito (pressione instabile)",
+            "pompa non fa pressione (guasto o aria)"
+          ],
+          "tests": [
+            "verificare pressione impianto: deve essere 1-1.5bar a freddo",
+            "sfiatare il circuito dai punti più alti",
+            "verificare funzionamento pompa: deve avviarsi"
+          ],
+          "fixes": [
+            "caricare o scaricare il circuito alla pressione corretta",
+            "sfiatare aria dal circuito",
+            "sostituire pressostato se difettoso"
+          ],
+          "certainty_logic": "Probabile aria nel circuito: sfiatare prima di sostituire componentistica"
+        },
+        {
+          "title": "Caldaia si spegne dopo 2-3 minuti con acqua calda",
+          "symptoms": [
+            "caldaia parte e poi si spegne",
+            "temperatura in uscita sale rapidamente poi blocco",
+            "codice errore temperatura alta"
+          ],
+          "probable_causes": [
+            "circolatore non funzionante (impianto a circuito chiuso senza portata)",
+            "valvole di zona tutte chiuse",
+            "scambiatore incrostato (flusso ridotto)"
+          ],
+          "tests": [
+            "verificare che il circolatore parta: sentire vibrazione, misurare assorbimento",
+            "verificare apertura delle valvole di zona",
+            "misurare temperatura ingresso e uscita: delta T >20°C indica portata insufficiente"
+          ],
+          "fixes": [
+            "riparare o sostituire il circolatore",
+            "aprire le valvole di zona",
+            "lavaggio chimico dello scambiatore se incrostato"
+          ],
+          "certainty_logic": "Confermato portata insufficiente se delta T ingresso-uscita >20°C"
+        }
+      ]
+    },
+    {
+      "category": "riscaldamento",
+      "name": "Circolatore riscaldamento alta efficienza",
+      "type": "pompa",
+      "brand": "Grundfos",
+      "model": "ALPHA2 L 15-60",
+      "technical_specs": {
+        "prevalenza_max": "6m", "portata_max": "3.5m3/h",
+        "alimentazione": "230V 50Hz", "potenza_max": "45W",
+        "connessione": "G1.5 (Rp 1½)"
+      },
+      "issues": [
+        {
+          "title": "Circolatore non parte — nessun rumore",
+          "symptoms": [
+            "nessuna vibrazione né rumore",
+            "LED del circolatore spento o lampeggiante errore"
+          ],
+          "probable_causes": [
+            "assenza alimentazione 230V",
+            "condensatore avviamento guasto (su vecchi modelli)",
+            "rotore bloccato (lunga inattività)"
+          ],
+          "tests": [
+            "misurare 230V ai morsetti di alimentazione",
+            "tentare sblocco manuale del rotore tramite vite di sblocco frontale (se presente)"
+          ],
+          "fixes": [
+            "ripristinare alimentazione",
+            "sbloccare il rotore con cacciavite piatto sul dado frontale",
+            "sostituire il circolatore se il motore è bruciato"
+          ],
+          "certainty_logic": "Probabile rotore bloccato dopo estate: tentare sblocco manuale prima di sostituire"
+        },
+        {
+          "title": "Circolatore rumoroso — cavitazione o aria",
+          "symptoms": [
+            "rumore di gorgoglio o ronzio anomalo",
+            "prestazioni ridotte"
+          ],
+          "probable_causes": [
+            "aria nel circuito idraulico",
+            "pressione di sistema troppo bassa",
+            "filtro anti-magnetite intasato"
+          ],
+          "tests": [
+            "sfiatare il circolatore tramite vite di sfiato sul corpo",
+            "verificare pressione circuito: deve essere >0.5bar",
+            "controllare filtro a Y a monte del circolatore"
+          ],
+          "fixes": [
+            "sfiatare il circuito",
+            "pulire il filtro a Y o magnetico a monte",
+            "portare la pressione a 1-1.5bar"
+          ],
+          "certainty_logic": "Probabile aria: sfiatare prima di qualsiasi altra azione"
+        }
+      ]
+    },
+    {
+      "category": "riscaldamento",
+      "name": "Valvola miscelatrice termostatica 3 vie",
+      "type": "valvola",
+      "brand": "Caleffi",
+      "model": "521700",
+      "technical_specs": {
+        "temperatura_regolazione": "35-60°C",
+        "Kvs": "1.8", "connessione": "1/2\"",
+        "scala": "blu-verde-rosso"
+      },
+      "issues": [
+        {
+          "title": "Temperatura uscita non raggiunge il valore impostato",
+          "symptoms": [
+            "acqua esce più fredda della temperatura impostata",
+            "manopola in posizione massima"
+          ],
+          "probable_causes": [
+            "elemento termostatico degradato",
+            "temperatura ingresso acqua calda inferiore alla minima (caldaia)",
+            "calcare blocca l'otturatore"
+          ],
+          "tests": [
+            "misurare temperatura acqua calda in ingresso: deve essere almeno 10°C sopra la T impostata",
+            "smontare e verificare libertà di movimento dell'otturatore"
+          ],
+          "fixes": [
+            "detartrare la valvola con acido citrico",
+            "sostituire l'elemento termostatico",
+            "alzare la temperatura della caldaia"
+          ],
+          "certainty_logic": "Probabile calcare se l'impianto ha anni e acqua dura"
+        },
+        {
+          "title": "Perdita d'acqua dalla valvola",
+          "symptoms": [
+            "gocciola dall'attacco o dalla manopola",
+            "tracce di calcare attorno alla perdita"
+          ],
+          "probable_causes": [
+            "O-ring o guarnizione usurata",
+            "dadi di raccordo non serrati"
+          ],
+          "tests": [
+            "asciugare e osservare da dove proviene la perdita",
+            "verificare serraggio raccordi"
+          ],
+          "fixes": [
+            "serrare i raccordi",
+            "sostituire O-ring o guarnizione piatta",
+            "sostituire la valvola se la perdita è dal corpo"
+          ],
+          "certainty_logic": "Probabile O-ring: frequente dopo 5-7 anni su acqua calcarea"
+        }
+      ]
+    },
+    {
+      "category": "rete",
+      "name": "Switch PoE gigabit 8 porte",
+      "type": "switch",
+      "brand": "TP-Link",
+      "model": "TL-SG108PE",
+      "technical_specs": {
+        "porte": 8, "PoE_ports": 4, "PoE_budget": "55W",
+        "velocita": "10/100/1000Mbps", "gestione": "web-managed",
+        "alimentazione": "53.5V DC interno"
+      },
+      "issues": [
+        {
+          "title": "Porta PoE non alimenta il dispositivo collegato",
+          "symptoms": [
+            "dispositivo PoE (telecamera, AP) non si accende",
+            "LED porta PoE non acceso o lampeggiante"
+          ],
+          "probable_causes": [
+            "budget PoE totale esaurito (>55W su 4 porte)",
+            "dispositivo non compatibile con standard PoE 802.3af/at",
+            "porta PoE disabilitata via software"
+          ],
+          "tests": [
+            "verificare nella web GUI il consumo PoE totale: somma non deve superare 55W",
+            "testare con un solo dispositivo PoE su porta 1",
+            "verificare configurazione PoE nella web GUI"
+          ],
+          "fixes": [
+            "ridurre il numero di dispositivi PoE o usare dispositivi a bassa potenza",
+            "usare injector PoE esterno per dispositivi non standard",
+            "abilitare la porta PoE nella web GUI"
+          ],
+          "certainty_logic": "Probabile budget esaurito se si hanno 4 dispositivi ad alta potenza"
+        },
+        {
+          "title": "Switch non raggiungibile in rete dopo modifica IP",
+          "symptoms": [
+            "impossibile accedere alla web GUI",
+            "switch comunica ma non risponde al ping all'IP configurato"
+          ],
+          "probable_causes": [
+            "IP impostato fuori dalla subnet del PC",
+            "conflitto IP con altro dispositivo"
+          ],
+          "tests": [
+            "collegare PC direttamente allo switch con IP statico 192.168.0.x",
+            "eseguire reset hardware (10 sec pulsante reset)"
+          ],
+          "fixes": [
+            "reset di fabbrica: porta IP a 192.168.0.1, poi riconfigurare",
+            "assegnare IP nella stessa subnet della rete"
+          ],
+          "certainty_logic": "Confermato IP errato: il reset di fabbrica risolve sempre il problema di accesso"
+        }
+      ]
+    },
+    {
+      "category": "rete",
+      "name": "Router fibra/xDSL con routing avanzato",
+      "type": "router",
+      "brand": "MikroTik",
+      "model": "RB750Gr3 hEX",
+      "technical_specs": {
+        "porte": 5, "velocita": "gigabit",
+        "CPU": "880MHz dual-core", "RAM": "256MB",
+        "alimentazione": "PoE passivo 24V o adattatore"
+      },
+      "issues": [
+        {
+          "title": "DHCP non assegna indirizzi IP ai client",
+          "symptoms": [
+            "client ottengono IP 169.254.x.x (APIPA)",
+            "connessione LAN ma senza accesso internet"
+          ],
+          "probable_causes": [
+            "pool DHCP esaurito",
+            "server DHCP disabilitato su interfaccia bridge",
+            "conflitto con altro DHCP in rete"
+          ],
+          "tests": [
+            "verificare in Winbox: IP → DHCP Server → Leases — se pool pieno eliminare lease scadute",
+            "verificare se c'è altro router/AP con DHCP attivo nella stessa LAN"
+          ],
+          "fixes": [
+            "aumentare il pool DHCP o ridurre il lease time",
+            "disabilitare DHCP sugli altri dispositivi",
+            "riabilitare DHCP server su interfaccia bridge"
+          ],
+          "certainty_logic": "Probabile pool esaurito o conflitto DHCP: verificare lease attive prima"
+        },
+        {
+          "title": "Connessione WAN cade ogni tot ore",
+          "symptoms": [
+            "internet si interrompe periodicamente",
+            "il router deve essere riavviato per ripristinare"
+          ],
+          "probable_causes": [
+            "IP WAN in conflitto (ISP assegna IP dinamico ma il router usa statico)",
+            "MTU non corretto (tipico su PPPoE: MTU 1492 non 1500)",
+            "overheating del dispositivo"
+          ],
+          "tests": [
+            "verificare temperatura CPU in Winbox: System → Resources (non deve superare 70°C)",
+            "verificare MTU: su PPPoE usare 1492, su DHCP WAN usare 1500"
+          ],
+          "fixes": [
+            "impostare MTU corretto sull'interfaccia WAN",
+            "garantire ventilazione adeguata al router",
+            "aggiornare RouterOS all'ultima versione stabile"
+          ],
+          "certainty_logic": "Probabile MTU errato su PPPoE: correggere prima di indagare hardware"
+        }
+      ]
+    },
+    {
+      "category": "domotica",
+      "name": "Rele smart WiFi monitoraggio potenza",
+      "type": "rele smart",
+      "brand": "Shelly",
+      "model": "Plus 1PM",
+      "technical_specs": {
+        "tensione": "110-240V AC", "corrente_max": "16A",
+        "misura_potenza": "sì", "protocollo": "WiFi 2.4GHz + Bluetooth",
+        "dimensioni": "DIN o scatola 503"
+      },
+      "issues": [
+        {
+          "title": "Shelly non risponde ai comandi app / cloud",
+          "symptoms": [
+            "dispositivo non raggiungibile nell'app",
+            "LED rosso fisso o spento"
+          ],
+          "probable_causes": [
+            "WiFi 2.4GHz assente o segnale troppo debole (<-75dBm)",
+            "IP cambiato (DHCP senza prenotazione)",
+            "firmware corrotto dopo aggiornamento"
+          ],
+          "tests": [
+            "verificare intensità segnale WiFi nel punto di installazione con smartphone",
+            "ricercare il dispositivo sulla rete locale con scanner IP (es. Fing)"
+          ],
+          "fixes": [
+            "avvicinare l'AP WiFi o usare ripetitore",
+            "assegnare IP statico o DHCP reservation al MAC del dispositivo",
+            "eseguire reset di fabbrica (tasto 10 sec) e riconfigurare"
+          ],
+          "certainty_logic": "Probabile segnale WiFi debole: misurare RSSI prima di altre diagnosi"
+        },
+        {
+          "title": "Misura di potenza errata o sempre zero",
+          "symptoms": [
+            "potenza mostrata nell'app non corrisponde al carico reale",
+            "sempre 0W anche con carico acceso"
+          ],
+          "probable_causes": [
+            "cablaggio errato: carico collegato su bypass invece che su output",
+            "firmware non aggiornato (bug noto nelle versioni <1.0.5)",
+            "sensore di corrente danneggiato"
+          ],
+          "tests": [
+            "verificare schema di collegamento: SW1 = linea, SW2 = carico",
+            "aggiornare firmware all'ultima versione"
+          ],
+          "fixes": [
+            "ricablaree rispettando lo schema del manuale Shelly",
+            "aggiornare il firmware",
+            "sostituire il dispositivo se il sensore è guasto"
+          ],
+          "certainty_logic": "Probabile cablaggio: verificare fisicamente prima di aggiornare firmware"
+        }
+      ]
+    },
+    {
+      "category": "domotica",
+      "name": "Gateway Zigbee con supporto multi-protocollo",
+      "type": "gateway",
+      "brand": "Sonoff",
+      "model": "Zigbee Bridge Pro",
+      "technical_specs": {
+        "protocolli": "Zigbee 3.0 + WiFi 2.4GHz",
+        "max_dispositivi": 128, "firmware": "Tasmota compatible",
+        "alimentazione": "5V USB-C"
+      },
+      "issues": [
+        {
+          "title": "Dispositivi Zigbee offline dopo riavvio gateway",
+          "symptoms": [
+            "tutti i dispositivi Zigbee risultano offline",
+            "il gateway è raggiungibile ma non comunica con i sensori"
+          ],
+          "probable_causes": [
+            "rete Zigbee non completamente ricostruita dopo riavvio (mesh in ripristino)",
+            "canale Zigbee in conflitto con WiFi 2.4GHz (es. WiFi ch.1/6/11 vs Zigbee ch.11-26)"
+          ],
+          "tests": [
+            "attendere 5 minuti dopo il riavvio: i dispositivi router Zigbee si riconnettono autonomamente",
+            "verificare il canale Zigbee usato e confrontarlo con i canali WiFi vicini"
+          ],
+          "fixes": [
+            "attendere riconnessione automatica (normale fino a 5 min)",
+            "cambiare il canale Zigbee (preferire 15, 20, 25 per minimizzare interferenza WiFi)"
+          ],
+          "certainty_logic": "Probabile interferenza canali: verificare sovrapposizione WiFi-Zigbee"
+        }
+      ]
+    },
+    {
+      "category": "idraulica",
+      "name": "Rubinetto a sfera con leva in ottone",
+      "type": "rubinetto",
+      "brand": "Giacomini",
+      "model": "R250Y",
+      "technical_specs": {
+        "diametro": "1/2\" (DN15)", "PN": "40bar",
+        "temperatura_max": "150°C", "materiale": "ottone CR6-free"
+      },
+      "issues": [
+        {
+          "title": "Perdita dalla leva o dallo stelo",
+          "symptoms": [
+            "gocciola dalla base della leva",
+            "tracce di umidità attorno allo stelo"
+          ],
+          "probable_causes": [
+            "tenuta in PTFE dello stelo usurata",
+            "dado premistoppa allentato"
+          ],
+          "tests": [
+            "asciugare la zona e osservare il punto esatto della perdita",
+            "tentare serraggio dado premistoppa di 1/4 di giro"
+          ],
+          "fixes": [
+            "serrare il dado premistoppa (senza esagerare)",
+            "sostituire la tenuta in PTFE dello stelo",
+            "sostituire il rubinetto se il corpo è incrinato"
+          ],
+          "certainty_logic": "Probabile tenuta usurata: il serraggio del premistoppa risolve nel 70% dei casi"
+        },
+        {
+          "title": "Rubinetto non chiude completamente — gocciola con leva chiusa",
+          "symptoms": [
+            "anche con leva a 90° rispetto al tubo gocciola ancora",
+            "flusso ridotto ma non azzerato"
+          ],
+          "probable_causes": [
+            "sfera con calcare depositato che impedisce chiusura completa",
+            "sfera usurata o graffiata"
+          ],
+          "tests": [
+            "provare ad aprire e chiudere più volte per sgretolare il calcare",
+            "verificare la posizione della leva: deve essere perfettamente perpendicolare al tubo"
+          ],
+          "fixes": [
+            "trattare con anticalcare se accessibile",
+            "sostituire il rubinetto (le sfere graffiate non si riparano)"
+          ],
+          "certainty_logic": "Probabile sfera usurata se il rubinetto ha >10 anni su acqua dura"
+        }
+      ]
+    },
+    {
+      "category": "idraulica",
+      "name": "Sifone lavabo con uscita DN40 e troppopieno",
+      "type": "sifone",
+      "brand": "Viega",
+      "model": "4990.2",
+      "technical_specs": {
+        "diametro_scarico": "DN40", "materiale": "PP",
+        "profondita_sigillo_idraulico": "50mm"
+      },
+      "issues": [
+        {
+          "title": "Perdita dal giunto del sifone",
+          "symptoms": [
+            "acqua sul fondo del mobile sotto il lavabo",
+            "tracce di calcare sul giunto"
+          ],
+          "probable_causes": [
+            "dado di collegamento non serrato correttamente",
+            "guarnizione di gomma spostata o mancante"
+          ],
+          "tests": [
+            "aprire il mobile e identificare il giunto che perde",
+            "verificare la presenza e posizione della guarnizione"
+          ],
+          "fixes": [
+            "smontare, riposizionare la guarnizione, rimontare e serrare a mano + 1/4 giro",
+            "sostituire la guarnizione se deformata"
+          ],
+          "certainty_logic": "Guarnizione spostata o assente: smontare per verificare prima di acquistare ricambi"
+        },
+        {
+          "title": "Odore di fogna dal lavabo",
+          "symptoms": [
+            "cattivo odore risale dal lavabo",
+            "peggiora con il calore"
+          ],
+          "probable_causes": [
+            "sifone asciutto (sigillo idraulico evaporato per lungo disuso)",
+            "sifone con sedimento organico"
+          ],
+          "tests": [
+            "versare 1 litro di acqua nel lavabo: se l'odore scompare il sifone era asciutto",
+            "controllare se ci sono residui organici visibili nel sifone"
+          ],
+          "fixes": [
+            "far scorrere acqua per ricostruire il sigillo idraulico",
+            "smontare e pulire il sifone con spazzola e detergente",
+            "installare sifone con valvola anti-odore se il problema persiste"
+          ],
+          "certainty_logic": "Probabile sifone asciutto: versare acqua prima di smontare qualsiasi cosa"
+        }
+      ]
+    },
+    {
+      "category": "sicurezza",
+      "name": "Rilevatore di fumo ottico 230V con batteria backup",
+      "type": "rilevatore fumo",
+      "brand": "Kidde",
+      "model": "29H-EU",
+      "technical_specs": {
+        "tensione": "230V AC con batteria 9V backup",
+        "principio": "ottico (Tyndall)", "standard": "EN 14604",
+        "area_copertura": "max 60m²"
+      },
+      "issues": [
+        {
+          "title": "Allarme falso frequente senza fumo visibile",
+          "symptoms": [
+            "sirena si attiva in assenza di fumo",
+            "spesso dopo cottura o vapore del bagno"
+          ],
+          "probable_causes": [
+            "camera ottica sporca (polvere o insetti)",
+            "posizione errata (troppo vicino a cucina o bagno)",
+            "umidità elevata nella stanza"
+          ],
+          "tests": [
+            "soffiare aria compressa nella fessura del rilevatore per rimuovere polvere",
+            "verificare la distanza da fonti di vapore (min 3m dalla cucina)"
+          ],
+          "fixes": [
+            "pulire la camera con aria compressa ogni anno",
+            "riposizionare il rilevatore almeno 3m da cucina e bagno",
+            "sostituire con modello termico per ambienti con vapore"
+          ],
+          "certainty_logic": "Probabile camera sporca o posizione errata: pulire prima di spostare"
+        },
+        {
+          "title": "LED rosso lampeggia ogni 30-40 secondi senza allarme",
+          "symptoms": [
+            "LED rosso lampeggia lentamente",
+            "nessuna sirena"
+          ],
+          "probable_causes": [
+            "batteria di backup quasi scarica",
+            "funzionamento normale (alcuni modelli lampeggia in standby)"
+          ],
+          "tests": [
+            "consultare il manuale: lampeggio lento ogni 30-40s spesso significa batteria scarica",
+            "verificare se c'è anche un bip intermittente (ogni 30-60s = batteria)"
+          ],
+          "fixes": [
+            "sostituire la batteria 9V di backup",
+            "se il lampeggio persiste dopo sostituzione batteria: sostituire il rilevatore"
+          ],
+          "certainty_logic": "Confermato batteria scarica se accompagnato da bip sonoro intermittente"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,167 @@
+{
+  "version": "1.0",
+  "description": "Regole di protezione e sicurezza impianti — IA Wire Pro",
+  "rules": [
+    {
+      "id": "PR-01",
+      "title": "Misurare sempre IN e OUT di ogni protezione",
+      "when_to_apply": "Ogni volta che si diagnosta un guasto su un circuito protetto da MCB, RCD o RCBO",
+      "if_seen_in_photo": [
+        "magnetotermico in posizione intermedia",
+        "differenziale con tasto TEST premuto",
+        "cavi collegati a protezioni nel quadro"
+      ],
+      "rule": "Misurare la tensione a monte (IN) e a valle (OUT) di ogni dispositivo di protezione con multimetro. Se IN=tensione e OUT=0 → il dispositivo è aperto. Se IN=OUT=tensione → il circuito è chiuso, cercare il guasto a valle.",
+      "verification_steps": [
+        "1) Impostare multimetro su VAC 600V o 750V",
+        "2) Misurare tensione fase-neutro a monte del dispositivo (morsetti superiori)",
+        "3) Misurare tensione fase-neutro a valle del dispositivo (morsetti inferiori)",
+        "4) Se c'è differenza: il dispositivo è aperto o ha un contatto difettoso",
+        "5) Verificare anche sotto carico (tensione può crollare con morsetti allentati)"
+      ],
+      "risk_level": "medium",
+      "references": ["CEI 64-8", "IEC 60364-6 (verifiche)"]
+    },
+    {
+      "id": "PR-02",
+      "title": "Non bypassare mai un differenziale scattato senza diagnosi",
+      "when_to_apply": "Quando il differenziale scatta e si è tentati di ponticellare o bloccare il tasto",
+      "if_seen_in_photo": [
+        "differenziale scattato",
+        "cavetto di bypass improvvisato",
+        "filo tra i morsetti del differenziale"
+      ],
+      "rule": "VIETATO bypassare, ponticellare o immobilizzare meccanicamente un differenziale. Il differenziale scatta perché rileva una dispersione reale. Bypassarlo espone le persone a rischio di folgorazione. Identificare e risolvere il guasto, poi ripristinare il differenziale.",
+      "verification_steps": [
+        "1) Scollegare tutti i carichi a valle",
+        "2) Tentare il riarmo: se tiene → guasto in un carico, trovarlo per esclusione",
+        "3) Se scatta ancora a vuoto: guasto nel cablaggio o nel neutro",
+        "4) Misurare isolamento con megohmetro 500V: >1MΩ = ok",
+        "5) Verificare che N e PE non siano uniti a valle"
+      ],
+      "risk_level": "high",
+      "references": ["CEI 64-8 Art. 411", "DL 81/2008"]
+    },
+    {
+      "id": "PR-03",
+      "title": "Ogni utenza >2kW deve avere linea dedicata",
+      "when_to_apply": "Progettazione o verifica di impianti residenziali/civili",
+      "if_seen_in_photo": [
+        "quadro elettrico residenziale",
+        "prese multiplo su unica linea",
+        "cavo unico per lavatrice e forno"
+      ],
+      "rule": "Secondo CEI 64-8, ogni utenza con potenza >2kW (lavatrice, lavastoviglie, forno, climatizzatore, piano cottura) deve avere una linea dedicata con proprio MCB e differenziale 30mA. Non collegare utenze pesanti su linee condivise.",
+      "verification_steps": [
+        "1) Identificare le utenze nel quadro: ogni linea deve essere etichettata",
+        "2) Verificare che le grandi utenze abbiano protezioni dedicate",
+        "3) Misurare la corrente assorbita con pinza amperometrica",
+        "4) Confrontare con In del magnetotermico (deve essere <80% di In in servizio continuo)"
+      ],
+      "risk_level": "medium",
+      "references": ["CEI 64-8 Tabella 37A"]
+    },
+    {
+      "id": "PR-04",
+      "title": "Separazione N e PE a valle del nodo equipotenziale",
+      "when_to_apply": "Ogni volta che si lavora su un quadro o si verifica un differenziale che scatta a vuoto",
+      "if_seen_in_photo": [
+        "barra PE e barra N",
+        "conduttori verdi e blu collegati alla stessa barra",
+        "cavo bicolore verde-giallo su barra neutri"
+      ],
+      "rule": "In un sistema TT o TN-S, il neutro (N) e la protezione (PE) devono essere separati a valle del nodo equipotenziale principale. Unirli a valle crea correnti di dispersione continue che fanno scattare il differenziale e rendono inefficace la protezione.",
+      "verification_steps": [
+        "1) Identificare la barra PE (verde/giallo) e la barra N (blu) nel quadro",
+        "2) Verificare che nessun conduttore sia connesso a entrambe le barre",
+        "3) Misurare la resistenza tra N e PE a monte del differenziale: non deve essere 0Ω (eccetto nel quadro principale)",
+        "4) Se trovi continuità N-PE a valle: trovare il punto di giunzione e separare"
+      ],
+      "risk_level": "high",
+      "references": ["CEI 64-8 Art. 543", "IEC 60364-5-54"]
+    },
+    {
+      "id": "PR-05",
+      "title": "Protezione IP adeguata all'ambiente",
+      "when_to_apply": "Installazione o verifica di quadri in ambienti umidi, esterni o industriali",
+      "if_seen_in_photo": [
+        "quadro esterno",
+        "guarnizione degradata",
+        "pressacavi aperti",
+        "condensa nel quadro",
+        "coperchio aperto all'esterno"
+      ],
+      "rule": "Il grado IP del quadro deve essere adeguato all'ambiente di installazione. IP44 minimo in ambienti umidi interni, IP65 per esterni. La protezione IP si perde anche con un solo pressacavo allentato o un foro non tappato.",
+      "verification_steps": [
+        "1) Verificare la targhetta IP sulla porta del quadro",
+        "2) Controllare integrità guarnizione perimetrale",
+        "3) Verificare serraggio di tutti i pressacavi",
+        "4) Controllare presenza coperchi ciechi su tutti i fori non usati",
+        "5) In caso di condensa: valutare installazione resistenza anticondensa"
+      ],
+      "risk_level": "high",
+      "references": ["IEC 60529", "CEI 23-48"]
+    },
+    {
+      "id": "PR-06",
+      "title": "Verifica differenziale mensile con tasto TEST",
+      "when_to_apply": "Manutenzione periodica e quando si sospetta un differenziale non funzionante",
+      "if_seen_in_photo": [
+        "differenziale con tasto TEST",
+        "quadro residenziale",
+        "impianto civile"
+      ],
+      "rule": "Il differenziale deve essere testato mensilmente premendo il tasto TEST con tensione presente. Se non scatta: dispositivo difettoso, sostituire immediatamente. Un differenziale che non scatta al TEST non offre protezione.",
+      "verification_steps": [
+        "1) Verificare presenza tensione in ingresso (230V)",
+        "2) Premere il tasto TEST: deve scattare entro 300ms",
+        "3) Riarmarlo e verificare che la tensione sia ripristinata a valle",
+        "4) Usare tester RCD certificato per verificare il tempo esatto di intervento"
+      ],
+      "risk_level": "high",
+      "references": ["IEC 61009-1", "CEI 64-8 Art. 531"]
+    },
+    {
+      "id": "PR-07",
+      "title": "Serraggio morsetti al valore di coppia corretto",
+      "when_to_apply": "Prima messa in servizio e dopo 6 mesi dalla installazione; su ogni quadro che mostra calore anomalo",
+      "if_seen_in_photo": [
+        "morsetti anneriti",
+        "plastica sciolta vicino a morsetti",
+        "conduttori con tracce di calore"
+      ],
+      "rule": "I morsetti allentati generano resistenza di contatto, calore, archi e incendi. Verificare e riserrare al valore di coppia corretto secondo il costruttore. Non usare cacciaviti comuni per serraggio definitivo.",
+      "verification_steps": [
+        "1) Con circuito disalimentato: verificare visivamente tutti i morsetti",
+        "2) Tentare di estrarre leggermente il cavo: non deve muoversi",
+        "3) Riserrare con cacciavite dinamometrico alla coppia indicata",
+        "4) Coppia indicativa: 1.5mm²→0.5Nm, 2.5mm²→0.6Nm, 4-6mm²→0.8-1Nm, 10-16mm²→1.2-1.5Nm",
+        "5) Dopo ripristino alimentazione: verificare temperatura a infrarossi o al tatto dopo 30 min"
+      ],
+      "risk_level": "high",
+      "references": ["IEC 60947-1", "CEI 64-8 Art. 526"]
+    },
+    {
+      "id": "PR-08",
+      "title": "Differenziale tipo A o superiore con carichi non lineari",
+      "when_to_apply": "Impianti con inverter, variatori di frequenza, UPS, caricatori di veicoli elettrici, fotovoltaico",
+      "if_seen_in_photo": [
+        "inverter",
+        "variatore di frequenza",
+        "wallbox auto elettrica",
+        "impianto fotovoltaico",
+        "UPS"
+      ],
+      "rule": "Il differenziale tipo AC rileva solo correnti alternate sinusoidali. I carichi non lineari (inverter, caricatori switching) generano correnti di dispersione DC pulsanti che il tipo AC non rileva. Usare tipo A (DC pulsante), tipo F (alta frequenza) o tipo B (correnti continue) in base al carico.",
+      "verification_steps": [
+        "1) Identificare il tipo di differenziale dalla marcatura sul dispositivo",
+        "2) Verificare la natura del carico collegato",
+        "3) Per inverter/variatori: minimo tipo A",
+        "4) Per wallbox auto elettriche: tipo B o tipo EV secondo norma IEC 62955",
+        "5) Per fotovoltaico: tipo B sul lato DC, tipo A/F sul lato AC"
+      ],
+      "risk_level": "high",
+      "references": ["IEC 62423 (tipo F)", "IEC 60755 (tipo B)", "CEI 64-8 v7"]
+    }
+  ]
+}

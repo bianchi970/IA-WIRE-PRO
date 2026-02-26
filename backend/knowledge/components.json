@@ -1,0 +1,322 @@
+{
+  "version": "1.0",
+  "description": "Catalogo componenti tecnici IA Wire Pro — base di conoscenza visiva e funzionale",
+  "items": [
+    {
+      "id": "rcd-ac-2p",
+      "category": "rcd",
+      "brand": null,
+      "model": null,
+      "keywords": ["differenziale", "RCD", "ID", "salvavita", "30mA", "tipo AC", "tipo A", "tipo F", "tipo B"],
+      "visual_cues": [
+        "corpo plastico modulare DIN, larghezza 2 moduli (35-36mm)",
+        "tasto TEST sporgente, solitamente rosso o giallo",
+        "leva di manovra bianca o nera in cima",
+        "finestra indicatore stato scatto (rosso=scattato)",
+        "marcatura I_dn: 30mA / 300mA visibile sulla faccia frontale",
+        "targhetta con simbolo ~ (tipo AC), ~ (tipo A), o tipo F/B"
+      ],
+      "functions": [
+        "protegge persone dal contatto indiretto rilevando corrente di dispersione verso terra",
+        "interviene quando la differenza tra corrente di fase e neutro supera I_dn",
+        "tasto TEST simula una dispersione per verifica meccanica mensile"
+      ],
+      "typical_faults": [
+        "scatta appena richiuso: dispersione sul cablaggio o guasto interno",
+        "non scatta al TEST: dispositivo difettoso, sostituire",
+        "scatta intermittente: corrente di dispersione cumulativa da carichi non lineari",
+        "scatta a vuoto: neutro e PE uniti a valle del punto equipotenziale",
+        "non scatta mai: dispositivo bloccato meccanicamente o senza tensione"
+      ],
+      "field_checks": [
+        "1) Verificare tensione in ingresso: 230V fase-neutro con multimetro",
+        "2) Scollegare tutti i carichi a valle, riarmare: se scatta ancora = guasto nel cablaggio",
+        "3) Misurare isolamento cavi con megohmetro 500V: deve essere >1MΩ",
+        "4) Premere tasto TEST con tensione presente: deve scattare in <300ms",
+        "5) Verificare che N e PE non siano uniti a valle del nodo equipotenziale",
+        "6) Per scatti intermittenti: misurare corrente di dispersione con pinza differenziale (deve essere <15mA)"
+      ],
+      "notes": "Tipo AC: rileva solo correnti alternate sinusoidali. Tipo A: anche correnti pulsanti. Tipo F: anche alta frequenza. Tipo B: DC e AC. Per impianti con inverter/fotovoltaico usare tipo B o almeno tipo A."
+    },
+    {
+      "id": "mcb-curva-c",
+      "category": "mcb",
+      "brand": null,
+      "model": null,
+      "keywords": ["magnetotermico", "MCB", "interruttore automatico", "curva B", "curva C", "curva D", "salvamotore"],
+      "visual_cues": [
+        "corpo modulare DIN, larghezza 1 modulo (18mm) per 1P, 2 per 2P",
+        "leva di manovra colorata (bianca, nera, verde/rossa per salvamotore)",
+        "marcatura In e curva visibili sulla faccia: es. C16, B20, D10",
+        "fori morsetti superiori e inferiori, viti di serraggio laterali",
+        "nessun tasto TEST (distinzione da differenziale)"
+      ],
+      "functions": [
+        "protegge il circuito da sovraccarichi (protezione termica bimetallo)",
+        "protegge da cortocircuiti (protezione magnetica istantanea)",
+        "curva B: scatta a 3-5× In — illuminazione, residenziale",
+        "curva C: scatta a 5-10× In — uso generale, industriale leggero",
+        "curva D: scatta a 10-20× In — motori, trasformatori, carichi con spunto elevato"
+      ],
+      "typical_faults": [
+        "scatta ripetutamente: sovraccarico, corrente assorbita >In",
+        "caldo al tatto/odore bruciato: morsetto allentato o cavo sottodimensionato",
+        "non scatta mai in cortocircuito: potere di interruzione superato, sostituire",
+        "leva non si re-inserisce: scattato per cortocircuito, verificare prima il guasto"
+      ],
+      "field_checks": [
+        "1) Misurare corrente assorbita con pinza amperometrica: confrontare con In",
+        "2) Verificare temperatura al tatto (>60°C = anomalia)",
+        "3) Controllare serraggio morsetti: svitare e riserrare alla coppia corretta",
+        "4) Misurare tensione IN e OUT con multimetro: devono coincidere se chiuso",
+        "5) Se leva non re-inserisce: attendere raffreddamento, poi ricercare il guasto"
+      ],
+      "notes": "Dopo un cortocircuito intenso, il magnetotermico può avere il potere di interruzione degradato: sempre sostituire se ha interrotto un cortocircuito importante."
+    },
+    {
+      "id": "rcbo-combinato",
+      "category": "rcbo",
+      "brand": null,
+      "model": null,
+      "keywords": ["RCBO", "magnetotermico differenziale", "combinato", "1P+N"],
+      "visual_cues": [
+        "corpo più largo del MCB standard (2-3 moduli per 1P+N)",
+        "tasto TEST presente (come RCD)",
+        "leva unica che ingloba protezione termica e differenziale",
+        "marcatura doppia: In (es. 16A) e I_dn (es. 30mA) sulla faccia"
+      ],
+      "functions": [
+        "combina in un solo dispositivo la protezione magnetotermica e quella differenziale",
+        "ideale per linee dedicate (lavatrice, lavastoviglie, forno)",
+        "scatta per sovraccarico, cortocircuito e dispersione verso terra"
+      ],
+      "typical_faults": [
+        "scatta per dispersione: come per RCD",
+        "scatta per sovraccarico: come per MCB",
+        "tasto TEST non funziona: dispositivo difettoso"
+      ],
+      "field_checks": [
+        "1) Verificare se è scattato il termico o il differenziale (alcuni hanno indicatori separati)",
+        "2) Stesse verifiche di RCD + MCB in sequenza",
+        "3) Premere TEST con tensione presente"
+      ],
+      "notes": "Più semplice da installare ma meno flessibile. In quadri complessi preferire RCD generale + MCB per circuito."
+    },
+    {
+      "id": "contactor-ac",
+      "category": "contactor",
+      "brand": null,
+      "model": null,
+      "keywords": ["contattore", "KM", "teleruttore", "bobina", "24V", "230V AC", "contatti NO/NC"],
+      "visual_cues": [
+        "corpo cubico o rettangolare, plastica nera o grigia",
+        "contatti di potenza superiori (L1/L2/L3) e inferiori (T1/T2/T3)",
+        "contatti ausiliari laterali piccoli (A1/A2 per bobina)",
+        "targhetta con tensione bobina: 24V AC, 24V DC, 230V AC",
+        "pulsante di sgancio manuale sul fronte (tasto piccolo)"
+      ],
+      "functions": [
+        "commuta carichi di potenza (motori, resistenze) tramite segnale di controllo a bassa tensione",
+        "bobina a 24V DC tipica per automazione PLC",
+        "bobina a 230V AC tipica per circuiti di controllo tradizionali"
+      ],
+      "typical_faults": [
+        "bobina ronza ma non chiude: tensione bobina insufficiente o contatti usurati",
+        "rimane chiuso senza segnale: contatti saldati (cortocircuito precedente)",
+        "non si eccita con 24V: verificare presenza tensione su A1-A2",
+        "scintille ai contatti: carico induttivo senza varistori/RC snubber"
+      ],
+      "field_checks": [
+        "1) Misurare tensione bobina (A1-A2): deve essere nei limiti (±15% del nominale)",
+        "2) Con tensione sulla bobina: verificare che i contatti di potenza chiudano (continuità T1-L1)",
+        "3) Senza segnale: verificare apertura contatti (nessuna continuità T1-L1)",
+        "4) Controllare visivamente usura contatti (annerimento, erosione)",
+        "5) Misurare tensione OUT quando eccitato: deve essere = tensione IN"
+      ],
+      "notes": "Corrente di richiamo bobina vs corrente di mantenimento: la corrente di richiamo è più alta, verificare che l'alimentatore/PLC regga lo spunto."
+    },
+    {
+      "id": "relay-24vdc",
+      "category": "relay",
+      "brand": null,
+      "model": null,
+      "keywords": ["relè", "relay", "miniatura", "bobina 24V DC", "SPDT", "DPDT", "zoccolato"],
+      "visual_cues": [
+        "corpo plastico piccolo (larghezza 14-28mm) montato su zoccolo DIN",
+        "LED indicatore bobina eccitata (verde o rosso)",
+        "targhetta con schema di collegamento stampato sul corpo",
+        "pin numerati visibili sullo zoccolo",
+        "trasparente: si vedono i contatti interni"
+      ],
+      "functions": [
+        "isola il circuito di controllo (PLC/sensore) dal circuito di carico",
+        "adatta impedenze e tensioni diverse",
+        "contatti NO (normalmente aperti) e NC (normalmente chiusi)"
+      ],
+      "typical_faults": [
+        "non si eccita con segnale: verificare tensione bobina e polarità",
+        "contatti ossidati: resistenza elevata, caduta di tensione al carico",
+        "bobina bruciata: odore + resistenza infinita tra pin bobina",
+        "contatti incollati: rimane eccitato dopo spegnimento segnale"
+      ],
+      "field_checks": [
+        "1) Con tester in continuità: verificare NO aperto e NC chiuso prima di eccitare",
+        "2) Dare tensione alla bobina: LED deve accendersi, NO deve chiudersi",
+        "3) Misurare caduta di tensione ai contatti: deve essere <0.5V con carico nominale",
+        "4) Misurare resistenza bobina: confrontare con datasheet (apertura = bruciata)"
+      ],
+      "notes": "I relè in serie al PLC vanno sempre verificati misurando IN e OUT: una tensione flottante (ghost voltage) può indicare induzione da cavi paralleli."
+    },
+    {
+      "id": "plc-generica",
+      "category": "plc",
+      "brand": null,
+      "model": null,
+      "keywords": ["PLC", "CPU", "Siemens", "Omron", "Mitsubishi", "controllore logico", "I/O digitali"],
+      "visual_cues": [
+        "modulo plastico DIN con LED stato I/O",
+        "connettori rimovibili su morsettiere",
+        "LED RUN (verde), ERR (rosso), alimentazione",
+        "porta di programmazione (RJ45, USB, RS485)"
+      ],
+      "functions": [
+        "esegue logica di controllo programmata",
+        "legge ingressi digitali/analogici e pilota uscite"
+      ],
+      "typical_faults": [
+        "LED ERR rosso fisso: errore hardware o programma",
+        "uscita non commuta: relè interno usurato, sostituire modulo",
+        "PLC non vede ingresso: verificare 24V sul morsetto ingresso con multimetro",
+        "tensione flottante in ingresso: causa ingressi che rimangono logicamente alti"
+      ],
+      "field_checks": [
+        "1) Verificare 24V DC alimentazione PLC (morsetti + e - o 0V)",
+        "2) Per ogni ingresso: misurare la tensione al morsetto (0V=OFF, 24V=ON)",
+        "3) Per ogni uscita: misurare la tensione di uscita con carico collegato",
+        "4) Confrontare stato LED I/O con lo stato fisico atteso"
+      ],
+      "notes": "Una tensione di ~3-8V su un ingresso 24V DC è un segnale flottante tipico da induzione o da un circuito non correttamente pilotato."
+    },
+    {
+      "id": "trasformatore-24v",
+      "category": "transformer",
+      "brand": null,
+      "model": null,
+      "keywords": ["trasformatore", "24V", "alimentatore", "SMPS", "switching", "toroidale", "230/24"],
+      "visual_cues": [
+        "switching: corpo plastico rettangolare con morsetti IN e OUT",
+        "toroidale: corpo cilindrico con cablaggio diretto",
+        "LED verde = alimentazione presente (solo switching moderni)",
+        "targhetta: tensione primario (230V AC) e secondario (24V AC o DC) + potenza VA/W"
+      ],
+      "functions": [
+        "abbassa la tensione da 230V AC a 24V per circuiti di controllo",
+        "isola galvanicamente il circuito di controllo dalla rete"
+      ],
+      "typical_faults": [
+        "nessuna tensione in uscita: fusibile primario bruciato o avvolgimento interrotto",
+        "tensione in uscita bassa sotto carico: potenza VA insufficiente (sovraccarico)",
+        "caldo eccessivo: sovraccarico o corto parziale"
+      ],
+      "field_checks": [
+        "1) Misurare tensione primaria (deve essere 230V AC)",
+        "2) Misurare tensione secondaria a vuoto: deve essere ±5% del nominale",
+        "3) Misurare tensione secondaria sotto carico: se cade >10% = sovraccarico",
+        "4) Verificare fusibile primario (se presente)"
+      ],
+      "notes": "Per calcolare la potenza necessaria: sommare le correnti di tutti i carichi a 24V e moltiplicare per 1.3 come margine di sicurezza."
+    },
+    {
+      "id": "sezionatore-portafusibile",
+      "category": "isolator",
+      "brand": null,
+      "model": null,
+      "keywords": ["sezionatore", "portafusibile", "fusibile cilindrico", "NH", "coltellare", "UR"],
+      "visual_cues": [
+        "corpo con impugnatura rossa/gialla (sezionatore rotativo DIN)",
+        "portafusibile: supporto estraibile con fusibile cilindrico 10×38mm o 14×51mm",
+        "finestra di ispezione (alcuni modelli)",
+        "morsetti a vite superiori e inferiori"
+      ],
+      "functions": [
+        "sezionamento manuale del circuito (lockout/tagout)",
+        "protezione da sovracorrenti tramite fusibile"
+      ],
+      "typical_faults": [
+        "fusibile fuso: nessuna continuità, verificare con tester",
+        "contatti ossidati: caduta di tensione elevata, caldo",
+        "fusibile da sostituire: calcolare corrente di guasto e scegliere calibro corretto"
+      ],
+      "field_checks": [
+        "1) Con circuito disalimentato: misurare continuità sul fusibile",
+        "2) Con circuito alimentato: misurare tensione IN e OUT (caduta <0.5V = ok)",
+        "3) Verificare visivamente il fusibile (finestra brunita = fuso)"
+      ],
+      "notes": "Sostituire sempre con fusibile dello stesso calibro (A) e categoria (gL/gG per protezione cavi, aM per motori)."
+    },
+    {
+      "id": "spd-scaricatore",
+      "category": "surge",
+      "brand": null,
+      "model": null,
+      "keywords": ["scaricatore", "SPD", "limitatore di sovratensione", "varistori", "tipo 1", "tipo 2", "tipo 3"],
+      "visual_cues": [
+        "modulo DIN colorato (verde=ok, rosso=guasto su alcuni modelli)",
+        "finestra di ispezione con indicatore verde/rosso",
+        "morsetti L/N/PE o L+/L- per DC",
+        "targhetta Uc (tensione continua massima) e Up (tensione protezione)"
+      ],
+      "functions": [
+        "protegge da sovratensioni transitorie (fulmini, manovre)",
+        "tipo 1: installatone al contatore (scarica scariche dirette)",
+        "tipo 2: nel quadro principale (scarica sovratensioni indotte)",
+        "tipo 3: vicino alle utenze sensibili"
+      ],
+      "typical_faults": [
+        "indicatore rosso: dispositivo sacrificato, sostituire",
+        "circuito di terra interrotto: SPD inefficace",
+        "SPD assente in impianti con fotovoltaico/inverter: alto rischio"
+      ],
+      "field_checks": [
+        "1) Verificare visivamente l'indicatore di stato (verde = integro)",
+        "2) Misurare continuità del conduttore di terra collegato all'SPD",
+        "3) Non misurare la resistenza dell'SPD con tester ordinario (componenti non lineari)"
+      ],
+      "notes": "Dopo un evento di fulmine: sempre verificare l'indicatore e sostituire se rosso, anche se l'impianto sembra funzionante."
+    },
+    {
+      "id": "enclosure-ip",
+      "category": "enclosure",
+      "brand": null,
+      "model": null,
+      "keywords": ["cassetta", "quadro", "box", "armadio", "IP44", "IP65", "IP67", "IK10", "esterno"],
+      "visual_cues": [
+        "targetta IP visibile sulla porta o all'interno",
+        "guarnizione perimetrale in gomma sulla porta",
+        "pressacavi con dado di serraggio",
+        "coperchi ciechi per gli ingressi non utilizzati",
+        "fori di aerazione con filtro (quadri interni grandi)"
+      ],
+      "functions": [
+        "protegge i componenti interni dall'ambiente esterno",
+        "IP44: protetto da schizzi d'acqua — uso interno umido",
+        "IP65: protetto da getti d'acqua — uso esterno",
+        "IP67: protetto da immersione temporanea"
+      ],
+      "typical_faults": [
+        "guarnizione degradata: infiltrazioni d'acqua",
+        "pressacavi allentato: ingresso polvere/acqua",
+        "coperchi ciechi mancanti: IP non rispettato",
+        "condensa interna: delta-termico senza riscaldamento anticondensa"
+      ],
+      "field_checks": [
+        "1) Verificare integrità guarnizione perimetrale (elastica, non secca/crepata)",
+        "2) Verificare che tutti i pressacavi siano serrati",
+        "3) Verificare presenza coperchi ciechi su tutti i fori non utilizzati",
+        "4) Controllare presenza condensa/umidità interna",
+        "5) Confrontare l'IP della cassetta con le condizioni ambientali"
+      ],
+      "notes": "Un quadro esterno con IP non adeguato o guarnizioni degradate è causa diretta di guasti e pericoli di sicurezza. L'IP si perde anche con un solo pressacavo allentato."
+    }
+  ]
+}

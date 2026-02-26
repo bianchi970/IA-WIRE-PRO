@@ -1,0 +1,140 @@
+{
+  "version": "1.0",
+  "description": "Protocolli di sicurezza operativa sul campo — IA Wire Pro",
+  "protocols": [
+    {
+      "id": "SP-01",
+      "title": "Protocollo disalimentazione e LOTO (Lockout/Tagout) prima di aprire quadri",
+      "pre_checks": [
+        "Identificare TUTTI i sezionatori/interruttori che alimentano il quadro (possono essere più di uno)",
+        "Avvisare tutti gli operatori presenti nell'area",
+        "Procurarsi multimetro funzionante e verificato, DPI (guanti isolanti, occhiali)"
+      ],
+      "lockout_tagout": [
+        "1) Aprire il sezionatore/interruttore principale",
+        "2) Applicare lucchetto personale sul sezionatore aperto",
+        "3) Appendere cartellino LOTO con nome operatore, data e ora",
+        "4) Attendere 30 secondi per lo scarico dei condensatori",
+        "5) VERIFICARE assenza tensione con multimetro su tutti i morsetti accessibili (fase-neutro, fase-fase, fase-PE)",
+        "6) In caso di dubbio: misurare due volte con due strumenti diversi",
+        "7) SOLO dopo la verifica: aprire il quadro e iniziare il lavoro"
+      ],
+      "measurement_rules": [
+        "Misurare sempre fase-neutro E fase-fase E fase-PE",
+        "Il multimetro deve essere testato prima su una tensione nota (presa di corrente) per verificare che funzioni",
+        "La misura '0V' non è affidabile se il multimetro non funziona: verificare il fusibile del multimetro",
+        "Non affidarsi alle indicazioni di LED o display del quadro per confermare l'assenza di tensione"
+      ],
+      "stop_conditions": [
+        "FERMARSI se si trova tensione dove non è attesa",
+        "FERMARSI se si odore di bruciato o si notano cavi anneriti prima ancora di aprire il quadro",
+        "FERMARSI se il quadro è visibilmente danneggiato o con tracce di incendio",
+        "FERMARSI se non si è sicuri del percorso di alimentazione (chiamare un tecnico qualificato)",
+        "FERMARSI se le misure non corrispondono alle aspettative"
+      ]
+    },
+    {
+      "id": "SP-02",
+      "title": "Protocollo verifica isolamento e dispersioni prima del ripristino",
+      "pre_checks": [
+        "Circuito completamente disalimentato e sezionato",
+        "Tutti i carichi scollegati dalla linea in prova",
+        "Megohmetro disponibile (500V per impianti BT domestici, 1000V per industriali)"
+      ],
+      "lockout_tagout": [
+        "Sezionare la linea in prova",
+        "Scollegare gli apparecchi dall'estremità (smontare prese, scollegare utenze)"
+      ],
+      "measurement_rules": [
+        "Misurare resistenza di isolamento fase-terra con megohmetro 500V DC",
+        "Risultato >1MΩ = accettabile per impianti esistenti",
+        "Risultato >100MΩ = buono per impianti nuovi",
+        "Misurare anche neutro-terra: deve essere >1MΩ (se inferiore: N e PE uniti a valle)",
+        "Misurare fase-neutro: deve essere >1MΩ (se inferiore: corto parziale o condensa)",
+        "Attendere 60 secondi per stabilizzazione del valore prima di leggere",
+        "Scaricare i cavi dopo la misura (cortocircuitare brevemente i conduttori tramite resistenza)"
+      ],
+      "stop_conditions": [
+        "FERMARSI se la resistenza è <100kΩ: guasto grave, non ripristinare senza trovare e risolvere la causa",
+        "FERMARSI se il valore non si stabilizza: possibile umidità o guasto intermittente",
+        "NON usare il megohmetro su circuiti con componenti elettronici (PLC, inverter, relè allo stato solido): scollegarli prima"
+      ]
+    },
+    {
+      "id": "SP-03",
+      "title": "Protocollo misura sotto carico (IN e OUT di ogni protezione)",
+      "pre_checks": [
+        "Circuito ALIMENTATO e in servizio",
+        "DPI indossati: guanti isolanti categoria 00 (fino a 500V) o superiore",
+        "Sonde multimetro in buone condizioni (nessuna crepa nell'isolamento)"
+      ],
+      "lockout_tagout": [],
+      "measurement_rules": [
+        "Impostare il multimetro sulla scala corretta PRIMA di collegare le sonde (VAC 600V o 750V)",
+        "Collegare prima la sonda di riferimento (COM, nera) poi la sonda di misura (rosso)",
+        "Non avvicinare mai le sonde tra loro durante la misura (rischio arco)",
+        "Misurare IN (morsetti superiori) e OUT (morsetti inferiori) di ogni protezione",
+        "La differenza IN-OUT deve essere <0.5V su un circuito correttamente funzionante",
+        "Caduta >1V indica contatto difettoso o componente guasto",
+        "Misurare la corrente con pinza amperometrica SENZA interrompere il circuito",
+        "Per circuiti trifase: misurare L1, L2, L3 singolarmente e verificare bilanciamento carichi"
+      ],
+      "stop_conditions": [
+        "FERMARSI se si vede arco durante l'avvicinamento delle sonde",
+        "FERMARSI se si avverte odore di bruciato durante le misure",
+        "FERMARSI se si misura una tensione anomala (es. 400V dove ci si aspetta 230V)",
+        "FERMARSI se le sonde del multimetro sono danneggiate"
+      ]
+    },
+    {
+      "id": "SP-04",
+      "title": "Protocollo intervento in presenza di odore di bruciato o componenti anneriti",
+      "pre_checks": [
+        "NON aprire il quadro prima di avere indossato DPI completi",
+        "NON aprire se si sente ancora odore forte o si vede fumo"
+      ],
+      "lockout_tagout": [
+        "Disalimentare IMMEDIATAMENTE il quadro dal sezionatore principale",
+        "Se il sezionatore non risponde: disalimentare dall'interruttore a monte",
+        "Applicare LOTO",
+        "Attendere almeno 5 minuti prima di aprire (raffreddamento)"
+      ],
+      "measurement_rules": [
+        "Dopo l'apertura e con circuito sezionato: ispezione visiva completa prima di qualsiasi misura",
+        "Documentare con fotografie ogni componente danneggiato",
+        "Non rimontare o ripristinare senza aver identificato e rimosso il componente guasto",
+        "Verificare l'isolamento di TUTTI i cavi nella zona interessata (non solo quelli visibilmente danneggiati)"
+      ],
+      "stop_conditions": [
+        "FERMARSI e chiamare un tecnico qualificato se il danno è esteso",
+        "FERMARSI se si trovano cavi con isolamento fuso che toccano la struttura metallica",
+        "FERMARSI se il circuito di protezione (PE) è danneggiato",
+        "NON rimettere in servizio un impianto con componenti bruciati senza sostituzione completa"
+      ]
+    },
+    {
+      "id": "SP-05",
+      "title": "Protocollo verifica terre e continuità PE",
+      "pre_checks": [
+        "Circuito disalimentato",
+        "Multimetro in modalità continuità o ohmmetro"
+      ],
+      "lockout_tagout": [
+        "Disalimentare il circuito",
+        "Scollegare il conduttore PE dal morsetto di terra dell'utenza da verificare"
+      ],
+      "measurement_rules": [
+        "Misurare la resistenza tra il conduttore PE e la barra PE del quadro principale",
+        "Risultato accettabile: <1Ω per cavi fino a 10m, <2Ω per cavi fino a 30m",
+        "Risultato >5Ω: conduttore interrotto o morsetto allentato",
+        "Verificare anche la continuità tra la barra PE del quadro e il dispersore di terra",
+        "Non confondere il conduttore PE (verde/giallo) con il neutro (blu): SEMPRE verificare colori e targhette",
+        "Verificare la resistenza di terra con tellumetro (non con tester): Rt ≤ 50V/I_dn"
+      ],
+      "stop_conditions": [
+        "FERMARSI se il conduttore PE è interrotto: non ripristinare l'alimentazione finché non è riparato",
+        "FERMARSI se si trova continuità tra PE e neutro in punti non previsti"
+      ]
+    }
+  ]
+}
