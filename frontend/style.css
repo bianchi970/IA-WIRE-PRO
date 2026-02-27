@@ -16,10 +16,15 @@
 }
 
 *{ box-sizing:border-box; }
-html, body{ height:100%; overflow:hidden; }
+
+/* ===== BASE LAYOUT (FIX COMPOSER SPARITO) ===== */
+html, body{
+  height:100%;
+  margin:0;
+}
 
 body{
-  margin:0;
+  overflow:hidden; /* pagina ferma: scroll solo chat */
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   background:
     radial-gradient(1200px 600px at 20% 10%, rgba(0,217,255,0.08), transparent 60%),
@@ -29,18 +34,19 @@ body{
 }
 
 .app{
-  min-height:100vh;
-  min-height:100dvh;
+  height:100dvh;           /* mobile-safe */
+  min-height:100vh;        /* fallback */
   display:flex;
   flex-direction:column;
   overflow:hidden;
 }
 
-/* TOPBAR */
+/* ===== TOPBAR ===== */
 .topbar{
+  flex:0 0 auto;
   position:sticky;
   top:0;
-  z-index:10;
+  z-index:20;
   display:flex;
   align-items:center;
   justify-content:space-between;
@@ -96,33 +102,34 @@ body{
   border-color: rgba(255,140,66,0.35);
 }
 
-/* MAIN */
+/* ===== MAIN ===== */
 .main{
-  flex:1;
+  flex:1 1 auto;
   min-height:0;
+  overflow:hidden;
   display:flex;
   flex-direction:column;
-  justify-content:center;
   padding:14px;
-  overflow:hidden;
 }
 
-/* CARD */
+/* ===== CARD ===== */
 .card{
   width:min(820px, 100%);
+  margin:0 auto;
   background: linear-gradient(180deg, rgba(11,28,51,0.92), rgba(8,22,43,0.92));
   border:1px solid rgba(255,255,255,0.10);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+
   overflow:hidden;
   display:flex;
   flex-direction:column;
-  min-height:0; /* rimuove calc hardcoded, si adatta al flex parent */
-  flex:1;
+  flex:1 1 auto;
+  min-height:0;
 }
 
 .card-head{
-  flex-shrink:0;
+  flex:0 0 auto;
   padding:16px 16px 10px 16px;
   border-bottom:1px solid var(--border);
 }
@@ -140,9 +147,9 @@ body{
   line-height:1.35;
 }
 
-/* UPLOAD */
+/* ===== UPLOAD ===== */
 .upload{
-  flex-shrink:0;
+  flex:0 0 auto;
   padding:14px 16px;
   border-bottom:1px solid var(--border);
 }
@@ -198,13 +205,14 @@ body{
   border:1px solid rgba(255,255,255,0.12);
 }
 
-/* CHAT */
+/* ===== CHAT (UNICA AREA SCROLLABILE) ===== */
 .chat{
-  flex:1;
-  min-height:220px;
-  max-height: clamp(260px, 55vh, 780px);
-  padding:14px 12px 12px 12px;
+  flex:1 1 auto;
+  min-height:0;
   overflow-y:auto;
+  -webkit-overflow-scrolling: touch;
+
+  padding:14px 12px 12px 12px;
   scroll-behavior:smooth;
   display:flex;
   flex-direction:column;
@@ -231,14 +239,12 @@ body{
   border:1px solid rgba(255,255,255,0.16);
 }
 
-/* COMPOSER */
+/* ===== COMPOSER (SEMPRE VISIBILE) ===== */
 .composer{
-  flex-shrink:0; /* non si schiaccia mai */
-  position:sticky;
-  bottom:0;
-  z-index:20;
+  flex:0 0 auto;
+
   border-top:1px solid var(--border);
-  background: rgba(7,19,38,0.88);
+  background: rgba(7,19,38,0.92);
   backdrop-filter: blur(10px);
   padding:10px 12px 12px 12px;
 }
@@ -277,7 +283,7 @@ body{
   padding:0 2px;
 }
 
-/* BUTTONS */
+/* ===== BUTTONS ===== */
 .btn{
   border:none;
   border-radius:16px;
@@ -305,49 +311,20 @@ body{
   cursor:not-allowed;
 }
 
-/* RESPONSIVE */
+/* ===== RESPONSIVE ===== */
 @media (max-width: 520px){
   .main{ padding:0; }
-  .card{ border-radius:0; border-left:none; border-right:none; }
-  .bubble{ max-width: 92%; }
-  /* mobile: compatta header card e upload per lasciare spazio alla chat */
+  .card{
+    width:100%;
+    margin:0;
+    border-radius:0;
+    border-left:none;
+    border-right:none;
+  }
+  .bubble{ max-width:92%; }
+
   .card-head{ padding:8px 12px 6px 12px; }
   .card-head p{ display:none; }
   .upload{ padding:8px 12px; }
   .preview-wrap img{ width:60px; height:60px; }
-}
-
-@media (max-width: 480px){
-  .chat{
-    min-height:240px;
-    max-height: clamp(260px, 50vh, 560px);
-  }
-}
-
-/* ============================================================
-   LAYOUT FIX V2 — scroll chat + layout responsive
-   ============================================================
-   SCROLL:    solo #chat scrolla; header e composer restano fissi.
-   LARGHEZZA: card e composer espansi a 1400px per desktop wide.
-   ============================================================ */
-
-/* struttura colonna piena altezza */
-.app{ min-height:100vh; display:flex; flex-direction:column; }
-.main{ flex:1; min-height:0; display:flex; flex-direction:column; }
-.card{ flex:1; min-height:0; display:flex; flex-direction:column; }
-
-/* chat: flex elastico, niente cap, scroll interno */
-#chat.chat{ flex:1; min-height:0; max-height:none; overflow-y:auto; }
-
-/* composer fisso in basso */
-.composer{ position:sticky; bottom:0; z-index:10; }
-
-/* larghezza responsive (override 820px originale) */
-.card{ width:min(1400px, 94%); margin:0 auto; }
-.composer-inner{ max-width:1400px; }
-.hint{ max-width:1400px; }
-
-/* mobile ≤480px */
-@media (max-width:480px){
-  .main{ padding:0; }
 }
