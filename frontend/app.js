@@ -66,12 +66,15 @@ console.log('BRIDGE LIVE');
     wrapper.appendChild(bubble);
     chat.appendChild(wrapper);
 
-    // autoscroll
-    try {
-      chat.scrollTo({ top: chat.scrollHeight, behavior: "smooth" });
-    } catch (e) {
-      chat.scrollTop = chat.scrollHeight;
-    }
+    // autoscroll — setTimeout(0) assicura che il DOM sia già renderizzato prima di leggere scrollHeight
+    var _chat = chat;
+    setTimeout(function () {
+      try {
+        _chat.scrollTo({ top: _chat.scrollHeight, behavior: "smooth" });
+      } catch (e) {
+        _chat.scrollTop = _chat.scrollHeight;
+      }
+    }, 0);
 
     return { wrapper: wrapper, bubble: bubble };
   }
@@ -497,6 +500,7 @@ console.log('BRIDGE LIVE');
           .catch(function (err) {
             console.error(err);
             removeTyping();
+            clearImage();
 
             var msg = String((err && err.message) ? err.message : (err || "Errore"));
 
