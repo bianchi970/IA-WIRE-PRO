@@ -3,63 +3,68 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
-  <title>Assistente Tecnico Virtuale</title>
+  <title>IA Wire Pro — Assistente Tecnico</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
   <div class="app">
 
-    <!-- BLOCCO 1: HEADER compatto -->
+    <!-- BLOCCO 1: HEADER (54px) -->
     <header class="topbar">
-      <div class="brand">
-        <div class="logo">⚡</div>
-        <div class="titles">
-          <div class="title">IA Wire Pro</div>
-          <div class="subtitle">Assistente Tecnico • Visione + Diagnosi</div>
+      <div class="topbar-inner">
+        <div class="brand">
+          <div class="logo">⚡</div>
+          <div class="titles">
+            <div class="title">IA Wire Pro</div>
+            <div class="subtitle">Assistente Tecnico • Visione + Diagnosi</div>
+          </div>
         </div>
+        <div class="status-pill" id="statusPill">Pronto</div>
       </div>
-      <div class="status-pill" id="statusPill">Pronto</div>
     </header>
 
-    <!-- UPLOAD STRIP compatta (tra header e chat) -->
-    <div class="upload-strip">
-      <input id="imageInput" type="file" accept="image/*" />
-      <label class="upload-btn" for="imageInput">
-        <span class="upload-icon">📷</span>
-        <span class="upload-label">Carica foto</span>
-      </label>
-      <div class="preview-wrap" id="previewWrap" hidden>
-        <img id="previewImg" alt="Anteprima" />
-        <button class="btn ghost small" id="removeImageBtn" type="button">✕ Rimuovi</button>
-      </div>
-    </div>
-
-    <!-- BLOCCO 2: CHAT scrollabile (unica area con scroll) -->
+    <!-- BLOCCO 2: CHAT — unica area scrollabile -->
     <div class="chat-container" id="chat">
       <div class="msg ai">
         <div class="bubble">Ciao! 👋
 1) Scrivi il problema in modo pratico (cosa succede + quando).
-2) Se puoi, carica una foto nitida.
+2) Se puoi, carica una foto nitida (📷 in basso a sinistra).
 
-Io rispondo sempre con:
+Rispondo sempre con:
 • Osservazioni (fatti)
 • Ipotesi (con livello di certezza)
 • Verifiche consigliate (passo passo)</div>
       </div>
     </div>
 
-    <!-- BLOCCO 3: COMPOSER fisso bottom -->
+    <!-- BLOCCO 3: COMPOSER — sempre visibile -->
     <footer class="composer">
-      <form id="chatForm" class="composer-inner">
-        <textarea
-          id="textInput"
-          placeholder="Scrivi il problema (es. 'salta il differenziale quando accendo forno')..."
-          rows="1"
-        ></textarea>
-        <button class="btn primary" id="sendBtn" type="submit">Invia</button>
-      </form>
-      <div class="hint">Suggerimento: aggiungi marca/modello e cosa hai già verificato ✅</div>
+      <div class="composer-wrap">
+
+        <!-- Preview chip: appare solo quando foto caricata -->
+        <div class="preview-wrap" id="previewWrap" hidden>
+          <img id="previewImg" alt="Anteprima" />
+          <span class="preview-label">Foto pronta</span>
+          <button class="btn ghost small" id="removeImageBtn" type="button">✕</button>
+        </div>
+
+        <!-- Riga: 📷 | textarea | Invia -->
+        <form id="chatForm" class="composer-row">
+          <input id="imageInput" type="file" accept="image/*" />
+          <label class="cam-btn" for="imageInput" title="Carica foto">📷</label>
+
+          <textarea
+            id="textInput"
+            placeholder="Scrivi il problema (es. 'salta il differenziale quando accendo forno')..."
+            rows="1"
+          ></textarea>
+
+          <button class="btn primary" id="sendBtn" type="submit">Invia</button>
+        </form>
+
+        <div class="hint">Suggerimento: aggiungi marca/modello e cosa hai già verificato ✅</div>
+      </div>
     </footer>
 
   </div>
