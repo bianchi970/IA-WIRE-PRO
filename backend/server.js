@@ -685,6 +685,11 @@ app.get("/health", async (req, res) => {
     } catch (_) {}
   }
 
+  const queue = buildProviderQueue();
+  const activeProvider = queue.length ? queue[0] : null;
+  const activeModel = activeProvider === "openai" ? OPENAI_MODEL : activeProvider === "anthropic" ? ANTHROPIC_MODEL : null;
+  const aiConnected = queue.length > 0;
+
   res.json({
     ok: true,
     time: new Date().toISOString(),
@@ -692,6 +697,12 @@ app.get("/health", async (req, res) => {
     runningFile: "backend/server.js",
     strictFormat: STRICT_FORMAT,
     db: { connected: dbOk, now: dbTime },
+    ai: {
+      connected: aiConnected,
+      activeProvider: activeProvider,
+      activeModel: activeModel,
+      preferredProvider: PREFERRED_PROVIDER,
+    },
     providers: {
       anthropicConfigured: Boolean(anthropic),
       openaiConfigured: Boolean(openai),
