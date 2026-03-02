@@ -135,6 +135,66 @@
         "FERMARSI se il conduttore PE è interrotto: non ripristinare l'alimentazione finché non è riparato",
         "FERMARSI se si trova continuità tra PE e neutro in punti non previsti"
       ]
+    },
+    {
+      "id": "SP-06",
+      "title": "Protocollo intervento su motori e variatori di frequenza (VFD)",
+      "pre_checks": [
+        "Verificare se il VFD è presente nella catena: il bus DC rimane carico anche dopo lo spegnimento",
+        "Procurarsi multimetro con portata DC (600V o più) per misurare il bus DC",
+        "DPI: guanti isolanti categoria 00 (fino a 500V), occhiali"
+      ],
+      "lockout_tagout": [
+        "1) Spegnere il drive tramite il comando locale o il PLC",
+        "2) Sezionare il sezionatore/interruttore di alimentazione del VFD",
+        "3) Applicare LOTO sul sezionatore",
+        "4) ATTENDERE ALMENO 5 MINUTI per lo scarico del bus DC",
+        "5) Misurare la tensione DC sui morsetti B+/B- (o P/N) del bus: deve essere <30V DC prima di procedere",
+        "6) Solo dopo la verifica: aprire il drive o scollegare i cavi di potenza"
+      ],
+      "measurement_rules": [
+        "Non usare MAI il megohmetro sui morsetti di uscita U/V/W del VFD senza aver prima scollegato il cavo motore",
+        "Non usare MAI il megohmetro sui morsetti di ingresso R/S/T con il drive collegato",
+        "Misurare il bus DC con multimetro in DC: morsetti B+/B- (o P+/P-)",
+        "Per misurare l'isolamento del cavo motore: scollegare il cavo da U/V/W del VFD e dai morsetti del motore, poi misurare",
+        "Misurare resistenza avvolgimento motore con ohmmetro (non megohmetro): U1-V1, V1-W1, U1-W1 — devono essere uguali ±5%"
+      ],
+      "stop_conditions": [
+        "FERMARSI se il bus DC è >30V: attendere ancora e rimisurare",
+        "FERMARSI se si sente scarica elettrostatica all'apertura del drive: condensatori non scarichi",
+        "FERMARSI se si trovano componenti bruciati o danneggiati all'interno del VFD: intervento specializzato",
+        "NON usare il megohmetro sui terminali di uscita del VFD con il drive collegato"
+      ]
+    },
+    {
+      "id": "SP-07",
+      "title": "Protocollo verifica impianto fotovoltaico (lato DC e lato AC)",
+      "pre_checks": [
+        "Il lato DC di un impianto FV è SEMPRE sotto tensione in presenza di luce: non è sezionabile come un normale circuito",
+        "Procurarsi multimetro CAT III 1000V per misure sul lato DC",
+        "DPI: guanti isolanti CAT III, occhiali, scarpe isolanti",
+        "Verificare se l'impianto è dotato di RSD (Rapid Shutdown Device) o MLPE"
+      ],
+      "lockout_tagout": [
+        "Lato AC: sezionare l'interruttore AC dell'inverter, applicare LOTO",
+        "Lato DC: COPRIRE I PANNELLI con teli opachi per ridurre la tensione — non è sufficiente per azzerarla",
+        "Attendere che la tensione DC scenda al di sotto di 50V prima di lavorare sui cavi DC",
+        "Se presente RSD: attivarlo per mettere in sicurezza i cavi DC"
+      ],
+      "measurement_rules": [
+        "Misurare la tensione DC tra + e - dei cavi stringa PRIMA di qualsiasi collegamento o scollegamento",
+        "Tensione attesa stringa: Voc_pannello × numero pannelli in serie (es. 40V × 10 pannelli = 400V DC)",
+        "Non scollegare i connettori MC4 sotto carico (arco DC pericoloso): usare sezionatori DC",
+        "Lato AC: verificare assenza tensione DOPO aver sezionato l'interruttore AC — l'inverter può ancora avere tensione interna",
+        "Misurare isolamento stringa DC: positivo-terra e negativo-terra con megohmetro 1000V DC (solo con pannelli coperti)",
+        "Valore accettabile isolamento: >40MΩ per stringa nuova, >1MΩ per stringa esistente"
+      ],
+      "stop_conditions": [
+        "FERMARSI se la tensione DC è >50V con pannelli coperti: copertura insufficiente o RSD guasto",
+        "FERMARSI se si trovano connettori MC4 danneggiati, bruciati o aperti: rischio arco DC",
+        "FERMARSI se l'isolamento stringa è <100kΩ: guasto grave, non ripristinare",
+        "NON lavorare sul lato DC in condizioni di pioggia o bagnato"
+      ]
     }
   ]
 }

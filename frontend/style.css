@@ -148,6 +148,72 @@ body {
   border-color: rgba(255,255,255,0.14);
 }
 
+/* ===== ROCCO FORMATTED RESPONSE ===== */
+.bubble.bubble-formatted {
+  white-space: normal;
+}
+.rline {
+  line-height: 1.5;
+}
+.rline-bullet {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 1px 0;
+}
+.bullet-dot {
+  color: var(--cyan);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.rline-num {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 1px 0;
+}
+.num-pfx {
+  color: var(--muted);
+  flex-shrink: 0;
+  min-width: 18px;
+}
+.sec-head {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--cyan);
+  text-transform: uppercase;
+  margin-top: 10px;
+  margin-bottom: 3px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid rgba(0,217,255,0.18);
+}
+/* Certezza badges */
+.cert {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  vertical-align: middle;
+  line-height: 1.6;
+}
+.cert-ok   { background: rgba(0,200,100,0.18); color: #4ade80; border: 1px solid rgba(0,200,100,0.28); }
+.cert-prob { background: rgba(255,180,0,0.15); color: #fbbf24; border: 1px solid rgba(255,180,0,0.28); }
+.cert-poss { background: rgba(144,164,191,0.12); color: var(--muted); border: 1px solid rgba(144,164,191,0.22); }
+/* Provider badge */
+.provider-badge {
+  font-size: 10px;
+  color: rgba(144,164,191,0.50);
+  margin-top: 3px;
+  padding-left: 4px;
+}
+.prov-fallback {
+  color: rgba(255,140,66,0.70);
+}
+
 /* ===== BLOCCO 3: COMPOSER — sempre visibile ===== */
 .composer {
   flex: 0 0 auto;

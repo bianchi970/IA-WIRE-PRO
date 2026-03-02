@@ -464,63 +464,6 @@ async function generateContextSummary(convId, provider) {
   }
 }
 
-// Forza struttura IA Wire Pro se il modello non la rispetta
-function ensureWireFormat(text) {
-  const t = String(text || "").trim();
-  if (!t) {
-    return [
-      "OSSERVAZIONI:",
-      "- (risposta vuota)",
-      "",
-      "IPOTESI:",
-      "- Non verificabile",
-      "",
-      "LIVELLO DI CERTEZZA:",
-      "- Non verificabile",
-      "",
-      "RISCHI / SICUREZZA:",
-      "- Verifica alimentazioni e isolamento prima di intervenire.",
-      "",
-      "VERIFICHE CONSIGLIATE:",
-      "1) Invia una foto più ravvicinata e nitida.",
-      "2) Indica marca/modello e cosa hai già verificato.",
-      "",
-      "PROSSIMO PASSO:",
-      "- Inviami un dettaglio del componente principale.",
-    ].join("\n");
-  }
-
-  const hasObs = /OSSERVAZIONI\s*:/i.test(t);
-  const hasHyp = /IPOTESI\s*:/i.test(t);
-  const hasCert = /LIVELLO DI CERTEZZA\s*:/i.test(t);
-  const hasChecks = /VERIFICHE CONSIGLIATE\s*:/i.test(t);
-
-  if (hasObs && hasHyp && hasCert && hasChecks) return t;
-
-  // ✅ neutro (non "termico" fisso)
-  return [
-    "OSSERVAZIONI:",
-    "- " + t.replace(/\n+/g, "\n- "),
-    "",
-    "IPOTESI:",
-    "- Probabile: servono conferme con misure/foto aggiuntive.",
-    "",
-    "LIVELLO DI CERTEZZA:",
-    "- Probabile (dati incompleti).",
-    "",
-    "RISCHI / SICUREZZA:",
-    "- Prima di intervenire: disalimenta, verifica assenza tensione/pressione dove applicabile, usa DPI adeguati.",
-    "",
-    "VERIFICHE CONSIGLIATE:",
-    "1) Invia un dettaglio ravvicinato del componente/collegamenti (foto nitida).",
-    "2) Indica marca/modello e cosa hai già misurato o verificato.",
-    "3) Se possibile, fornisci valori misurati (es. tensione, continuità, pressione, temperatura) e condizioni di prova.",
-    "",
-    "PROSSIMO PASSO:",
-    "- Inviami il dettaglio più ravvicinato del componente principale (o i valori misurati).",
-  ].join("\n");
-}
-
 // ============================================================
 // OFFLINE FALLBACK HELPER
 // Rileva errori di rete (DNS, timeout, connection reset)
@@ -1105,6 +1048,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       engineDiag = analyzeTechnicalRequest({ message, hasImage: !!imageBase64 }, {
         failurePatterns: _kb.failurePatterns,
         protectionRules: _kb.protectionRules,
+        components:      _kb.components,
       });
       engineText = formatDiagnosticContext(engineDiag);
       // FASE 5 — Safety Lock: se condizione pericolosa, forza avviso in testa al system prompt
@@ -1166,7 +1110,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       }
     }
 
-    if (STRICT_FORMAT && usedProvider !== "offline_engine") answer = ensureWireFormat(answer);
+    if (STRICT_FORMAT && usedProvider !== "offline_engine") answer = rocco.postcheck(answer);
 
     // Persistenza + summary
     await msgInsert({
@@ -1196,6 +1140,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
         isDangerous: engineDiag.isDangerous,
         matchedPatterns: engineDiag.matchedPatterns,
         matchedRules: engineDiag.matchedRules,
+        matchedComponents: engineDiag.matchedComponents,
       } : { active: false },
     });
   } catch (err) {
@@ -1236,7 +1181,7 @@ app.get("/api/engine/test", (req, res) => {
   try {
     const input = { message: TEST_CASE.message, hasImage: TEST_CASE.hasImage };
     const _kb = getLoadedKnowledge();
-    const diag = analyzeTechnicalRequest(input, { failurePatterns: _kb.failurePatterns, protectionRules: _kb.protectionRules });
+    const diag = analyzeTechnicalRequest(input, { failurePatterns: _kb.failurePatterns, protectionRules: _kb.protectionRules, components: _kb.components });
     const ctx = formatDiagnosticContext(diag);
     const knCtx = fetchKnowledgeContext(TEST_CASE.message);
 

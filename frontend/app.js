@@ -53,17 +53,102 @@ console.log('BRIDGE LIVE');
     return str;
   }
 
-  function addMessage(role, text) {
+  // ====== ROCCO RESPONSE FORMATTER ======
+  var KNOWN_SECTIONS = {
+    "OSSERVAZIONI": 1, "COMPONENTI RICONOSCIUTI": 1, "COMPONENTI": 1,
+    "IPOTESI": 1, "IPOTESI PROBABILE": 1,
+    "VERIFICHE SUL CAMPO": 1, "VERIFICHE CONSIGLIATE": 1, "VERIFICHE": 1,
+    "RISCHI": 1, "RISCHI / SICUREZZA": 1, "SICUREZZA": 1,
+    "LIVELLO DI CERTEZZA": 1,
+    "NEXT STEP": 1, "PROSSIMO PASSO": 1,
+    "CONCLUSIONE": 1, "CAUSA PROBABILE": 1, "NOTA": 1, "AVVERTENZE": 1
+  };
+
+  function inlineFormat(s) {
+    var t = escapeHtml(s);
+    t = t.replace(/\[CONFERMATO\]/g, '<span class="cert cert-ok">CONFERMATO</span>');
+    t = t.replace(/\[PROBABILE\]/g, '<span class="cert cert-prob">PROBABILE</span>');
+    t = t.replace(/\[POSSIBILE\]/g, '<span class="cert cert-poss">POSSIBILE</span>');
+    return t;
+  }
+
+  function formatRoccoResponse(rawText) {
+    var text = String(rawText == null ? "" : rawText);
+    var lines = text.split("\n");
+    var html = "";
+    var firstSection = true;
+
+    for (var i = 0; i < lines.length; i++) {
+      var trimmed = lines[i].trim();
+      if (!trimmed) continue; // sezioni hanno margin-top, blank lines non servono
+
+      // Section header: controlla tabella KNOWN_SECTIONS
+      var noColon = trimmed.replace(/:+\s*$/, "").trim();
+      if (KNOWN_SECTIONS[noColon.toUpperCase()]) {
+        var mt = firstSection ? ' style="margin-top:0"' : "";
+        html += '<div class="rline"' + mt + '><strong class="sec-head">' + escapeHtml(noColon) + "</strong></div>";
+        firstSection = false;
+        continue;
+      }
+
+      // Bullet: "- testo" o "• testo"
+      if (/^[-\u2022]\s/.test(trimmed)) {
+        var bContent = trimmed.replace(/^[-\u2022]\s+/, "");
+        html += '<div class="rline rline-bullet"><span class="bullet-dot">&#x2022;</span><span>' + inlineFormat(bContent) + "</span></div>";
+        continue;
+      }
+
+      // Numerato: "1) testo" o "1. testo"
+      var nm = trimmed.match(/^(\d+[.)]\s*)(.*)/);
+      if (nm) {
+        html += '<div class="rline rline-num"><span class="num-pfx">' + escapeHtml(nm[1]) + "</span><span>" + inlineFormat(nm[2]) + "</span></div>";
+        continue;
+      }
+
+      html += '<div class="rline">' + inlineFormat(trimmed) + "</div>";
+    }
+
+    return html || escapeHtml(text);
+  }
+
+  function addMessage(role, text, meta) {
     if (!chat) return { wrapper: null, bubble: null };
 
     var wrapper = document.createElement("div");
     wrapper.className = "msg " + role;
 
     var bubble = document.createElement("div");
-    bubble.className = "bubble";
-    bubble.innerHTML = escapeHtml(text);
+
+    // Usa il formatter per risposte AI strutturate
+    var hasStructure = (role === "ai") &&
+      /OSSERVAZIONI|IPOTESI|VERIFICHE|RISCHI|CERTEZZA|NEXT STEP|PROSSIMO PASSO/i.test(text);
+
+    if (hasStructure) {
+      bubble.className = "bubble bubble-formatted";
+      bubble.innerHTML = formatRoccoResponse(text);
+    } else {
+      bubble.className = "bubble";
+      bubble.innerHTML = escapeHtml(text);
+    }
 
     wrapper.appendChild(bubble);
+
+    // Badge provider (solo su risposte strutturate con meta)
+    if (hasStructure && meta && (meta.provider || meta.model)) {
+      var badge = document.createElement("div");
+      badge.className = "provider-badge";
+      var provText = String(meta.provider || "").toLowerCase();
+      var modelText = String(meta.model || "");
+      var label = provText;
+      if (modelText) label += " \u00B7 " + modelText;
+      if (meta.fallback_used) {
+        badge.innerHTML = '<span class="prov-fallback">[fallback]</span> ' + escapeHtml(label);
+      } else {
+        badge.textContent = label;
+      }
+      wrapper.appendChild(badge);
+    }
+
     chat.appendChild(wrapper);
 
     // autoscroll — setTimeout(0) assicura che il DOM sia già renderizzato prima di leggere scrollHeight
@@ -483,7 +568,11 @@ console.log('BRIDGE LIVE');
             removeTyping();
 
             var ans = ensureStructuredAnswer(data.answer || data.reply || "");
-            addMessage("ai", ans);
+            addMessage("ai", ans, {
+              provider: data.provider,
+              model: data.model,
+              fallback_used: !!data.fallback_used
+            });
 
             pushHistory("assistant", ans);
 

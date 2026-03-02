@@ -317,6 +317,508 @@
         "5) Confrontare l'IP della cassetta con le condizioni ambientali"
       ],
       "notes": "Un quadro esterno con IP non adeguato o guarnizioni degradate è causa diretta di guasti e pericoli di sicurezza. L'IP si perde anche con un solo pressacavo allentato."
+    },
+    {
+      "id": "motor-3phase",
+      "category": "motor",
+      "brand": null,
+      "model": null,
+      "keywords": ["motore", "trifase", "asincrono", "kW", "RPM", "avvolgimenti", "IE2", "IE3", "statore", "rotore", "condensatore"],
+      "visual_cues": [
+        "corpo cilindrico in ghisa o alluminio con alette di raffreddamento",
+        "targa dati su lato motore: tensione (es. 230Δ/400Y), corrente nominale, potenza kW, RPM, cos φ",
+        "morsettiera di collegamento con 6 morsetti (U1/V1/W1 e U2/V2/W2) o 3 morsetti",
+        "ventola di raffreddamento sul retro (coperta da un carter plastico)",
+        "cuscinetti anteriori e posteriori con tappi di ingrassaggio"
+      ],
+      "functions": [
+        "converte energia elettrica in meccanica tramite campo magnetico rotante",
+        "collegamento stella (Y): bassa coppia spunto, adatto a 400V trifase",
+        "collegamento triangolo (Δ): alta coppia spunto, adatto a 230V trifase o avvio Y/Δ"
+      ],
+      "typical_faults": [
+        "non parte: verificare alimentazione trifase, fusibili, contattore, sezionatore",
+        "parte ma si scalda e scatta il termico: sovraccarico meccanico o avvolgimento in corto parziale",
+        "rumore anomalo (ronzio o grattamento): cuscinetti usurati o perdita di fase",
+        "vibrazione eccessiva: sbilanciamento meccanico, accoppiamento difettoso, rotore eccentrico",
+        "odore bruciato: avvolgimento bruciato — misurare resistenza tra fasi con ohmmetro",
+        "funziona ma con coppia ridotta: perdita di una fase (lavora monofase su due avvolgimenti)"
+      ],
+      "field_checks": [
+        "1) Misurare tensione trifase in ingresso: L1-L2, L2-L3, L1-L3 devono essere 400V ±5%",
+        "2) Misurare corrente su ogni fase con pinza amperometrica: confrontare con In targa",
+        "3) Con motore fermo e disalimentato: misurare resistenza tra U1-V1, V1-W1, U1-W1 — devono essere uguali (±5%)",
+        "4) Misurare isolamento avvolgimenti con megohmetro 500V: fase-carcassa >1MΩ",
+        "5) Ruotare il rotore a mano: deve essere libero, senza grattamenti",
+        "6) Verificare temperatura carcassa dopo 30 min: max 60-80°C dipende da classe isolamento"
+      ],
+      "notes": "Perdita di una fase: il motore continua a girare (non parte a freddo) con corrente molto alta sulle due fasi rimaste. Il relè termico trifase deve intervenire in pochi secondi. Verificare sempre con pinza amperometrica su tutte e tre le fasi."
+    },
+    {
+      "id": "inverter-vfd",
+      "category": "inverter",
+      "brand": null,
+      "model": null,
+      "keywords": ["inverter", "variatore di frequenza", "VFD", "drive", "inverter motore", "frequenza", "Hz", "rampa", "allarme"],
+      "visual_cues": [
+        "corpo plastico rettangolare con display a 7 segmenti o LCD sul fronte",
+        "morsettiere: lato sinistro/inferiore per potenza (L/N o R/S/T per trifase), lato destro per controllo (AI, DI, DO, +24V, COM)",
+        "LED stato: RUN (verde), FAULT (rosso o arancione)",
+        "codice allarme visualizzato sul display (es. OC = sovracorrente, OT = sovratemperatura, GF = guasto terra)",
+        "dissipatore in alluminio sul retro o sui lati con ventola interna"
+      ],
+      "functions": [
+        "varia la frequenza e la tensione di uscita per regolare la velocità del motore",
+        "rampa di accelerazione e decelerazione programmabile per ridurre gli spunti",
+        "protezioni integrate: sovracorrente, sovratemperatura, perdita di fase, guasto terra"
+      ],
+      "typical_faults": [
+        "OC (overcurrent): sovraccarico meccanico, rampa troppo ripida, cortocircuito uscita",
+        "OV (overvoltage): rampa di decelerazione troppo rapida, tensione di rete alta",
+        "OT (overtemperature): ventola bloccata, filtro aria ostruito, temperatura ambiente alta",
+        "GF (ground fault): dispersione verso terra sul cavo motore o avvolgimento",
+        "LF (loss of phase): perdita di una fase in ingresso",
+        "nessuna uscita a motore: drive in stand-by, mancanza segnale enable o start"
+      ],
+      "field_checks": [
+        "1) Leggere il codice allarme sul display e cercarlo nel manuale del drive",
+        "2) Misurare tensione di alimentazione (L/N o R/S/T): deve essere nei limiti del drive",
+        "3) Verificare temperatura ambiente e ventola di raffreddamento (deve girare quando in marcia)",
+        "4) Verificare segnali di controllo: enable (spesso morsetto 24V su DI1), run/stop",
+        "5) Misurare tensione di uscita U/V/W con multimetro (valore medio AC): deve essere proporzionale alla frequenza impostata",
+        "6) NON misurare con megohmetro su morsetti di uscita del drive (danneggia l'IGBT)"
+      ],
+      "notes": "Prima di intervenire sul drive: disalimentare e attendere almeno 5 minuti per lo scarico del bus DC (condensatori interni). Verificare con multimetro su morsetti bus DC (etichettati B+/B- o P/N): deve essere <30V prima di toccare."
+    },
+    {
+      "id": "timer-relay",
+      "category": "timer",
+      "brand": null,
+      "model": null,
+      "keywords": ["temporizzatore", "timer", "ritardo", "on-delay", "off-delay", "ciclico", "DIN", "24V", "230V"],
+      "visual_cues": [
+        "modulo DIN piccolo (1-2 moduli) con potenziometro o display per impostare il tempo",
+        "LED indicatore stato (alimentazione e contatto)",
+        "targhetta con scala tempi (secondi/minuti/ore) e range",
+        "morsetti: alimentazione bobina (A1/A2) e contatti (11/12/14 o NO/NC/COM)"
+      ],
+      "functions": [
+        "on-delay (ritardo all'inserzione): il contatto commuta dopo T secondi dall'alimentazione",
+        "off-delay (ritardo alla disinserzione): il contatto tiene per T secondi dopo la rimozione del segnale",
+        "ciclico (lampeggiatore): alterna ON/OFF con tempo impostabile",
+        "usato per avvii sequenziali, protezioni anti-sbattimento, segnalazioni"
+      ],
+      "typical_faults": [
+        "contatto non commuta mai: alimentazione assente o timer difettoso",
+        "commuta subito senza ritardo: potenziometro a zero o timer guasto",
+        "ritardo instabile: tensione di alimentazione instabile",
+        "contatto ossidato: caduta di tensione al carico, alta resistenza"
+      ],
+      "field_checks": [
+        "1) Verificare tensione di alimentazione su A1-A2 (deve corrispondere al nominale del timer)",
+        "2) Impostare il tempo al minimo e verificare la commutazione con tester in continuità",
+        "3) Misurare la caduta di tensione sui contatti con carico: deve essere <0.5V",
+        "4) Sostituire il timer se il ritardo non è costante o non commuta"
+      ],
+      "notes": "I timer elettronici sono sensibili alla qualità della tensione. In ambienti con disturbi, preferire timer con alimentazione SELV 24V DC."
+    },
+    {
+      "id": "terminal-block",
+      "category": "terminal",
+      "brand": null,
+      "model": null,
+      "keywords": ["morsettiera", "morsetto", "DIN", "sezionabile", "a vite", "a molla", "passante", "sezionatore"],
+      "visual_cues": [
+        "blocchi plastici modulari su guida DIN, larghezza 4-8mm per morsetto",
+        "colori: grigio (segnale), blu (neutro), giallo-verde (PE), rosso (fase)",
+        "morsetti a vite con fessura cacciavite oppure a molla con pulsante arancione",
+        "targhette numeriche o con etichette incise",
+        "ponticelli orizzontali per collegare morsetti adiacenti"
+      ],
+      "functions": [
+        "punto di connessione e distribuzione dei conduttori nel quadro",
+        "morsetti sezionabili: interrompono il circuito ruotando/estraendo il punto di sezionamento",
+        "morsetti portafusibili: integrano un fusibile nel blocco"
+      ],
+      "typical_faults": [
+        "morsetto allentato: il conduttore scorre, resistenza elevata, calore",
+        "morsetto ossidato: alta resistenza, perdita di segnale in circuiti a bassa tensione",
+        "conduttore non inserito abbastanza: serraggio solo sull'isolante",
+        "ponticello mancante o allentato: circuito interrotto"
+      ],
+      "field_checks": [
+        "1) Verificare che il conduttore non si estragga tirandolo leggermente",
+        "2) Misurare la caduta di tensione sul morsetto con carico: deve essere <0.1V",
+        "3) Ispezionare visivamente i morsetti: tracce di ossidazione o bruciature",
+        "4) Per morsetti a vite: riserrare con cacciavite della misura corretta"
+      ],
+      "notes": "Per cavi flessibili su morsetti a vite: usare ferrule terminali (capicorda a bussola) per garantire il contatto uniforme e prevenire il taglio dei fili."
+    },
+    {
+      "id": "limit-switch",
+      "category": "sensor",
+      "brand": null,
+      "model": null,
+      "keywords": ["finecorsa", "sensore", "prossimità", "induttivo", "ottico", "magnetico", "NPN", "PNP", "NA", "NC", "reed"],
+      "visual_cues": [
+        "finecorsa meccanico: corpo metallico con leva o rullo, morsetti per cavo",
+        "sensore induttivo: cilindro M12/M18/M30 in metallo, LED indicatore",
+        "sensore ottico: corpo plastico con lente, LED TX e RX",
+        "sensore magnetico/reed: piccolo corpo plastico montato su guida, attivato da magnete"
+      ],
+      "functions": [
+        "rileva la posizione o la presenza di un oggetto senza contatto (induttivo/ottico) o con contatto (finecorsa meccanico)",
+        "uscita NPN (a collettore aperto verso 0V) o PNP (verso +24V)",
+        "contatti NA (normalmente aperti) o NC (normalmente chiusi)"
+      ],
+      "typical_faults": [
+        "sensore non attiva: distanza troppo elevata dall'oggetto, sporco sulla lente",
+        "sensore sempre attivo: cortocircuito sull'uscita o guasto interno",
+        "LED acceso ma PLC non vede l'ingresso: tipo di uscita incompatibile (NPN su PLC PNP)",
+        "finecorsa meccanico intermittente: leva piegata, contatti ossidati"
+      ],
+      "field_checks": [
+        "1) Verificare tensione di alimentazione del sensore (tipicamente 24V DC tra marrone e blu)",
+        "2) Avvicinare un oggetto: il LED deve accendersi/spegnersi nel range dichiarato",
+        "3) Misurare la tensione sull'uscita (nero): NPN → 0V attivo, PNP → 24V attivo",
+        "4) Se il PLC non vede l'ingresso: verificare compatibilità NPN/PNP con il tipo di ingresso del PLC",
+        "5) Per finecorsa meccanico: misurare continuità sui contatti con il tester in modalità beep"
+      ],
+      "notes": "Incompatibilità NPN/PNP: un sensore NPN collegato a un ingresso PNP (o viceversa) può sembrare sempre attivo o sempre spento. Verificare sempre il tipo di uscita prima di collegare."
+    },
+    {
+      "id": "caldaia-riscaldamento",
+      "category": "heating",
+      "brand": null,
+      "model": null,
+      "keywords": ["caldaia", "boiler", "riscaldamento", "bruciatore", "termostato", "acs", "acqua calda", "termosifone", "radiatore", "pompa calore", "pellet", "gasolio", "metano", "gas"],
+      "visual_cues": [
+        "corpo metallico verticale o orizzontale con pannello comandi frontale",
+        "display o manometro indicatore pressione circuito (bar)",
+        "termostato di sicurezza (STB) sul corpo caldaia — pulsante rosso di sblocco",
+        "vaso di espansione: serbatoio rosso/nero collegato al circuito",
+        "sonda di temperatura NTC sul collettore mandata/ritorno"
+      ],
+      "functions": [
+        "riscalda l'acqua del circuito di riscaldamento e/o sanitario",
+        "bruciatore a gas/pellet/gasolio: converte combustibile in calore",
+        "pompa circolatore integrata o esterna: fa circolare l'acqua",
+        "termostato di sicurezza STB: spegne se la temperatura supera 95-100°C"
+      ],
+      "typical_faults": [
+        "non si accende: assenza gas/combustibile, pressione circuito bassa (<0.8 bar), STB scattato",
+        "si spegne continuamente: sonda NTC guasta, pressostato acqua aperto, termostato STB in scatto",
+        "pressione bassa: perdita nel circuito o vaso di espansione scarico",
+        "rumore acqua (gorgoglio): aria nel circuito — sfogare i radiatori",
+        "errore codice display: consultare manuale (es. E01 = pressione bassa, E05 = sonda NTC)",
+        "bruciatore non parte: elettrodi di accensione sporchi, valvola gas non apre"
+      ],
+      "field_checks": [
+        "1) Verificare pressione manometro: deve essere 1-1.5 bar a freddo (gonfiare se bassa)",
+        "2) Verificare alimentazione 230V AC alla caldaia con multimetro",
+        "3) Sbloccare STB (pulsante rosso) se scattato — solo dopo verifica causa",
+        "4) Misurare resistenza sonda NTC con ohmmetro: confrontare con tabella (es. 10kΩ a 25°C)",
+        "5) Verificare apertura valvola gas (230V su bobina valvola durante accensione)",
+        "6) Controllare elettrodi di accensione: distanza corretta (3-4mm), assenza depositi"
+      ],
+      "notes": "Per interventi su caldaia a gas: obbligatorio abilitazione per apparecchi a gas. Verificare sempre la presenza di gas e l'assenza di perdite con rivelatore prima di accendere."
+    },
+    {
+      "id": "pompa-circolatore",
+      "category": "pump",
+      "brand": null,
+      "model": null,
+      "keywords": ["pompa", "circolatore", "circolazione", "idraulica", "prevalenza", "portata", "girante", "cavitazione", "mandata", "ritorno", "pressostato"],
+      "visual_cues": [
+        "corpo in ghisa o bronzo con motore elettrico integrato",
+        "morsettiera elettrica laterale con coperchio",
+        "pulsante di sblocco manuale (sfiatatore) sulla testa motore",
+        "freccia di flusso incisa sul corpo (indicazione senso di flusso)",
+        "flangie di collegamento o raccordi filettati"
+      ],
+      "functions": [
+        "mette in circolazione il fluido nel circuito idraulico/riscaldamento",
+        "vince le perdite di carico del circuito (prevalenza in mH2O)",
+        "pompe con velocità variabile: adattano la prevalenza alla richiesta"
+      ],
+      "typical_faults": [
+        "non parte: alimentazione assente, condensatore guasto (monofase), girante bloccata",
+        "rumore (cigolamento/grattamento): cuscinetti usurati, cavitazione, corpo estraneo",
+        "non sposta acqua: senso di rotazione errato, aria nel circuito, girante slittata",
+        "surriscalda e scatta: sovraccarico, fluido troppo caldo, mancata refrigerazione"
+      ],
+      "field_checks": [
+        "1) Verificare alimentazione 230V AC ai morsetti della pompa",
+        "2) Per pompa monofase: misurare capacità condensatore con tester (confrontare con targa)",
+        "3) Sbloccare manualmente la girante tramite vite di sblocco/sfiatatore",
+        "4) Misurare corrente assorbita con pinza: confrontare con targa",
+        "5) Verificare senso di rotazione (freccia sul corpo) — invertire 2 fasi se errato"
+      ],
+      "notes": "Prima di intervenire su pompa idraulica: chiudere le valvole di intercettazione e sfiatare la pressione. Non avviare mai a secco (senza fluido nel corpo pompa)."
+    },
+    {
+      "id": "ups-batteria",
+      "category": "ups",
+      "brand": null,
+      "model": null,
+      "keywords": ["UPS", "gruppo di continuità", "batteria", "autonomia", "bypass", "inverter UPS", "on-line", "off-line", "VRLA", "AGM", "piombo", "litio"],
+      "visual_cues": [
+        "corpo rettangolare con display LCD o LED di stato",
+        "LED: rete (verde), batteria (giallo), guasto (rosso)",
+        "prese di uscita posteriori o laterali",
+        "morsetti batteria interni (12V VRLA o rack di batterie)",
+        "porta USB o RS232 per comunicazione con PC"
+      ],
+      "functions": [
+        "mantiene l'alimentazione ai carichi durante mancanza rete",
+        "off-line: commuta su batteria in caso di guasto rete (commutazione <15ms)",
+        "on-line: sempre invertito su batteria — protezione totale da disturbi rete",
+        "filtro EMI integrato: elimina disturbi dalla rete"
+      ],
+      "typical_faults": [
+        "batteria scarica/guasta: autonomia ridotta o nulla, LED rosso batteria",
+        "non commuta su batteria: fusibile interno bruciato, contattore bypass bloccato",
+        "allarme rete: UPS rileva tensione fuori range (bassa/alta)",
+        "allarme sovratemperatura: ventola bloccata, ambiente troppo caldo",
+        "batteria non si carica: guasto al raddrizzatore/caricabatteria"
+      ],
+      "field_checks": [
+        "1) Misurare tensione batteria a riposo: 12V VRLA deve essere >12.5V (scarica se <12V)",
+        "2) Misurare tensione di carica con UPS in rete: deve essere 13.5-13.8V",
+        "3) Verificare durata autonomia con carico noto (confrontare con specifiche)",
+        "4) Misurare tensione uscita UPS con multimetro: deve essere 230V ±5%",
+        "5) Verificare ventola di raffreddamento (deve girare sotto carico)"
+      ],
+      "notes": "Le batterie VRLA hanno vita media 3-5 anni. Sostituire sempre in coppia (stesso lotto di produzione). Non miscolare batterie nuove con vecchie."
+    },
+    {
+      "id": "wallbox-ev",
+      "category": "ev_charger",
+      "brand": null,
+      "model": null,
+      "keywords": ["wallbox", "ricarica auto", "auto elettrica", "colonnina", "EV", "EVSE", "tipo 2", "mode 3", "kW ricarica", "OCPP", "PWM pilota"],
+      "visual_cues": [
+        "box plastico da parete con cavo tipo 2 o presa tipo 2",
+        "LED o display stato: disponibile (verde), in carica (blu), errore (rosso)",
+        "differenziale integrato tipo B (obbligatorio per EV)",
+        "morsetti interni: L1 (L2/L3 per trifase), N, PE, segnale CP (pilota)"
+      ],
+      "functions": [
+        "eroga corrente di ricarica all'auto tramite protocollo IEC 61851 (mode 3)",
+        "segnale PWM su CP: comunica corrente disponibile all'auto (6-32A)",
+        "protezione integrata: RCD tipo B, sovracorrente, sovratemperatura"
+      ],
+      "typical_faults": [
+        "non eroga: RCD interno scattato, segnale CP interrotto, auto non autorizzata (RFID)",
+        "eroga a bassa potenza: impostazione corrente ridotta, cavo tipo 2 difettoso",
+        "LED rosso errore: comunicazione CP guasta, sovratemperatura, guasto terra",
+        "scatta differenziale principale: corrente di dispersione dalla batteria auto"
+      ],
+      "field_checks": [
+        "1) Verificare alimentazione 230V (o 400V trifase) ai morsetti wallbox",
+        "2) Verificare differenziale tipo B interno (tasto TEST)",
+        "3) Misurare tensione sul cavo CP (pilota): deve essere ±12V a riposo",
+        "4) Verificare messa a terra: resistenza PE < 1Ω",
+        "5) Controllare corrente impostata nel menu wallbox (deve corrispondere al contratto)"
+      ],
+      "notes": "Obbligatorio differenziale tipo B per wallbox (rileva correnti continue che un tipo A non vede). Non usare tipo A o tipo AC per impianti EV."
+    },
+    {
+      "id": "inverter-fotovoltaico",
+      "category": "pv_inverter",
+      "brand": null,
+      "model": null,
+      "keywords": ["fotovoltaico", "FV", "solare", "pannello solare", "inverter solare", "stringa", "MPPT", "isola", "grid", "immissione", "accumulo", "batteria FV"],
+      "visual_cues": [
+        "corpo metallico a parete con display LCD e LED",
+        "morsetti DC lato pannelli (coppie +/-), morsetti AC lato rete",
+        "connettori MC4 per le stringhe fotovoltaiche",
+        "LED: alimentato (verde), produzione (blu), guasto (rosso)",
+        "display: potenza istantanea kW, energia kWh giornaliera, errori"
+      ],
+      "functions": [
+        "converte la tensione DC dei pannelli in AC 230V/400V immessa in rete",
+        "MPPT: inseguimento del punto di massima potenza dei pannelli",
+        "protezioni di isola: si disconnette in caso di blackout rete (obbligatorio per legge)"
+      ],
+      "typical_faults": [
+        "nessuna produzione: irraggiamento insufficiente, disconnessione AC, errore isolamento DC",
+        "errore isola: inverter non si ricollega dopo rientro rete (timeout)",
+        "errore GFCI/RCD: dispersione DC verso terra — pannelli, cavi, inverter",
+        "produzione ridotta: stringa ombreggiata, modulo degradato, MPPT non ottimizzato",
+        "display codice errore: consultare manuale (es. F001 = bassa tensione DC)"
+      ],
+      "field_checks": [
+        "1) Misurare tensione DC stringa con multimetro (ingresso inverter): confrontare con Voc*Ns",
+        "2) Misurare tensione AC uscita: deve essere 230V ±10%",
+        "3) Verificare isolamento DC con megohmetro 500V (solo con inverter scollegato dalla rete)",
+        "4) Controllare connettori MC4: devono essere agganciati (click), nessuna corrosione",
+        "5) Verificare temperatura dissipatore e funzionamento ventola"
+      ],
+      "notes": "I pannelli fotovoltaici sono SEMPRE in tensione quando illuminati — anche con interruttore AC aperto. Operare sul lato DC SOLO con protezioni adeguate (guanti isolanti, visiera). Tensione stringa può superare i 600-1000V DC."
+    },
+    {
+      "id": "soft-starter",
+      "category": "soft_starter",
+      "brand": null,
+      "model": null,
+      "keywords": ["soft starter", "avviatore progressivo", "avviamento dolce", "coppia ridotta", "corrente di spunto", "rampa avvio", "bypass"],
+      "visual_cues": [
+        "modulo plastico DIN o da pannello, più largo di un inverter normale",
+        "morsetti: R/S/T ingresso, U/V/W uscita motore",
+        "LED RUN (verde), FAULT (rosso)",
+        "potenziometro o DIP switch per impostare tempo rampa e corrente iniziale"
+      ],
+      "functions": [
+        "avvia il motore riducendo progressivamente la tensione applicata (rampa di tensione)",
+        "riduce la corrente di spunto (tipicamente da 6-8× In a 2-4× In)",
+        "riduce gli stress meccanici e i colpi di coppia all'avvio",
+        "bypass automatico dopo avvio (contattore interno chiude, elimina perdite thyristor)"
+      ],
+      "typical_faults": [
+        "motore non parte: thyristor aperto, segnale enable assente, temperatura eccessiva",
+        "FAULT immediato: cortocircuito a valle, perdita di fase, squilibrio fasi",
+        "motore parte ma lentamente e si ferma: rampa troppo lunga, coppia insufficiente",
+        "calore eccessivo: soft starter sottodimensionato, bypass non inserisce"
+      ],
+      "field_checks": [
+        "1) Verificare alimentazione trifase R/S/T con multimetro (400V ±5%)",
+        "2) Misurare corrente di spunto con pinza amperometrica durante avvio",
+        "3) Verificare segnale enable (morsetto EN o DI1): deve essere 24V durante avvio",
+        "4) Controllare che il bypass si inserisca dopo avvio (click del contattore interno)",
+        "5) Misurare temperatura dissipatore: non deve superare 60°C"
+      ],
+      "notes": "Il soft starter non regola la velocità a regime — è solo per avvio/arresto progressivo. Per variare la velocità a regime usare un inverter VFD."
+    },
+    {
+      "id": "pressostato",
+      "category": "pressure_switch",
+      "brand": null,
+      "model": null,
+      "keywords": ["pressostato", "pressione", "bar", "set point", "differenziale pressione", "acqua pressione", "aria compressa", "compressore"],
+      "visual_cues": [
+        "corpo metallico o plastico con attacco filettato (G1/4 o G1/2)",
+        "potenziometro o scala graduata per impostare il set point",
+        "morsetti elettrici: normalmente aperto (NA) e normalmente chiuso (NC)",
+        "manometro integrato (alcuni modelli)"
+      ],
+      "functions": [
+        "commuta un contatto elettrico al raggiungimento della pressione impostata",
+        "differenziale: differenza tra pressione di intervento e rientro (es. 1-2 bar)",
+        "usato per proteggere pompe, compressori, circuiti idraulici"
+      ],
+      "typical_faults": [
+        "non commuta: membrana guasta, contatti ossidati, impostazione errata",
+        "commuta continuamente: differenziale troppo stretto, oscillazioni di pressione",
+        "non si apre a pressione alta: set point troppo alto, molla bloccata",
+        "perdita dal raccordo: guarnizione OR usurata"
+      ],
+      "field_checks": [
+        "1) Misurare la pressione nel circuito con manometro esterno (confrontare con set point)",
+        "2) Misurare continuità sul contatto NA/NC con tester (a pressione nulla e a set point)",
+        "3) Verificare il set point: regolare con potenziometro e verificare intervento",
+        "4) Misurare la caduta di tensione sui contatti con carico nominale (<0.5V)"
+      ],
+      "notes": "Il differenziale di pressione (isteresi) deve essere abbastanza ampio da evitare cicli rapidi (pompa/compressore). Un differenziale troppo stretto causa surriscaldamento del motore."
+    },
+    {
+      "id": "sonda-temperatura",
+      "category": "temp_sensor",
+      "brand": null,
+      "model": null,
+      "keywords": ["sonda", "temperatura", "PT100", "PT1000", "NTC", "PTC", "termocoppia", "termoresistenza", "sonda NTC", "sonda PT100"],
+      "visual_cues": [
+        "PT100/PT1000: bulbo metallico con 2 o 4 fili, connettore testa sonda",
+        "NTC/PTC: sensore ceramico piccolo, 2 fili, spesso incapsulato in resina",
+        "termocoppia: 2 fili di metalli diversi, colori standard (rosso/bianco o rosso/giallo)",
+        "targhetta: tipo sensore, range temperatura, classe di precisione"
+      ],
+      "functions": [
+        "PT100: resistenza 100Ω a 0°C, varia linearmente con temperatura",
+        "NTC: resistenza diminuisce all'aumentare della temperatura (termistore negativo)",
+        "PTC: resistenza aumenta bruscamente sopra la temperatura di Curie",
+        "termocoppia: genera tensione (mV) proporzionale alla differenza di temperatura"
+      ],
+      "typical_faults": [
+        "lettura errata (deriva): sensore degradato, connessione ossidati",
+        "lettura fuori scala: cavo interrotto (aperto → PT100 misura infinito)",
+        "corto circuito sonda: due fili in contatto → lettura bassa fissa",
+        "interferenze su segnale: cavo non schermato vicino a cavi di potenza"
+      ],
+      "field_checks": [
+        "1) PT100: misurare resistenza a temperatura nota (es. 109Ω a 25°C circa)",
+        "2) NTC: misurare resistenza e confrontare con tabella del costruttore (es. 10kΩ a 25°C)",
+        "3) Verificare continuità del cavo sonda (nessun filo interrotto)",
+        "4) Per termocoppia: misurare tensione mV e confrontare con tabella tipo J/K/T",
+        "5) Verificare che il cavo di segnale sia schermato e la schermatura collegata a terra"
+      ],
+      "notes": "Per PT100 a 2 fili: la resistenza del cavo si somma alla misura (errore). In applicazioni di precisione usare PT100 a 4 fili (misura Kelvin) o compensare la resistenza cavo."
+    },
+    {
+      "id": "quadro-distribuzione",
+      "category": "main_panel",
+      "brand": null,
+      "model": null,
+      "keywords": ["quadro generale", "quadro elettrico", "quadro distribuzione", "guida DIN", "barra rame", "nodo equipotenziale", "messa a terra impianto", "IMQ"],
+      "visual_cues": [
+        "armadio metallico o plastico con porta cieca o trasparente",
+        "barra rame superiore fase/neutro e barra PE inferiore giallo-verde",
+        "dispositivi DIN montati su guide: differenziali, magnetotermici, SPD",
+        "cavi in ingresso dall'alto (servizio) e in uscita verso utenze (linee)",
+        "targhette identificazione circuiti"
+      ],
+      "functions": [
+        "distribuisce l'energia dal punto di consegna alle singole utenze",
+        "protegge le linee con dispositivi coordinati (selettività)",
+        "nodo equipotenziale PE: centralizza la messa a terra di tutti i conduttori PE"
+      ],
+      "typical_faults": [
+        "surriscaldamento barra: serraggio morsetti insufficiente o cavo sottodimensionato",
+        "scatto differenziale generale: guasto su una linea a valle non selettiva",
+        "tensione asimmetrica tra fasi: perdita di una fase dal fornitore",
+        "condensazione interna: cambio termico, guarnizioni mancanti"
+      ],
+      "field_checks": [
+        "1) Misurare tensione tra fasi (L1-L2, L2-L3, L1-L3): deve essere 400V ±5%",
+        "2) Misurare tensione fase-neutro su ogni linea: deve essere 230V ±5%",
+        "3) Verificare resistenza della barra PE a terra: <1Ω",
+        "4) Verificare che N e PE siano collegati SOLO nel nodo principale (non a valle)",
+        "5) Misurare temperatura barre e morsetti con termometro IR: max 60°C"
+      ],
+      "notes": "La selettività degli interruttori (coordinamento) garantisce che in caso di guasto scatti solo il dispositivo più vicino al guasto. Verificare la tabella di coordinamento del progetto."
+    },
+    {
+      "id": "gruppo-elettrogeno",
+      "category": "generator",
+      "brand": null,
+      "model": null,
+      "keywords": ["generatore", "gruppo elettrogeno", "genset", "alternatore", "avviamento automatico", "ATS", "commutazione rete", "kVA", "diesel", "benzina"],
+      "visual_cues": [
+        "motore a combustione interna (diesel/benzina) con alternatore accoppiato",
+        "quadro di controllo con voltmetro, amperometro, frequenzimetro",
+        "ATS (Automatic Transfer Switch): quadro commutazione rete/generatore",
+        "batteria di avviamento 12V o 24V con caricabatteria",
+        "serbatoio carburante integrato o esterno"
+      ],
+      "functions": [
+        "produce energia elettrica in caso di mancanza rete",
+        "ATS: commuta automaticamente l'utenza tra rete e generatore in caso di guasto",
+        "potenza in kVA: carico massimo supportato (cos φ = 0.8 → kW = kVA × 0.8)"
+      ],
+      "typical_faults": [
+        "non parte: batteria scarica, carburante esaurito, filtro aria intasato",
+        "parte ma non produce tensione: avvolgimento alternatore guasto, AVR difettoso",
+        "tensione instabile: carico eccessivo, governatore motore difettoso",
+        "ATS non commuta: segnale mancanza rete assente, relè ATS bloccato"
+      ],
+      "field_checks": [
+        "1) Verificare livello carburante e stato batteria avviamento (>12.5V)",
+        "2) Misurare tensione uscita alternatore: 230V ±5% a vuoto",
+        "3) Misurare frequenza con tester: 50Hz ±0.5Hz",
+        "4) Verificare funzionamento ATS: simulare mancanza rete e cronometrare commutazione",
+        "5) Controllare livello olio motore e stato filtri"
+      ],
+      "notes": "Manutenzione preventiva obbligatoria: cambiare olio ogni 250 ore di funzionamento, filtri aria e gasolio annualmente. Effettuare test mensile di avvio con carico reale (almeno 30% della potenza nominale)."
     }
   ]
 }

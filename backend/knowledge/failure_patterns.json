@@ -174,6 +174,306 @@
         "Non verificare i fusibili del circuito di controllo"
       ],
       "example_case": "Pompa non si avvia: tensione 400V presente a monte di KM1. Tensione bobina A1-A2: 0V. PLC: uscita Q0.1 attiva ma tensione uscita 0V. Causa: relè di interfaccia RLY1 tra PLC e bobina ha la bobina bruciata (resistenza infinita misurata). Soluzione: sostituzione relè RLY1."
+    },
+    {
+      "id": "FP-07",
+      "symptom": "Motore trifase non si avvia: contattore chiuso, tensione a monte presente, motore fermo",
+      "likely_causes": [
+        "Asse meccanicamente bloccato (giunto, riduttore, pompa, camma inceppata)",
+        "Avvolgimento in corto parziale: resistenza ridotta tra due fasi, corrente elevatissima allo spunto",
+        "Relè termico calibrato troppo basso o già scattato (tasto reset non premuto)",
+        "Perdita di una fase: il motore non riesce a partire monofase ma ronza"
+      ],
+      "confidence_logic": [
+        "CONFERMATO blocco meccanico: se il rotore non ruota a mano con asse libero",
+        "CONFERMATO perdita di fase: se su una fase la corrente è zero o la tensione manca",
+        "PROBABILE avvolgimento guasto: se le resistenze tra le fasi sono molto diverse tra loro",
+        "DA_VERIFICARE: se il relè termico è scattato senza causa nota"
+      ],
+      "checks": [
+        "1) Scollegare il motore e verificare che il rotore ruoti liberamente a mano",
+        "2) Misurare tensione sulle 3 fasi in ingresso motore: L1-L2, L2-L3, L1-L3 (400V ±5%)",
+        "3) Misurare corrente su ogni fase con pinza amperometrica durante il tentativo di avvio",
+        "4) Verificare stato relè termico: tasto di reset sporgente = scattato, premere reset",
+        "5) Con motore scollegato: misurare resistenza U1-V1, V1-W1, U1-W1 — sbilanciamento >5% = avvolgimento guasto",
+        "6) Misurare isolamento avvolgimento-carcassa con megohmetro 500V: deve essere >1MΩ"
+      ],
+      "common_mistakes": [
+        "Premere il reset del termico senza trovare la causa dello scatto",
+        "Non verificare il blocco meccanico prima di diagnosticare guasti elettrici",
+        "Aumentare la calibrazione del termico per evitare lo scatto (pericoloso)"
+      ],
+      "example_case": "Motore pompa 4kW non parte: contattore chiuso, tensione 400V presente. Corrente misurata: L1=22A, L2=22A, L3=0A. Tensione L1-L3 a monte del contattore: 400V; a valle: 230V solo su due fasi. Causa: fusibile gL 10A sulla fase L3 del circuito di potenza saltato. Sostituzione fusibile con calibro corretto (25A gL): motore ripartito."
+    },
+    {
+      "id": "FP-08",
+      "symptom": "Inverter/VFD mostra allarme o codice di errore — motore non gira",
+      "likely_causes": [
+        "OC (overcurrent): carico meccanico eccessivo, rampa di accelerazione troppo ripida, cortocircuito su uscita",
+        "OT (overtemperature): ventola bloccata, filtro aria ostruito, Tamb >45°C",
+        "GF (ground fault): dispersione verso terra su cavo motore o avvolgimenti degradati",
+        "LV/UV (undervoltage): tensione di rete bassa o calo improvviso durante l'avvio",
+        "Mancanza segnale Enable o Run: il drive è in stand-by per assenza del consenso esterno"
+      ],
+      "confidence_logic": [
+        "CONFERMATO causa da codice: se il codice allarme corrisponde univocamente al guasto (es. OT → ventola bloccata visibile)",
+        "PROBABILE: se il codice corrisponde ma la causa non è ancora identificata fisicamente",
+        "DA_VERIFICARE: se il drive non mostra codice ma non parte"
+      ],
+      "checks": [
+        "1) Leggere il codice allarme sul display e identificarlo sul manuale del modello specifico",
+        "2) OT: verificare visivamente la ventola (gira?), pulire i filtri di aerazione, misurare Tamb",
+        "3) OC: verificare corrente assorbita con pinza, controllare il carico meccanico, aumentare il tempo di rampa",
+        "4) GF: misurare resistenza di isolamento cavo motore (megohmetro su morsetti U/V/W del drive SPENTI e scollegati)",
+        "5) LV: misurare tensione di rete durante l'avvio del motore (possibile calo sotto soglia)",
+        "6) Nessun run: verificare morsetti di controllo (enable, run, segnale di riferimento frequenza)",
+        "7) SEMPRE attendere 5 minuti dopo lo spegnimento prima di aprire il drive (bus DC)"
+      ],
+      "common_mistakes": [
+        "Resettare l'allarme senza trovare e risolvere la causa",
+        "Misurare con megohmetro sui morsetti di uscita con il drive alimentato (danneggia gli IGBT)",
+        "Non attendere lo scarico del bus DC prima di lavorare all'interno"
+      ],
+      "example_case": "Inverter 5.5kW in allarme OT. Ventola posteriore ferma. Resistenza di avvolgimento misurata: 120Ω (blocco meccanico della ventola per accumulo di polvere). Ventola sostituita: inverter tornato in funzione. Raccomandazione: pulizia filtri ogni 3 mesi in ambiente polveroso."
+    },
+    {
+      "id": "FP-09",
+      "symptom": "Differenziale scatta di notte o a riposo, senza carichi attivi",
+      "likely_causes": [
+        "Corrente di dispersione cumulativa da più carichi in standby (alimentatori switching, inverter, climatizzatori)",
+        "Umidità o condensa nel cablaggio o nelle prese che aumenta di notte con calo termico",
+        "SPD (scaricatore) degradato con corrente di perdita verso terra superiore alla norma",
+        "Differenziale degradato con soglia effettiva scesa sotto il valore nominale",
+        "Sovratensione transitoria notturna che attiva la corrente di guasto"
+      ],
+      "confidence_logic": [
+        "CONFERMATO umidità: se il differenziale tiene dopo un periodo di asciugatura del cablaggio",
+        "PROBABILE dispersione cumulativa: se scollegando metà dei carichi il problema scompare",
+        "DA_VERIFICARE: se il differenziale ha più di 10 anni o il tasto TEST funziona a fatica"
+      ],
+      "checks": [
+        "1) Scollegare tutti i carichi a valle durante la notte: se il differenziale tiene → dispersione nei carichi",
+        "2) Ricollegare i carichi uno alla volta per isolare il carico responsabile",
+        "3) Misurare la corrente di dispersione complessiva con pinza differenziale (deve essere <15mA su 30mA)",
+        "4) Misurare isolamento cablaggio con megohmetro 500V: controllare valori più bassi di notte (umidità)",
+        "5) Verificare lo stato degli SPD: indicatore verde = integro, rosso = da sostituire",
+        "6) Verificare il differenziale con tester RCD certificato: misurare la soglia di intervento effettiva"
+      ],
+      "common_mistakes": [
+        "Sostituire il differenziale senza cercare la causa",
+        "Non misurare la dispersione complessiva prima di procedere",
+        "Ignorare l'umidità come causa (frequente in quadri esterni o in ambienti umidi)"
+      ],
+      "example_case": "Differenziale generale 30mA scatta ogni notte tra le 2 e le 4. Di giorno non scatta mai. Misura dispersione a carichi attivi: 22mA (al limite). Di notte con calo termico l'umidità nella tubazione del cablaggio esterno sale. Megohmetro su linea esterna: 180kΩ (troppo basso). Causa: infiltrazione acqua in un tratto di tubazione esterna. Soluzione: rifacimento tratto cablaggio + drenaggio tubo."
+    },
+    {
+      "id": "FP-10",
+      "symptom": "Perdita di fase in impianto trifase: motori lenti, caldi, con corrente sbilanciata",
+      "likely_causes": [
+        "Fusibile bruciato su una fase del circuito di potenza",
+        "Contatto del contattore usurato o non chiuso su una fase",
+        "Morsetto allentato su una delle tre fasi (caduta di tensione sotto carico)",
+        "Interruttore trifase con un polo difettoso",
+        "Cavo interrotto su una delle tre fasi"
+      ],
+      "confidence_logic": [
+        "CONFERMATO perdita di fase: se la tensione è assente su una delle tre fasi misurate a monte del motore",
+        "PROBABILE morsetto allentato: se la tensione c'è a vuoto ma crolla sotto carico su una fase",
+        "DA_VERIFICARE: se le correnti sono sbilanciate ma le tensioni sembrano a posto"
+      ],
+      "checks": [
+        "1) Misurare tensione trifase SOTTO CARICO: L1-L2, L2-L3, L1-L3 — una fase bassa o assente indica il problema",
+        "2) Misurare corrente con pinza su tutte e tre le fasi: quella con tensione mancante avrà corrente 0 o molto alta sulle altre",
+        "3) Risalire la catena: verificare tensione a monte di ogni dispositivo (contattore, fusibili, sezionatore)",
+        "4) Verificare fisicamente i fusibili sulla fase sospetta (continuità con tester)",
+        "5) Verificare serraggio morsetti su ogni dispositivo della fase sospetta",
+        "6) Verificare i contatti del contattore sulla fase mancante: aprire e misurare continuità a mano premuto"
+      ],
+      "common_mistakes": [
+        "Misurare solo a vuoto (la fase può sembrare presente senza carico per tensione di ritorno)",
+        "Non verificare i fusibili su ogni fase separatamente",
+        "Concludere che il motore è guasto senza verificare prima l'alimentazione"
+      ],
+      "example_case": "3 motori pompaggio non raggiungono la velocità nominale, si scaldano dopo 10 minuti. Corrente misurata: L1=18A, L2=18A, L3=0A. Tensione L3 a monte del sezionatore: presente (400V). A valle del sezionatore su L3: 0V sotto carico. Sezionatore aperto: polo L3 con morsetto superiore estratto a mano. Causa: morsetto di serraggio allentato. Riserraggio + verifica tutti gli altri morsetti."
+    },
+    {
+      "id": "FP-11",
+      "symptom": "Guasto intermittente: il sistema va in allarme o si blocca saltuariamente, non riproducibile a freddo",
+      "likely_causes": [
+        "Morsetto allentato che fa contatto saltuario (cambia con le dilatazioni termiche)",
+        "Condensatore di disaccoppiamento degradato nel circuito di controllo",
+        "Cavo con conduttore parzialmente interrotto (rompe solo sotto vibrazione o trazione)",
+        "Relè con contatti ossidati che fanno contatto solo a caldo",
+        "Disturbi EMI da variatori di frequenza o motori che si accoppiando ai cavi di segnale"
+      ],
+      "confidence_logic": [
+        "CONFERMATO morsetto allentato: se il problema scompare dopo un ciclo di riserraggio di tutti i morsetti",
+        "PROBABILE EMI: se il guasto compare solo quando un inverter o motore grande si avvia",
+        "DA_VERIFICARE: se il guasto è casuale senza correlazione temporale o termica"
+      ],
+      "checks": [
+        "1) Raccogliere i log degli allarmi: cercare una correlazione temporale (ora, temperatura, operazione specifica)",
+        "2) Verificare se il guasto compare sempre alla stessa temperatura (espansione termica → morsetto)",
+        "3) Riserrare sistematicamente TUTTI i morsetti nel quadro (alimentazione + controllo) e monitorare",
+        "4) Verificare i percorsi dei cavi di segnale: non devono correre paralleli a cavi di potenza per >50cm",
+        "5) Misurare la resistenza del cavo sospetto mentre si flette/tira: deve essere stabile (<1Ω)",
+        "6) Sostituire eventuali relè con contatti ossidati (verificabile con misura caduta di tensione <0.5V)"
+      ],
+      "common_mistakes": [
+        "Resettare il guasto senza documentare le condizioni al momento del guasto",
+        "Non raccogliere i log degli allarmi",
+        "Dichiarare il sistema 'riparato' dopo un reset senza trovare la causa"
+      ],
+      "example_case": "PLC di linea va in errore circa 2 volte a settimana, sempre tra le 14 e le 16. Nessun allarme specifico, solo perdita di comunicazione. Correlazione trovata: l'errore compare sempre quando la temperatura interna del quadro supera i 45°C. Causa: connettore di comunicazione RS485 sul modulo CPU con filo stagnato male — la saldatura si apre per dilatazione termica. Soluzione: rifacimento connessione con ferrula e morsetto a vite."
+    },
+    {
+      "id": "FP-12",
+      "symptom": "Caldaia non si accende o si spegne subito: errore o segnale di blocco",
+      "likely_causes": [
+        "STB (termostato sicurezza) scattato per surriscaldamento: richiede sblocco manuale dopo verifica causa",
+        "Pressione circuito bassa (<0.8 bar): manometro sotto scala, perdita nel circuito o vaso di espansione scarico",
+        "Sonda NTC guasta o scollegata: la centralina riceve un valore fuori range e blocca il bruciatore",
+        "Mancanza gas o pressione gas insufficiente: valvola gas non apre o pressione rete bassa",
+        "Elettrodi di accensione sporchi o distanza errata: il bruciatore non si accende in tempo (lock-out)"
+      ],
+      "confidence_logic": [
+        "CONFERMATO STB: se il tasto rosso di sblocco STB è sporgente e premendolo la caldaia riparte",
+        "CONFERMATO pressione bassa: se il manometro indica <0.8 bar a freddo",
+        "PROBABILE sonda NTC: se la sonda misura un valore anomalo (confrontare con tabella)",
+        "DA_VERIFICARE: se la caldaia va in lock-out ripetutamente senza causa apparente"
+      ],
+      "checks": [
+        "1) Verificare il manometro pressione circuito: deve essere 1-1.5 bar a freddo",
+        "2) Verificare e sbloccare STB (pulsante rosso) solo dopo aver trovato la causa del surriscaldamento",
+        "3) Misurare resistenza sonda NTC con ohmmetro a temperatura nota (es. 10kΩ a 25°C per NTC 10k)",
+        "4) Verificare tensione su bobina valvola gas (230V AC durante tentativo di accensione)",
+        "5) Ispezionare elettrodi: devono essere integri, distanza 3-4mm, senza depositi",
+        "6) Leggere il codice errore sul display e consultare il manuale del modello specifico"
+      ],
+      "common_mistakes": [
+        "Sbloccare STB più volte senza trovare la causa del surriscaldamento",
+        "Non verificare la pressione prima di cercare guasti elettrici",
+        "Sostituire la sonda NTC senza misurarne prima la resistenza"
+      ],
+      "example_case": "Caldaia murale a gas non parte, display mostra E05. Manuale: E05 = sonda NTC mandata fuori range. Resistenza misurata: 480kΩ a temperatura ambiente (valore atteso 10kΩ). Connettore sonda: staccato sul corpo caldaia. Ricollegato il connettore: caldaia ripartita regolarmente."
+    },
+    {
+      "id": "FP-13",
+      "symptom": "Impianto fotovoltaico non produce o mostra errore GFCI/RCD/isolamento",
+      "likely_causes": [
+        "Dispersione DC verso terra: pannello con celle rotte, bypass diode guasto, cavo MC4 con isolamento degradato",
+        "Connettori MC4 non agganciati o ossidati: resistenza di contatto elevata, riscaldamento",
+        "Stringa in ombra parziale: uno o più moduli degradati riducono la tensione sotto MPPT minimo",
+        "Inverter in attesa del minimo irraggiamento (mattino/sera): comportamento normale",
+        "Codice errore di isola: inverter non trova la rete AC e rimane disconnesso dopo il rientro"
+      ],
+      "confidence_logic": [
+        "CONFERMATO dispersione DC: se il megohmetro tra string + o - e terra misura <1MΩ (con inverter scollegato)",
+        "CONFERMATO connettori: se la resistenza di contatto MC4 è >0.1Ω o visibile ossidazione",
+        "PROBABILE stringa degradata: se la tensione di stringa è <Voc×0.85 in pieno sole",
+        "DA_VERIFICARE isolamento: SEMPRE con inverter scollegato dalla rete e dai pannelli — alta tensione DC"
+      ],
+      "checks": [
+        "1) Leggere il codice errore sull'inverter e consultare il manuale",
+        "2) Misurare tensione di stringa sui morsetti DC dell'inverter in pieno sole (confrontare con Voc×Ns)",
+        "3) Con inverter SPENTO e SCOLLEGATO: misurare isolamento string+/terra e string-/terra con megohmetro 500V (>1MΩ richiesto)",
+        "4) Ispezionare visivamente i connettori MC4: devono fare click, nessuna ossidazione o bruciatura",
+        "5) Misurare tensione AC in uscita inverter: 230V ±10% con rete presente",
+        "6) Verificare che la protezione di isola si sia disattivata (alcuni inverter richiedono 5 min dopo rientro rete)"
+      ],
+      "common_mistakes": [
+        "Misurare isolamento DC con inverter alimentato (pericoloso e danneggia l'inverter)",
+        "Non attendere il timeout di riconnessione dopo un'interruzione di rete",
+        "Dimenticare che i pannelli sono SEMPRE in tensione anche con interruttore aperto"
+      ],
+      "example_case": "Inverter 6kW in allarme GFCI dalla mattina. Tensione DC stringa: 340V (normale per 10 moduli). Misura isolamento con inverter scollegato: string+/terra = 180kΩ — GUASTO. Ispezione pannelli: modulo 7 con vetro rotto e cella ossidata. Sostituzione modulo e verifica isolamento: >10MΩ. Inverter tornato in produzione."
+    },
+    {
+      "id": "FP-14",
+      "symptom": "Wallbox non eroga corrente all'auto o si interrompe la ricarica",
+      "likely_causes": [
+        "RCD tipo B interno scattato: corrente di dispersione DC dalla batteria dell'auto durante la ricarica",
+        "Segnale CP (pilota) interrotto o fuori range: il cavo tipo 2 è difettoso o il connettore danneggiato",
+        "Wallbox in errore di comunicazione con l'auto: protocollo IEC 61851 non rispettato",
+        "Corrente impostata nel menu troppo bassa o limitazione da gestore rete (OCPP/smart charging)",
+        "Temperatura interna wallbox eccessiva: protezione termica interviene"
+      ],
+      "confidence_logic": [
+        "CONFERMATO RCD scattato: se il LED rosso è acceso e premendo TEST il RCD scatta",
+        "PROBABILE cavo CP guasto: se la tensione sul pin CP è assente o fuori range (±12V)",
+        "DA_VERIFICARE: se la ricarica si interrompe casualmente senza errori sul display"
+      ],
+      "checks": [
+        "1) Verificare il LED di stato della wallbox: verde=disponibile, blu=in carica, rosso=errore",
+        "2) Verificare il RCD tipo B interno (tasto TEST): se scattato, trovare la causa prima di ripristinare",
+        "3) Misurare tensione sul pin CP del connettore tipo 2: deve essere ±12V a riposo, ±9V durante la ricarica",
+        "4) Misurare tensione di alimentazione wallbox: 230V AC (o 400V AC trifase) ai morsetti interni",
+        "5) Verificare la corrente impostata nel menu (deve essere ≥6A per avviare la ricarica)",
+        "6) Misurare resistenza PE: deve essere <1Ω (senza terra efficace la wallbox non abilita la ricarica)"
+      ],
+      "common_mistakes": [
+        "Usare un RCD tipo A invece di tipo B per la wallbox (non rileva DC)",
+        "Non verificare la resistenza di terra prima di diagnosticare altri guasti",
+        "Resettare l'errore senza trovare la causa della dispersione DC"
+      ],
+      "example_case": "Wallbox 11kW trifase: ricarica si interrompe dopo 10-15 minuti, RCD interno scattato. Causa: batteria dell'auto modello X genera corrente DC pulsante di 8mA durante il bilanciamento delle celle — superiore alla soglia del RCD tipo A installato per errore. Sostituzione con RCD tipo B: ricarica stabile per ore."
+    },
+    {
+      "id": "FP-15",
+      "symptom": "Soft starter va in fault o il motore non raggiunge la velocità a regime",
+      "likely_causes": [
+        "Corrente di spunto troppo alta: rampa di avvio troppo ripida, coppia richiesta elevata al momento dell'avvio",
+        "Thyristor guasto o surriscaldato: il soft starter non sta bypassando correttamente dopo l'avvio",
+        "Mancanza segnale enable o run: il PLC/automatismo non sta fornendo il consenso",
+        "Coppia di avvio insufficiente per il carico: la tensione iniziale è troppo bassa per il carico (es. pompa a prevalenza)"
+      ],
+      "confidence_logic": [
+        "CONFERMATO fault thyristor: se la corrente di uscita è sbilanciata tra le fasi durante l'avvio",
+        "CONFERMATO mancanza enable: se il morsetto enable misura 0V quando dovrebbe essere 24V",
+        "PROBABILE rampa errata: se la corrente di spunto supera la soglia di overcurrent impostata"
+      ],
+      "checks": [
+        "1) Verificare il codice di fault sul display del soft starter e consultare il manuale",
+        "2) Misurare il segnale enable/run sui morsetti di controllo durante il comando di avvio",
+        "3) Misurare la corrente su tutte e tre le fasi durante l'avvio con pinza amperometrica",
+        "4) Verificare la temperatura del dissipatore: non deve superare 60°C",
+        "5) Aumentare il tempo di rampa (riduce la corrente di spunto ma aumenta il tempo di avvio)",
+        "6) Verificare che il bypass interno si inserisca dopo l'avvio (click del contattore bypass)"
+      ],
+      "common_mistakes": [
+        "Non aspettare il raffreddamento prima di resettare e riprovare (aggrava il surriscaldamento)",
+        "Aumentare la soglia di overcurrent invece di ottimizzare la rampa",
+        "Dimenticare di verificare il segnale enable che spesso è la causa più semplice"
+      ],
+      "example_case": "Soft starter 30kW per pompa centrifuga: fault OC (overcurrent) ad ogni avvio. Corrente di spunto misurata: 280A (soglia OC impostata a 250A). Rampa avvio: 3 secondi. Aumentata a 8 secondi: corrente di spunto scesa a 180A. Soft starter avvia regolarmente, bypass inserisce dopo 8s."
+    },
+    {
+      "id": "FP-16",
+      "symptom": "Pompa o compressore si avvia e si ferma continuamente (corto ciclismo)",
+      "likely_causes": [
+        "Pressostato con differenziale troppo stretto: la pressione oscilla rapidamente tra i valori di start/stop",
+        "Vaso di espansione scarico (membrana rotta o aria esaurita): non accumula pressione sufficiente",
+        "Perdita nel circuito: la pompa mantiene la pressione solo mentre gira, cade subito dopo lo stop",
+        "Set point pressostato errato: troppo vicino alla pressione di esercizio del sistema"
+      ],
+      "confidence_logic": [
+        "CONFERMATO vaso scarico: se il rubinetto di carica del vaso emette solo acqua (invece di aria)",
+        "CONFERMATO perdita: se la pressione scende nel circuito anche con pompa ferma",
+        "PROBABILE differenziale stretto: se la pressione oscilla di <0.3 bar tra start e stop"
+      ],
+      "checks": [
+        "1) Misurare la pressione nel circuito durante i cicli di start/stop con manometro",
+        "2) Verificare la pressione del vaso di espansione (lato aria): deve essere 0.5-1.5 bar a sistema vuoto",
+        "3) Verificare se la pressione scende con pompa ferma (perdita nel circuito)",
+        "4) Leggere il set point del pressostato (pressione di start e di stop): differenziale consigliato 1-2 bar",
+        "5) Misurare il numero di cicli al minuto (>6-8 cicli/min = corto ciclismo dannoso per il motore)"
+      ],
+      "common_mistakes": [
+        "Caricare aria nel vaso senza prima svuotare il circuito (falsifica la misura)",
+        "Aumentare il set point invece di trovare la perdita",
+        "Non misurare i cicli al minuto e non quantificare il problema"
+      ],
+      "example_case": "Pompa autoclave da 1.1kW si avvia ogni 20 secondi. Cicli/minuto: 3. Pressione di start: 2 bar, stop: 2.5 bar. Differenziale: 0.5 bar (troppo stretto). Vaso espansione: rubinetto carica emette solo acqua — membrana rotta. Sostituzione vaso + regolazione pressostato a 1.5-3 bar: cicli scesi a 1 ogni 3 minuti."
     }
   ]
 }

@@ -162,6 +162,48 @@
       ],
       "risk_level": "high",
       "references": ["IEC 62423 (tipo F)", "IEC 60755 (tipo B)", "CEI 64-8 v7"]
+    },
+    {
+      "id": "PR-09",
+      "title": "Coordinamento protezioni: selettività tra differenziali e magnetotermici",
+      "when_to_apply": "Progettazione e verifica di quadri con più livelli di protezione (quadro generale + quadri di zona)",
+      "if_seen_in_photo": [
+        "più differenziali in cascata",
+        "differenziale generale e differenziali di zona",
+        "quadro con protezioni a più livelli"
+      ],
+      "rule": "In un impianto con più livelli di protezione, solo il dispositivo più vicino al guasto deve scattare (selettività). Per differenziali in cascata: il differenziale a monte deve avere soglia ≥3× quella del differenziale a valle, oppure essere di tipo 'S' (ritardato). Per magnetotermici in cascata: la curva I²t del dispositivo a valle deve stare tutta sotto quella del dispositivo a monte.",
+      "verification_steps": [
+        "1) Verificare le soglie dei differenziali: il generale deve avere I_dn ≥ 3 × I_dn dei parziali (es. 300mA generale, 100mA zona, 30mA circuito)",
+        "2) Verificare se il differenziale generale è di tipo 'S' (temporizzato: scatta dopo 40-200ms)",
+        "3) Per magnetotermici: confrontare le curve di intervento (curva tempo-corrente) — sempre specifico prima del generale",
+        "4) Verificare che il potere di cortocircuito dei dispositivi a valle non sia inferiore alla corrente di cortocircuito nel punto di installazione",
+        "5) In caso di scatto del generale invece del parziale: verificare la selettività e riprogettare la protezione"
+      ],
+      "risk_level": "medium",
+      "references": ["CEI 64-8 Art. 536", "IEC 60364-5-53", "IEC 60947-2 (selettività)"]
+    },
+    {
+      "id": "PR-10",
+      "title": "Sezione minima del cavo in funzione della portata e della caduta di tensione",
+      "when_to_apply": "Ogni nuova installazione, prolungamento di linea, aggiunta di carichi, o verifica di impianti esistenti con problemi di calore o tensione bassa",
+      "if_seen_in_photo": [
+        "cavi di sezione visibilmente sottile rispetto al carico",
+        "cavi caldi al tatto",
+        "morsetti anneriti",
+        "cavo lungo tra quadro e utenza"
+      ],
+      "rule": "La sezione del cavo deve rispettare due vincoli: (1) portata di corrente adeguata al carico (norma CEI UNEL 35024) e (2) caduta di tensione massima del 4% per impianti civili, del 3% per linee principali. La sezione minima per l'installazione civile è 1.5mm² per illuminazione e 2.5mm² per prese. Non usare il magnetotermico come misura indiretta della sezione corretta.",
+      "verification_steps": [
+        "1) Misurare la corrente assorbita dal carico con pinza amperometrica",
+        "2) Verificare la sezione del cavo (marcatura sull'isolante o con calibro)",
+        "3) Confrontare con la tabella di portata CEI UNEL 35024 in funzione della posa (in tubo, in aria, interrato)",
+        "4) Calcolare la caduta di tensione: ΔV = 2 × ρ × L × I / S (ρ rame = 0.0178 Ω·mm²/m)",
+        "5) Misurare la tensione all'utenza con carico attivo: confrontare con la tensione a monte",
+        "6) Se ΔV > 4%: dimensionare la sezione correttamente o ridurre il percorso del cavo"
+      ],
+      "risk_level": "medium",
+      "references": ["CEI 64-8 Art. 523-525", "CEI UNEL 35024", "IEC 60364-5-52"]
     }
   ]
 }

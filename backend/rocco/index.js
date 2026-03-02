@@ -60,6 +60,7 @@ function buildSystemPrompt(plan, ragContext) {
     "OSSERVAZIONI: elenca solo fatti presenti nel testo o visibili nella foto. Zero inferenze. Se non ci sono foto scrivilo.\n" +
     "COMPONENTI COINVOLTI: elenca solo componenti citati dall'utente o visibili nell'immagine, con sigla/modello se noti.\n" +
     "IPOTESI: ogni voce deve iniziare con [CONFERMATO], [PROBABILE] o [DA_VERIFICARE]. Spiega brevemente il ragionamento.\n" +
+    "LIVELLO DI CERTEZZA: UNA SOLA parola tra: Confermato | Probabile | Non verificabile. Motiva in una riga.\n" +
     "VERIFICHE OPERATIVE: elenco numerato. Ogni passo DEVE indicare:\n" +
     "  • Strumento (es: multimetro VAC, pinza amperometrica, megohmetro 500V)\n" +
     "  • Punto di misura esatto (es: morsetti L1-N del differenziale, uscita T1-T2 del contattore)\n" +
