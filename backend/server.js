@@ -56,7 +56,7 @@ const PREFERRED_PROVIDER = (process.env.PREFERRED_PROVIDER || "openai").toLowerC
 
 // Provider keys + modelli (trim anti newline)
 const ANTHROPIC_API_KEY = (process.env.ANTHROPIC_API_KEY || "").trim();
-const ANTHROPIC_MODEL = (process.env.ANTHROPIC_MODEL || "claude-3-haiku-20240307").trim();
+const ANTHROPIC_MODEL = (process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001").trim();
 
 const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || "").trim();
 const OPENAI_MODEL = (process.env.OPENAI_MODEL || "gpt-4o-mini").trim();
@@ -535,7 +535,7 @@ async function callAnthropic({ systemPrompt, shortHistory, imageBase64, message,
   const sysContent = [systemPrompt, dbContextText, docChunksText, knowledgeText, engineText].filter(Boolean).join("\n\n");
   const resp = await anthropic.messages.create({
     model: ANTHROPIC_MODEL,
-    max_tokens: 900,
+    max_tokens: 1800,
     temperature: 0.1,
     system: sysContent,
     messages: msgs,

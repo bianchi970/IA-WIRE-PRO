@@ -84,18 +84,8 @@ function buildSystemPrompt(plan, ragContext) {
   );
 }
 
-function buildUserPayload(message, history) {
-  return (
-    "Richiesta utente:\n" +
-    (message || "(nessun testo)") +
-    "\n\nStorico (ultimi messaggi):\n" +
-    JSON.stringify(history || [], null, 2)
-  );
-}
-
 module.exports = {
   plan: plan,
   buildSystemPrompt: buildSystemPrompt,
-  buildUserPayload: buildUserPayload,
   postcheck: postcheck
 };

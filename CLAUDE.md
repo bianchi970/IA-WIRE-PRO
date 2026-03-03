@@ -41,10 +41,10 @@ ia-wire-pro/
 │   │                       (components and issues are NOT touched here)
 │   ├── knowledge.js     ← Lazy-loads knowledge/*.json; fetchKnowledgeContext() + getLoadedKnowledge()
 │   ├── knowledge/       ← Base di conoscenza locale (no DB required)
-│   │   ├── components.json       ← 10 componenti elettrici con guasti tipici e field_checks
-│   │   ├── protection_rules.json ← 8 regole di protezione con risk_level e verification_steps
-│   │   ├── failure_patterns.json ← 6 pattern di guasto con symptom/causes/checks/confidence_logic
-│   │   └── safety_protocols.json ← 5 protocolli LOTO/isolamento/misura con stop_conditions
+│   │   ├── components.json       ← 50 componenti elettrici con guasti tipici e field_checks
+│   │   ├── protection_rules.json ← 10 regole di protezione con risk_level e verification_steps
+│   │   ├── failure_patterns.json ← 16 pattern di guasto con symptom/causes/checks/confidence_logic
+│   │   └── safety_protocols.json ← 7 protocolli LOTO/isolamento/misura con stop_conditions
 │   ├── engine/          ← ROCCO diagnostic engine (pre-LLM)
 │   │   └── diagnosticEngine.js  ← analyzeTechnicalRequest() + formatOfflineAnswer() + MATCH_THRESHOLD=3
 │   ├── rocco/           ← IA pipeline module
@@ -92,10 +92,10 @@ Se tutti i provider LLM falliscono per errore di rete (`isNetworkError()` detect
 ### /api/engine/test endpoint
 `GET /api/engine/test` esegue `analyzeTechnicalRequest` sul caso di test hardcoded (`TEST_CASE` in diagnosticEngine.js) usando i dati reali dei JSON. Utile per verificare il pattern matching senza avviare una conversazione. Risposta include `diagnostic`, `formatted_engine_context`, `formatted_knowledge_context`, `counts`.
 
-### Dual response format issue
-`rocco/index.js` produces `TECH_REPORT_V1` format (sections: OSSERVAZIONI, COMPONENTI RICONOSCIUTI, IPOTESI, VERIFICHE SUL CAMPO, RISCHI / SICUREZZA, NEXT STEP).
-`server.js` also has its own `ensureWireFormat()` which enforces a different section set (OSSERVAZIONI, IPOTESI, LIVELLO DI CERTEZZA, RISCHI / SICUREZZA, VERIFICHE CONSIGLIATE, PROSSIMO PASSO).
-The two formats coexist: `rocco.buildSystemPrompt()` is used to build the prompt, then `ensureWireFormat()` is applied to the raw answer. This causes nested section output from the model. Reconciling the two formats is an open improvement.
+### Formato risposta (RISOLTO)
+`rocco/index.js` produce `TECH_REPORT_V1` con sezioni: OSSERVAZIONI, COMPONENTI COINVOLTI, IPOTESI, LIVELLO DI CERTEZZA, VERIFICHE OPERATIVE, RISCHI REALI, PROSSIMO PASSO.
+`server.js` chiama `rocco.postcheck(answer)` dopo la risposta AI per garantire che tutte le sezioni siano presenti.
+`ensureWireFormat()` rimossa definitivamente. Nessun conflitto di formato.
 
 ### Rocco module
 `rocco.plan()` classifies the user message into domains (elettrico, termico, rete, domotica, idraulico, altro) using keyword regex. RAG is disabled for domain `"altro"`. The plan drives model selection and system prompt construction but does NOT currently change the provider — the actual provider selection happens in `server.js` via `pickProvider()`.
@@ -122,7 +122,12 @@ PostgreSQL full-text search (`plainto_tsquery('italian', ...)`) over `components
 `HISTORY_MAX` (default 10, env override) controls how many messages are sent to the AI. When `conversation_id` is available, `/api/chat` loads the last 10 messages directly from DB (ignoring the frontend-supplied `history`). `SUMMARY_THRESHOLD` (default 14, env override): when a conversation reaches this many messages, `generateContextSummary()` runs fire-and-forget after each AI response, calls the AI to summarise the conversation in 5-8 technical bullet points, and stores it in `conversations.summary`. On the next chat turn the summary is prepended to the system prompt as `CONTESTO CONVERSAZIONE PRECEDENTE:`.
 
 ### Frontend
-Pure ES5 vanilla JS (no `?.`, no `??`, no `replaceAll`) for maximum browser compatibility. Image compression via Canvas API: max 1800px, 0.85 JPEG quality. History capped at 10 messages sent to backend (fallback only — DB history takes priority server-side). `loadConversationOnStart()` fetches `/api/conversations/:id/messages` on page load and calls `setBusy(true)` to block input during restore.
+Pure ES5 vanilla JS (no `?.`, no `??`, no `replaceAll`) for maximum browser compatibility. Image compression via Canvas API: max 1800px, 0.85 JPEG quality. History capped at 10 messages sent to backend (fallback only — DB history takes priority server-side). `loadConversationOnStart()` fetches `/api/conversations/:id/messages` on page load.
+- **Pulsante "Nuova"** in topbar: resetta conversationId, localStorage, chat UI, history locale.
+- **Pulsante "Annulla"**: quando busy, il bottone Invia si trasforma in "✕ Annulla" (rosso) e chiama `abortCtrl.abort()`.
+- **`_busy` flag** globale (all'interno dell'IIFE): `setBusy()` lo imposta e cambia il testo/stile del sendBtn.
+- **KNOWN_SECTIONS** include tutte le sezioni backend: COMPONENTI COINVOLTI, VERIFICHE OPERATIVE, RISCHI REALI.
+- **`[DA_VERIFICARE]`** renderizzato come badge `.cert-poss` (grigio), oltre a [CONFERMATO] e [PROBABILE].
 
 ## API Endpoints
 

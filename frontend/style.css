@@ -92,6 +92,13 @@ body {
   line-height: 1.2;
 }
 
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .status-pill {
   font-size: 11px;
   padding: 4px 10px;
@@ -338,6 +345,12 @@ body {
   padding: 3px 8px;
   font-size: 11px;
   border-radius: 6px;
+}
+
+.btn.danger {
+  background: linear-gradient(135deg, rgba(255,80,60,0.55), rgba(255,140,66,0.40));
+  border-color: rgba(255,100,80,0.45);
+  color: #fff;
 }
 
 .btn:disabled {

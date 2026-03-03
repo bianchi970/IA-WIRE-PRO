@@ -15,6 +15,7 @@ console.log('BRIDGE LIVE');
   var textInput = document.getElementById("textInput");
   var sendBtn = document.getElementById("sendBtn");
   var statusPill = document.getElementById("statusPill");
+  var newChatBtn = document.getElementById("newChatBtn");
 
   var imageInput = document.getElementById("imageInput");
   var previewWrap = document.getElementById("previewWrap");
@@ -24,6 +25,7 @@ console.log('BRIDGE LIVE');
   // ====== STATE ======
   var selectedBlob = null;
   var abortCtrl = null;
+  var _busy = false;
 
   // Persistenza conversation_id
   var conversationId = localStorage.getItem("conversation_id") || null;
@@ -196,10 +198,42 @@ console.log('BRIDGE LIVE');
   }
 
   function setBusy(busy) {
-    var b = !!busy;
-    if (sendBtn) sendBtn.disabled = b;
-    if (textInput) textInput.disabled = b;
-    if (imageInput) imageInput.disabled = b;
+    _busy = !!busy;
+    if (textInput) textInput.disabled = _busy;
+    if (imageInput) imageInput.disabled = _busy;
+    if (sendBtn) {
+      if (_busy) {
+        sendBtn.textContent = "✕ Annulla";
+        sendBtn.classList.add("danger");
+        sendBtn.classList.remove("primary");
+        sendBtn.disabled = false;
+      } else {
+        sendBtn.textContent = "Invia";
+        sendBtn.classList.remove("danger");
+        sendBtn.classList.add("primary");
+        sendBtn.disabled = false;
+      }
+    }
+  }
+
+  function startNewChat() {
+    if (abortCtrl) abortCtrl.abort();
+    _busy = false;
+    conversationId = null;
+    conversationHistory = [];
+    localStorage.removeItem("conversation_id");
+    clearChatUi();
+    clearImage();
+    setStatus("Pronto");
+    if (sendBtn) {
+      sendBtn.textContent = "Invia";
+      sendBtn.classList.remove("danger");
+      sendBtn.classList.add("primary");
+      sendBtn.disabled = false;
+    }
+    if (textInput) { textInput.disabled = false; textInput.value = ""; autoResize(); }
+    if (imageInput) imageInput.disabled = false;
+    addMessage("ai", "Nuova conversazione avviata. Descrivi il problema.");
   }
 
   // ✅ History helpers
@@ -521,6 +555,16 @@ console.log('BRIDGE LIVE');
 
     if (sendBtn) {
       sendBtn.addEventListener("click", function () {
+        // Se in corso → annulla la richiesta
+        if (_busy) {
+          if (abortCtrl) abortCtrl.abort();
+          setBusy(false);
+          removeTyping();
+          clearImage();
+          setStatus("Annullato");
+          return sleep(800).then(function () { setStatus("Pronto"); });
+        }
+
         var text = (textInput && textInput.value ? textInput.value : "").trim();
         if (!text && !selectedBlob) return;
 
@@ -611,6 +655,12 @@ console.log('BRIDGE LIVE');
           });
       });
     }
+  }
+
+  if (newChatBtn) {
+    newChatBtn.addEventListener("click", function () {
+      startNewChat();
+    });
   }
 
   setStatus("Pronto");
