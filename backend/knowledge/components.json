@@ -819,6 +819,804 @@
         "5) Controllare livello olio motore e stato filtri"
       ],
       "notes": "Manutenzione preventiva obbligatoria: cambiare olio ogni 250 ore di funzionamento, filtri aria e gasolio annualmente. Effettuare test mensile di avvio con carico reale (almeno 30% della potenza nominale)."
+    },
+    {
+      "id": "mccb-potenza",
+      "category": "mccb",
+      "brand": null,
+      "model": null,
+      "keywords": ["MCCB", "interruttore automatico di potenza", "interruttore scatolato", "NS", "SACE", "Tmax", "interruttore generale", "magnetotermico potenza", "125A", "160A", "250A", "400A", "630A", "scatolato"],
+      "visual_cues": [
+        "corpo scatolato plastico robusto, molto più grande di un magnetotermico modulare",
+        "leva di manovra grande con posizioni ON / OFF / TRIP",
+        "morsetti di potenza anteriori o posteriori per cavi di sezione elevata",
+        "targhetta con corrente nominale In da 63A a 1600A",
+        "eventuale regolazione esterna della soglia termica (lr) e magnetica (Im)"
+      ],
+      "functions": [
+        "protezione da sovraccarico e cortocircuito su circuiti di potenza elevata",
+        "funzione di sezionatore: sezionamento sicuro dell'impianto",
+        "può essere motorizzato per riarmo telecomandato da remoto"
+      ],
+      "typical_faults": [
+        "scatta per sovraccarico: verificare corrente assorbita con pinza amperometrica",
+        "scatta per cortocircuito: trovare il guasto prima di riarmare",
+        "non riarma in posizione TRIP: attendere raffreddamento o meccanismo bloccato",
+        "surriscaldamento morsetti: contatti usurati o serraggio insufficiente",
+        "sganciatore termico fuori taratura: regolare soglia lr o sostituire"
+      ],
+      "field_checks": [
+        "1) Verificare posizione leva: ON / OFF / TRIP (TRIP = scattato per guasto)",
+        "2) Con pinza amperometrica misurare corrente su ogni fase",
+        "3) Verificare temperatura morsetti con termometro IR: >60°C è anomalia",
+        "4) Controllare sezione cavi vs portata nominale interruttore",
+        "5) Verificare regolazione sganciatori lr e Im se presenti"
+      ]
+    },
+    {
+      "id": "fusibile-cilindrico",
+      "category": "fuse",
+      "brand": null,
+      "model": null,
+      "keywords": ["fusibile", "cartuccia", "NH", "gG", "aM", "portafusibile", "fusibile cilindrico", "10x38", "14x51", "22x58", "NH00", "NH1", "NH2", "fusibile ceramico"],
+      "visual_cues": [
+        "cartuccia cilindrica ceramica o in vetro con cappucci metallici alle estremità",
+        "formato cilindrico 10x38mm (fino 32A), 14x51mm, o a coltello NH00/NH1/NH2/NH3",
+        "caratteristica marcata sulla cartuccia: gG (uso generale), aM (per motori)",
+        "portafusibile DIN con griffa a pressione o a scomparsa con spia bruciatura"
+      ],
+      "functions": [
+        "protezione da cortocircuito con intervento rapido e preciso",
+        "protezione motori (tipo aM) con tenuta al picco di avviamento",
+        "sezionamento fisico del circuito dopo intervento (non si riarma automaticamente)"
+      ],
+      "typical_faults": [
+        "fusibile bruciato: filamento interrotto, verificare con multimetro in continuità",
+        "bruciatura per sovraccarico prolungato: sostituire e trovare la causa",
+        "bruciatura per cortocircuito: verificare isolamento prima di rimettere",
+        "surriscaldamento portafusibile: contatti ossidati o allentati",
+        "fusibile gG su motore: scatta all'avviamento, usare tipo aM"
+      ],
+      "field_checks": [
+        "1) Misurare continuità sul fusibile: 0Ω = integro, ∞ = bruciato",
+        "2) Verificare tensione a monte e a valle del portafusibile",
+        "3) Prima di sostituire: trovare la causa (cortocircuito, sovraccarico)",
+        "4) Controllare che corrente nominale e caratteristica gG/aM siano corrette",
+        "5) Verificare serraggio e ossidazione dei contatti del portafusibile"
+      ]
+    },
+    {
+      "id": "salvamotore",
+      "category": "motor_protector",
+      "brand": null,
+      "model": null,
+      "keywords": ["salvamotore", "PKZ", "MS", "protettore motore", "interruttore motore", "motor protector", "magnetotermico motore", "regolazione corrente motore"],
+      "visual_cues": [
+        "corpo modulare compatto DIN, larghezza circa 45mm",
+        "manopola di regolazione corrente frontale (Ir regolabile)",
+        "posizioni leva: ON / OFF / TRIP",
+        "morsetti per collegamento diretto o innesto su contattore coordinato",
+        "pulsante di test/reset laterale o frontale"
+      ],
+      "functions": [
+        "protezione integrata da sovraccarico (termico) e cortocircuito (magnetico) per motori",
+        "regolazione soglia termica sulla corrente nominale del motore",
+        "sistema coordinato contattore+salvamotore per avviamento compatto e protetto"
+      ],
+      "typical_faults": [
+        "scatta per squilibrio di fase: verificare tensioni e correnti su tutte e 3 le fasi",
+        "scatta all'avviamento: Ir troppo bassa o motore bloccato meccanicamente",
+        "non scatta in caso di guasto: Ir impostata troppo alta",
+        "surriscaldamento: corrente troppo vicina alla soglia, contatti interni usurati",
+        "leva bloccata in TRIP: attendere raffreddamento prima di riarmare"
+      ],
+      "field_checks": [
+        "1) Verificare corrente nominale motore (targhetta) e impostare Ir correttamente",
+        "2) Misurare corrente su tutte e 3 le fasi: squilibrio >5% indica problema",
+        "3) Verificare tensioni di alimentazione: calo causa aumento di corrente",
+        "4) Controllare temperatura motore: >80°C sul corpo è anomalia",
+        "5) Verificare assenza di blocco meccanico: motore deve girare libero a mano"
+      ]
+    },
+    {
+      "id": "rele-termico",
+      "category": "overload_relay",
+      "brand": null,
+      "model": null,
+      "keywords": ["relè termico", "relè overload", "protezione termica", "bimetallico", "TR", "overload relay", "relè di massima corrente", "protezione sovraccarico"],
+      "visual_cues": [
+        "corpo plastico su guida DIN o agganciato sotto un contattore",
+        "manopola di regolazione corrente frontale",
+        "pulsante RESET manuale o automatico",
+        "contatti ausiliari NC/NO per segnalazione scatto",
+        "finestra con indicazione visiva di scatto"
+      ],
+      "functions": [
+        "protezione da sovraccarico prolungato per motori e trasformatori",
+        "intervento termico con ritardo (tollera picchi brevi di avviamento)",
+        "fornisce contatto NC per aprire il contattore in caso di scatto"
+      ],
+      "typical_faults": [
+        "scatta ma motore non è in sovraccarico: regolazione errata o bimetalli usurati",
+        "non scatta in sovraccarico: bimetalli bloccati, verificare funzionalità",
+        "reset impossibile: temperatura ancora alta, attendere raffreddamento",
+        "falsi scatti: vibrazioni eccessive o temperatura ambiente molto alta",
+        "contatti ausiliari ossidati: il contattore non apre anche se il relè scatta"
+      ],
+      "field_checks": [
+        "1) Verificare impostazione corrente vs corrente nominale motore (targhetta)",
+        "2) Misurare corrente su tutte le fasi con pinza amperometrica",
+        "3) Verificare temperatura ambiente: compensare se >40°C (declassamento)",
+        "4) Testare contatti ausiliari con multimetro: NC chiuso a riposo",
+        "5) Dopo scatto: trovare causa prima di premere RESET"
+      ]
+    },
+    {
+      "id": "ats-commutatore",
+      "category": "ats",
+      "brand": null,
+      "model": null,
+      "keywords": ["ATS", "commutatore automatico", "commutatore rete-generatore", "transfer switch", "commutazione automatica", "interruttore di trasferimento", "bypass rete"],
+      "visual_cues": [
+        "contenitore metallico o plastico con due interruttori meccanicamente interbloccati",
+        "indicatori luminosi: RETE / GENERATORE / MANCANZA RETE",
+        "selettore AUTO/MAN per modalità di funzionamento",
+        "morsetti di potenza per rete, generatore e carico",
+        "modulo di controllo elettronico con temporizzatori regolabili"
+      ],
+      "functions": [
+        "commuta automaticamente l'alimentazione da rete a generatore in caso di black-out",
+        "attende il ritorno della rete prima di ricommutare alla fonte principale",
+        "interblocco meccanico impedisce connessione simultanea di rete e generatore"
+      ],
+      "typical_faults": [
+        "non commuta a generatore: soglia mancanza rete non raggiunta o generatore non pronto",
+        "non ritorna alla rete: temporizzatore ritorno troppo lungo o guasto modulo",
+        "commutazione frequente (hunting): soglie di isteresi non configurate",
+        "modulo di controllo guasto: nessuna risposta, sostituire scheda",
+        "contatti di potenza bruciati: archi durante commutazione, usura accelerata"
+      ],
+      "field_checks": [
+        "1) Verificare tensioni su ingresso RETE e ingresso GENERATORE",
+        "2) Controllare impostazione soglie: tensione minima e tempo ritardo commutazione",
+        "3) Verificare interblocco meccanico: i due interruttori non possono essere entrambi ON",
+        "4) Testare in modalità manuale: commutare e verificare tensione al carico",
+        "5) Controllare temperatura e usura contatti di potenza"
+      ]
+    },
+    {
+      "id": "alimentatore-24vdc",
+      "category": "power_supply",
+      "brand": null,
+      "model": null,
+      "keywords": ["alimentatore", "SMPS", "alimentatore switching", "24VDC", "24V DC", "psu", "alimentatore DIN", "trasformatore switching", "alimentatore industriale", "Meanwell", "Phoenix Contact", "SITOP"],
+      "visual_cues": [
+        "corpo modulare DIN rail, larghezza 1-6 moduli",
+        "morsetti ingresso 230VAC e uscita 24VDC separati e chiaramente marcati",
+        "LED verde di stato (OK) e eventuale LED rosso di allarme",
+        "targhetta con potenza nominale (W) e corrente uscita (A): es. 24VDC/10A",
+        "alcune versioni con potenziometro di regolazione tensione uscita"
+      ],
+      "functions": [
+        "converte 230VAC in 24VDC stabilizzato per PLC, sensori, relè, attuatori",
+        "protezione da sovraccarico e cortocircuito sull'uscita DC",
+        "isolamento galvanico tra ingresso AC e uscita DC"
+      ],
+      "typical_faults": [
+        "nessuna tensione uscita: alimentatore in protezione (sovraccarico/cortocircuito a valle)",
+        "tensione uscita bassa: carico eccessivo o condensatori degradati",
+        "LED rosso: allarme per sovraccarico, cortocircuito o sovratemperatura",
+        "tensione uscita oscillante: condensatori di filtraggio guasti",
+        "surriscaldamento: ventilazione insufficiente o carico vicino alla potenza nominale"
+      ],
+      "field_checks": [
+        "1) Misurare tensione AC in ingresso: 230V ±10%",
+        "2) Misurare tensione DC in uscita: 24VDC ±5% (22.8–25.2V)",
+        "3) Scollegare il carico: se tensione torna → problema a valle",
+        "4) Misurare corrente assorbita: non superare 90% della portata nominale",
+        "5) Verificare temperatura corpo: >70°C indica sovraccarico o ventilazione scarsa"
+      ]
+    },
+    {
+      "id": "trasformatore-corrente",
+      "category": "current_transformer",
+      "brand": null,
+      "model": null,
+      "keywords": ["TA", "trasformatore di corrente", "CT", "toroide", "sonda di corrente", "pinza TA", "misura corrente indiretta", "100/5", "200/5", "rapporto trasformazione"],
+      "visual_cues": [
+        "toroide o corpo ad anello con foro centrale per passaggio del conduttore primario",
+        "morsetti secondari S1/S2 per collegamento allo strumento di misura",
+        "targhetta con rapporto di trasformazione: es. 100/5A, 200/1A",
+        "classe di precisione: 0.5, 1, 3 per misura; 5P, 10P per protezione",
+        "versioni apribili (split-core) per installazione senza scollegare il cavo"
+      ],
+      "functions": [
+        "riduce correnti elevate a valori standard (1A o 5A) per strumenti di misura",
+        "isola galvanicamente lo strumento dal circuito di potenza",
+        "alimenta amperometri, contatori, relè di protezione, analizzatori di rete"
+      ],
+      "typical_faults": [
+        "secondario aperto con carico: tensione pericolosamente alta ai morsetti S1/S2",
+        "rapporto sbagliato: letture errate sullo strumento di misura",
+        "saturazione magnetica: errore di misura ad alta corrente",
+        "perdita di isolamento: dispersione verso terra",
+        "classe di precisione inadeguata: errore sistematico nella misura"
+      ],
+      "field_checks": [
+        "1) IMPORTANTE: non aprire mai il secondario del TA sotto carico → tensione pericolosa",
+        "2) Verificare rapporto di trasformazione e classe sulla targhetta",
+        "3) Misurare corrente secondaria: proporzionale alla primaria per il rapporto",
+        "4) Verificare polarità S1/P1: potenza deve risultare positiva in assorbimento",
+        "5) Controllare il carico (burden): non superare i VA nominali del TA"
+      ]
+    },
+    {
+      "id": "contatore-energia",
+      "category": "energy_meter",
+      "brand": null,
+      "model": null,
+      "keywords": ["contatore", "kWh", "energy meter", "misuratore energia", "contatore bidirezionale", "contatore trifase", "contatore monofase", "contatore digitale", "EM", "contatore ENEL"],
+      "visual_cues": [
+        "display LCD o LED con lettura kWh, eventualmente kvarh e kW istantanei",
+        "DIN rail o a pannello, larghezza 2-4 moduli DIN",
+        "morsetti per fase(i), neutro e PE; versioni con TA esterni",
+        "uscita impulsiva S0 o comunicazione RS485 Modbus",
+        "sigillo antimanomissione sul vano morsetti"
+      ],
+      "functions": [
+        "misura e totalizza energia attiva (kWh) consumata o prodotta",
+        "versioni bidirezionali per impianti FV (energia immessa e prelevata)",
+        "versioni con Modbus per monitoraggio remoto e integrazione BMS"
+      ],
+      "typical_faults": [
+        "display spento: mancanza alimentazione o guasto interno",
+        "lettura errata: rapporto TA sbagliato o connessione scorretta",
+        "comunicazione Modbus assente: indirizzo o baud rate errati",
+        "inversione fase/neutro: lettura negativa o errore di cablaggio"
+      ],
+      "field_checks": [
+        "1) Verificare tensioni su tutti gli ingressi (fasi, neutro)",
+        "2) Controllare sequenza e polarità cablaggio (L1, L2, L3, N)",
+        "3) Per contatori con TA: verificare rapporto impostato vs reale",
+        "4) Verificare parametri comunicazione: indirizzo Modbus, baud rate, parità",
+        "5) Confrontare lettura con pinza amperometrica per validare la misura"
+      ]
+    },
+    {
+      "id": "pulsante-comando",
+      "category": "pushbutton",
+      "brand": null,
+      "model": null,
+      "keywords": ["pulsante", "NO", "NC", "pulsante di marcia", "pulsante di stop", "avvio", "start", "stop", "pulsante luminoso", "tasto", "pulsante 22mm"],
+      "visual_cues": [
+        "testa sporgente o a raso, colori standard: verde=avvio, rosso=stop, nero=funzione",
+        "corpo cilindrico da 22mm o 30mm, montaggio a pannello",
+        "contatti NO e/o NC accessibili dal retro",
+        "versioni con LED integrato per segnalazione stato",
+        "versioni con chiave o guardia di protezione"
+      ],
+      "functions": [
+        "invia segnale momentaneo di comando a PLC, relè, contattore",
+        "avvio (verde/NO) o arresto (rosso/NC) di un processo",
+        "versioni luminose confermano visivamente lo stato del circuito comandato"
+      ],
+      "typical_faults": [
+        "pulsante non risponde: contatto ossidato, resistenza >1Ω",
+        "circuito sempre attivo: contatto NC incollato o cablaggio errato",
+        "LED non si accende: LED bruciato o tensione di alimentazione errata",
+        "testa non ritorna: meccanismo usurato, sostituire solo la testa"
+      ],
+      "field_checks": [
+        "1) Misurare continuità contatto NO: 0Ω premuto, ∞ rilasciato",
+        "2) Misurare continuità contatto NC: 0Ω rilasciato, ∞ premuto",
+        "3) Verificare tensione ai capi del contatto nel circuito reale",
+        "4) Pulire i contatti con spray contatti se ossidati",
+        "5) Verificare serraggio morsetti a vite sul retro del pulsante"
+      ]
+    },
+    {
+      "id": "selettore-rotativo",
+      "category": "selector",
+      "brand": null,
+      "model": null,
+      "keywords": ["selettore", "selettore rotativo", "commutatore", "2 posizioni", "3 posizioni", "AUTO MAN", "selettore a chiave", "rotary switch", "locale remoto"],
+      "visual_cues": [
+        "manopola rotante da 22mm o 30mm con posizioni marcate a tacche",
+        "posizioni tipiche: 0/1, MAN/OFF/AUTO, locale/remoto",
+        "versioni con chiave rimovibile solo in una posizione",
+        "contatti multipli accessibili dal retro (fino a 3 circuiti commutabili)",
+        "freccia o punto di riferimento sulla manopola indica la posizione"
+      ],
+      "functions": [
+        "seleziona modalità operative: MAN/AUTO, locale/remoto, on/off",
+        "commuta tra sorgenti o circuiti diversi",
+        "versioni a chiave impediscono modifiche non autorizzate"
+      ],
+      "typical_faults": [
+        "posizione intermedia: contatti in stato indeterminato",
+        "contatti ossidati: resistenza elevata, segnale intermittente",
+        "manopola allentata: non mantiene la posizione selezionata",
+        "cablaggio invertito: funzione opposta a quella attesa"
+      ],
+      "field_checks": [
+        "1) Verificare posizione fisica manopola e corrispondenza con schema",
+        "2) Misurare continuità tra contatti nelle varie posizioni",
+        "3) Controllare il diagramma contatti (inciso sul corpo) per le commutazioni",
+        "4) Verificare serraggio dado di fissaggio sul pannello",
+        "5) Controllare tensioni in ingresso e uscita nelle varie posizioni"
+      ]
+    },
+    {
+      "id": "lampada-spia",
+      "category": "indicator_light",
+      "brand": null,
+      "model": null,
+      "keywords": ["lampada spia", "spia luminosa", "pilota", "LED segnalazione", "spia", "indicatore luminoso", "luce segnalazione", "spia verde", "spia rossa", "spia gialla"],
+      "visual_cues": [
+        "corpo cilindrico da 22mm o 30mm, montaggio a pannello",
+        "lente colorata: verde=in funzione, rosso=allarme/stop, giallo=anomalia, bianco=neutro",
+        "versioni a incandescenza (sostituibile), neon o LED integrato",
+        "morsetti posteriori per alimentazione 24VDC, 110VAC o 230VAC"
+      ],
+      "functions": [
+        "segnala lo stato di un circuito: alimentato/non alimentato, marcia/fermo",
+        "indica presenza di allarmi o anomalie con colore codificato",
+        "feedback visivo sull'efficacia di un comando"
+      ],
+      "typical_faults": [
+        "spia spenta con circuito alimentato: lampadina bruciata o LED guasto",
+        "spia sempre accesa: cortocircuito nel circuito di segnalazione",
+        "tensione errata: spia 24V alimentata a 230V brucia immediatamente",
+        "falso contatto sui morsetti: spia intermittente"
+      ],
+      "field_checks": [
+        "1) Misurare tensione ai morsetti della spia: deve corrispondere alla tensione nominale",
+        "2) Se spenta con tensione corretta: sostituire lampadina o modulo LED",
+        "3) Verificare colore corretto vs schema (verde=marcia, rosso=stop/allarme)",
+        "4) Per spia LED in DC: verificare polarità se non si accende",
+        "5) Controllare serraggio morsetti e integrità del portalampada"
+      ]
+    },
+    {
+      "id": "sirena-cicalino",
+      "category": "alarm_sounder",
+      "brand": null,
+      "model": null,
+      "keywords": ["sirena", "cicalino", "buzzer", "suonatore", "allarme acustico", "horn", "campanello", "avvisatore acustico", "segnalazione sonora"],
+      "visual_cues": [
+        "corpo plastico o metallico: versioni DIN da 22mm simili a pulsante con altoparlante",
+        "versioni a tromba per ambienti rumorosi (>100dB)",
+        "tensione di alimentazione marcata: 24VDC, 230VAC",
+        "alcune versioni con tono multiplo o regolazione volume"
+      ],
+      "functions": [
+        "segnalazione acustica di allarmi, fine ciclo, guasti",
+        "attira l'attenzione dell'operatore su condizioni anomale",
+        "spesso usato in combinazione con lampada spia o colonna luminosa"
+      ],
+      "typical_faults": [
+        "nessun suono con tensione corretta: altoparlante bruciato o guasto interno",
+        "suono continuo non previsto: contatto di attivazione incollato o cablaggio errato",
+        "volume basso: altoparlante degradato o tensione bassa",
+        "tensione errata: guasto immediato se alimentato fuori tensione nominale"
+      ],
+      "field_checks": [
+        "1) Misurare tensione ai morsetti di alimentazione",
+        "2) Verificare segnale di attivazione (contatto NO o ingresso digitale)",
+        "3) Se non suona con alimentazione corretta: sostituire il dispositivo",
+        "4) Verificare livello sonoro in dB vs normativa per l'ambiente"
+      ]
+    },
+    {
+      "id": "colonna-luminosa",
+      "category": "tower_light",
+      "brand": null,
+      "model": null,
+      "keywords": ["colonna luminosa", "tower light", "semaforo industriale", "segnalatore a colonna", "stack light", "palo segnalazione", "rosso verde giallo", "colonna di segnalazione"],
+      "visual_cues": [
+        "colonna modulare impilabile con moduli colorati: rosso, giallo, verde, blu, bianco",
+        "montaggio su palo o direttamente su macchina",
+        "versioni con modulo acustico integrato (buzzer o sirena)",
+        "altezza tipica 50-200mm per modulo, diametro 50-70mm",
+        "alimentazione 24VDC o 230VAC"
+      ],
+      "functions": [
+        "segnalazione visiva dello stato macchina o processo su più livelli cromatici",
+        "verde=in marcia, giallo=anomalia/attenzione, rosso=guasto/stop, blu=intervento operatore",
+        "consente di capire lo stato di una macchina a distanza"
+      ],
+      "typical_faults": [
+        "modulo non si illumina: LED guasto, sostituire il modulo colorato",
+        "colonna sempre rossa: segnalazione guasto non resettata",
+        "intermittenza: cablaggio allentato o modulo di controllo instabile",
+        "colore sbagliato per lo stato: cablaggio invertito o logica PLC errata"
+      ],
+      "field_checks": [
+        "1) Verificare tensione su ogni modulo colore",
+        "2) Verificare segnali di attivazione dal PLC o dal circuito di controllo",
+        "3) Confrontare stato colonne con schema elettrico e logica macchina",
+        "4) Sostituire solo il modulo difettoso (sono modulari e intercambiabili)"
+      ]
+    },
+    {
+      "id": "pulsante-emergenza",
+      "category": "emergency_stop",
+      "brand": null,
+      "model": null,
+      "keywords": ["pulsante di emergenza", "fungo rosso", "E-stop", "arresto emergenza", "stop emergenza", "pulsante a fungo", "categoria 0", "categoria 1", "IEC 60947-5-5"],
+      "visual_cues": [
+        "testa a fungo di colore ROSSO obbligatorio su sfondo GIALLO",
+        "corpo da 40mm o 60mm, molto più grande di un pulsante normale",
+        "meccanismo a blocco: riarmo a chiave o a rotazione",
+        "contatti NC che aprono alla pressione",
+        "targhetta ARRESTO DI EMERGENZA o pittogramma CE obbligatorio"
+      ],
+      "functions": [
+        "arresta immediatamente la macchina in condizioni di pericolo",
+        "deve essere azionabile senza ostacoli e visibile da ogni posto di lavoro",
+        "rimane bloccato dopo azionamento: richiede riarmo intenzionale per riavviare"
+      ],
+      "typical_faults": [
+        "macchina non si ferma all'E-stop: contatto NC non cablato nella catena di sicurezza",
+        "riarmo impossibile: meccanismo bloccato, usare chiave o ruotare il fungo",
+        "contatto ossidato: apertura non affidabile, misurare resistenza in conduzione",
+        "E-stop bypassato: violazione gravissima, non accettabile in nessun caso"
+      ],
+      "field_checks": [
+        "1) Verificare che il circuito di sicurezza sia cablato in serie correttamente",
+        "2) Premere e misurare apertura contatto NC con multimetro",
+        "3) Verificare che la macchina si fermi entro il tempo specificato",
+        "4) Testare il riarmo: riavvio deve richiedere azione deliberata separata",
+        "5) Verificare conformità EN/IEC 60947-5-5 e Direttiva Macchine 2006/42/CE"
+      ]
+    },
+    {
+      "id": "rele-sicurezza",
+      "category": "safety_relay",
+      "brand": null,
+      "model": null,
+      "keywords": ["relè di sicurezza", "safety relay", "Pilz", "PNOZ", "3SK", "categoria sicurezza", "PL d", "SIL 2", "categoria 3", "categoria 4", "EDM"],
+      "visual_cues": [
+        "corpo DIN modulare giallo o verde, larghezza 22-45mm",
+        "LED di stato multipli: alimentazione, canale 1, canale 2, uscita",
+        "morsetti per: alimentazione, ingressi canale 1 e 2, uscite NO di sicurezza",
+        "marcatura CE e categoria di sicurezza PLd, SIL2 ben visibile"
+      ],
+      "functions": [
+        "monitora circuiti di sicurezza (E-stop, guardie, finecorsa) con doppio canale",
+        "apre le uscite di sicurezza in caso di anomalia su un canale",
+        "garantisce la categoria di sicurezza richiesta dalla Direttiva Macchine"
+      ],
+      "typical_faults": [
+        "LED canale 1 o 2 spento: interruzione del circuito di ingresso corrispondente",
+        "LED uscita spento con ingressi OK: guasto interno al relè di sicurezza",
+        "riarmo impossibile: contatto EDM non chiuso o pulsante reset mancante",
+        "falsi scatti: disturbi EMC sul cablaggio degli ingressi",
+        "categoria non rispettata: cablaggio non conforme, cross-fault non rilevato"
+      ],
+      "field_checks": [
+        "1) Verificare tensione alimentazione: 24VDC ±15%",
+        "2) Controllare tutti i LED e confrontare con la guida del produttore",
+        "3) Misurare tensione e continuità su entrambi i canali di ingresso",
+        "4) Verificare circuito di feedback EDM (External Device Monitoring)",
+        "5) Non bypassare mai le funzioni di sicurezza: segnalare al responsabile"
+      ]
+    },
+    {
+      "id": "pompa-calore",
+      "category": "heat_pump",
+      "brand": null,
+      "model": null,
+      "keywords": ["pompa di calore", "PDC", "heat pump", "climatizzatore", "aria-acqua", "aria-aria", "inverter termico", "COP", "EER", "split", "unità esterna", "unità interna"],
+      "visual_cues": [
+        "unità esterna con ventilatore assiale e scambiatore alettato",
+        "unità interna con serpentino e circolatore (aria-acqua) o ventilatore (aria-aria)",
+        "compressore a scroll o rotativo nella sezione esterna",
+        "pannello di controllo con display e morsettiera di collegamento",
+        "linee frigorifere (tubi rame isolati) tra unità esterna e interna"
+      ],
+      "functions": [
+        "trasferisce calore dall'aria esterna all'impianto di riscaldamento o raffrescamento",
+        "modalità riscaldamento invernale e raffrescamento estivo",
+        "integrazione con serbatoio ACS e impianto idronico (aria-acqua)"
+      ],
+      "typical_faults": [
+        "codice errore su display: consultare manuale, spesso compressore o sonda guasta",
+        "nessun calore prodotto: temperatura esterna troppo bassa o gas refrigerante scarico",
+        "sgelo continuo: sonda NTC esterna guasta o scambiatore ostruito",
+        "rumore anomalo compressore: gas basso o usura meccanica",
+        "differenziale scatta: dispersione nell'inverter o nel compressore"
+      ],
+      "field_checks": [
+        "1) Leggere codice errore dal display e consultare manuale tecnico",
+        "2) Verificare alimentazione: trifase o monofase, tensioni e bilanciamento fasi",
+        "3) Misurare corrente assorbita vs corrente nominale da targhetta",
+        "4) Verificare temperature ingresso/uscita acqua: deltaT normale 5-8°C",
+        "5) Controllare sonde NTC con multimetro: resistenza deve variare con temperatura"
+      ]
+    },
+    {
+      "id": "batteria-accumulo",
+      "category": "battery_storage",
+      "brand": null,
+      "model": null,
+      "keywords": ["batteria accumulo", "storage", "accumulatore", "BESS", "LiFePO4", "litio", "batteria casa", "Powerwall", "BYD", "kWh storage", "sistema accumulo", "BMS"],
+      "visual_cues": [
+        "pacco batteria rettangolare a parete o su piedistallo",
+        "modulo BMS integrato con display e LED stato di carica (SOC)",
+        "connessioni DC verso inverter ibrido",
+        "pulsante di accensione/spegnimento di sicurezza"
+      ],
+      "functions": [
+        "accumula energia solare in eccesso per uso nelle ore notturne o di punta",
+        "alimenta i carichi in caso di black-out (modalità island/UPS)",
+        "BMS gestisce carica/scarica ottimizzando la vita della batteria"
+      ],
+      "typical_faults": [
+        "SOC sempre basso: inverter non carica, verificare setpoint di carica",
+        "BMS in protezione: sovratemperatura, sovratensione cella o sottotensione",
+        "nessuna erogazione in emergenza: modalità island non abilitata",
+        "comunicazione persa con inverter: cavo CAN/Modbus o indirizzo errato",
+        "capacità ridotta nel tempo: normale degradazione, verificare SOH"
+      ],
+      "field_checks": [
+        "1) Leggere SOC (stato di carica) e SOH (stato di salute) da display o app",
+        "2) Verificare tensione DC tra batteria e inverter",
+        "3) Controllare temperatura batteria: non deve superare 45°C",
+        "4) Verificare comunicazione BMS-inverter: cavo CAN o Modbus intatto",
+        "5) Leggere log errori dall'app o dal display del sistema"
+      ]
+    },
+    {
+      "id": "analizzatore-rete",
+      "category": "power_analyzer",
+      "brand": null,
+      "model": null,
+      "keywords": ["analizzatore di rete", "power quality", "analizzatore power", "misuratore potenza", "power meter", "cos phi", "THD", "armoniche", "PowerLogic", "EM", "PM"],
+      "visual_cues": [
+        "display grafico o LCD integrato, montaggio DIN o a pannello",
+        "morsetti per TA (S1/S2 per ogni fase) e tensioni L1/L2/L3/N",
+        "porta di comunicazione RS485 Modbus o Ethernet",
+        "parametri misurabili marcati: V, A, W, VAR, VA, PF, Hz, THD"
+      ],
+      "functions": [
+        "misura parametri avanzati: potenza attiva/reattiva/apparente, fattore di potenza, THD",
+        "rileva disturbi di qualità dell'energia: armoniche, buchi di tensione, sbalzi",
+        "registra dati storici per analisi dei consumi energetici"
+      ],
+      "typical_faults": [
+        "letture errate: rapporto TA sbagliato nella configurazione",
+        "comunicazione Modbus assente: indirizzo o baud rate errati",
+        "display spento: mancanza alimentazione ausiliaria",
+        "potenza negativa: TA collegato in polarità inversa"
+      ],
+      "field_checks": [
+        "1) Verificare configurazione: rapporto TA, tensione nominale, frequenza",
+        "2) Confrontare letture V e A con multimetro e pinza amperometrica",
+        "3) Verificare polarità TA: potenza attiva positiva = assorbimento",
+        "4) Testare comunicazione Modbus con PC e software di configurazione"
+      ]
+    },
+    {
+      "id": "busbar-pettine",
+      "category": "busbar",
+      "brand": null,
+      "model": null,
+      "keywords": ["pettine", "barra", "busbar", "pettine di fase", "barra omnibus", "barra di distribuzione", "pettine DIN", "ripartitore fasi"],
+      "visual_cues": [
+        "pettine isolato in plastica con spine di collegamento su interruttori DIN",
+        "colori: marrone/grigio/nero per L1/L2/L3, blu per neutro",
+        "sezione da 16mm² a 120mm² a seconda della corrente",
+        "versioni monofase, bifase, trifase + neutro",
+        "barre nude in rame o alluminio nei quadri di potenza"
+      ],
+      "functions": [
+        "distribuisce la corrente di ingresso a più interruttori DIN in parallelo",
+        "elimina il cablaggio cavo-cavo tra interruttori (più sicuro e compatto)",
+        "garantisce connessione sicura e bassa resistenza tra più protezioni"
+      ],
+      "typical_faults": [
+        "surriscaldamento: corrente totale supera la portata del pettine",
+        "pettine non inserito correttamente: falso contatto, scintillio",
+        "isolamento danneggiato: rischio cortocircuito tra fasi",
+        "pettine incompatibile: passo o dimensione non adatti agli interruttori"
+      ],
+      "field_checks": [
+        "1) Verificare compatibilità pettine/interruttori (stesso produttore e passo)",
+        "2) Controllare temperatura con termometro IR: >60°C è anomalia",
+        "3) Verificare serraggio morsetti degli interruttori sul pettine",
+        "4) Controllare integrità isolamento: nessuna crepa o bruciatura visibile"
+      ]
+    },
+    {
+      "id": "interruttore-sezionatore",
+      "category": "disconnector",
+      "brand": null,
+      "model": null,
+      "keywords": ["sezionatore", "interruttore di manovra", "load break switch", "disconnettore", "sezionatore rotativo", "sezionatore sottocarico", "OT", "VCF", "LOTO"],
+      "visual_cues": [
+        "corpo robusto con manopola rotativa o leva laterale",
+        "morsetti di potenza per cavi di sezione elevata",
+        "indicazione visiva ON/OFF sulla manopola",
+        "versioni con blocco a lucchetto in posizione OFF per LOTO",
+        "versioni DIN modulare o da pannello/porta"
+      ],
+      "functions": [
+        "seziona fisicamente un circuito per manutenzione in sicurezza",
+        "versioni sottocarico (load break) aprono anche con corrente nominale",
+        "base per procedure LOTO (Lock Out Tag Out) in manutenzione"
+      ],
+      "typical_faults": [
+        "non si apre sotto carico: non è un load break switch, aprire solo a vuoto",
+        "arco durante manovra: normale per load break, anomalo per sezionatore puro",
+        "leva dura o bloccata: meccanismo ossidato o manomissione",
+        "surriscaldamento morsetti: serraggio insufficiente o corrente sopra nominale"
+      ],
+      "field_checks": [
+        "1) Identificare tipo: sezionatore puro (solo a vuoto) vs load break (sottocarico)",
+        "2) Se sezionatore puro: ridurre il carico a zero prima di aprire",
+        "3) Verificare continuità contatti in posizione chiusa con multimetro",
+        "4) Applicare procedura LOTO dopo apertura per manutenzione in sicurezza"
+      ]
+    },
+    {
+      "id": "sensore-pir",
+      "category": "pir_sensor",
+      "brand": null,
+      "model": null,
+      "keywords": ["PIR", "rilevatore di presenza", "sensore di movimento", "infrarosso passivo", "rilevatore infrarosso", "sensore movimento", "presenza", "rilevatore pir"],
+      "visual_cues": [
+        "cupola bianca o grigia con finestra Fresnel visibile",
+        "piccolo corpo plastico da soffitto o parete",
+        "potenziometri di regolazione: sensibilità, ritardo spegnimento, soglia lux",
+        "LED di segnalazione rilevamento su alcuni modelli"
+      ],
+      "functions": [
+        "rileva presenza umana tramite variazione di calore infrarosso",
+        "comanda automaticamente illuminazione o sistemi di allarme",
+        "tempo di mantenimento ON regolabile dopo ultima rilevazione"
+      ],
+      "typical_faults": [
+        "luce sempre accesa: sensibilità troppo alta o soglia lux troppo bassa",
+        "luce non si accende: sensibilità troppo bassa o zona morta nella copertura",
+        "rilevazioni spurie: correnti d'aria calde, finestre, animali",
+        "non funziona di giorno: soglia lux da regolare",
+        "falsi negativi: persona ferma non rilevata (normale per tecnologia passiva)"
+      ],
+      "field_checks": [
+        "1) Regolare potenziometro tempo T: da 10 secondi a 10 minuti",
+        "2) Regolare soglia lux L: verso MIN per funzionare anche di giorno",
+        "3) Verificare tensione di alimentazione: 230VAC o 24VDC a seconda del tipo",
+        "4) Controllare angolo copertura (tipico 120°-180°) e distanza massima"
+      ]
+    },
+    {
+      "id": "valvola-motorizzata",
+      "category": "motorized_valve",
+      "brand": null,
+      "model": null,
+      "keywords": ["valvola motorizzata", "attuatore valvola", "valvola zona", "zone valve", "valvola 2 vie", "valvola 3 vie", "attuatore termico", "valvola modulante"],
+      "visual_cues": [
+        "corpo valvola in ottone o acciaio con attuatore elettrico montato sopra",
+        "attuatore con motore riduttore e morsettiera di collegamento",
+        "indicatore visivo posizione APERTO/CHIUSO",
+        "versioni con microswitch di fine corsa per segnalazione apertura",
+        "alimentazione 24VAC, 24VDC o 230VAC a seconda del tipo"
+      ],
+      "functions": [
+        "apre o chiude il flusso acqua calda/fredda verso un circuito di zona riscaldamento",
+        "versioni modulanti (0-10V o 4-20mA) regolano la portata in modo proporzionale",
+        "coordinate con termostato ambiente per gestione zone indipendenti"
+      ],
+      "typical_faults": [
+        "valvola non apre: mancanza alimentazione attuatore o attuatore guasto",
+        "valvola sempre aperta: microswitch difettoso o cablaggio errato",
+        "perdita acqua dal premistoppa: usura guarnizione, serrare o sostituire",
+        "rumore ma nessun flusso: valvola bloccata dal calcare",
+        "attuatore caldo ma fermo: motore riduttore guasto"
+      ],
+      "field_checks": [
+        "1) Verificare tensione ai morsetti attuatore: 24VAC, 24VDC o 230VAC",
+        "2) Misurare resistenza bobina attuatore termico (kΩ) o elettrico (Ω)",
+        "3) Aprire manualmente con leva o pulsante manuale se presente",
+        "4) Controllare microswitch fine corsa: deve cambiare stato a valvola aperta"
+      ]
+    },
+    {
+      "id": "dimmer",
+      "category": "dimmer",
+      "brand": null,
+      "model": null,
+      "keywords": ["dimmer", "regolatore di luminosità", "variatore di luce", "dimmer LED", "dimmer da incasso", "KNX dimmer", "DALI", "0-10V dimmer", "variatore"],
+      "visual_cues": [
+        "corpo da incasso o DIN rail con manopola o pulsante di regolazione",
+        "versioni da incasso simili a interruttori standard (503, 506)",
+        "versioni DIN con ingressi digitali o analogici 0-10V, DALI",
+        "targhetta con potenza minima e massima compatibile"
+      ],
+      "functions": [
+        "regola la potenza erogata alla lampada variando la tensione (TRIAC o PWM)",
+        "risparmio energetico e comfort visivo nelle aree di lavoro",
+        "integrazione in sistemi domotici KNX, DALI, Modbus per controllo centralizzato"
+      ],
+      "typical_faults": [
+        "lampada sfarfalla: carico sotto il minimo del dimmer",
+        "lampada non si spegne completamente: leakage TRIAC, normale per alcuni tipi",
+        "lampada non dimmerabile: tipo LED non compatibile con il dimmer",
+        "dimmer caldo: potenza vicina al massimo, verificare dissipazione",
+        "sfarfallìo a basso livello: incompatibilità driver LED"
+      ],
+      "field_checks": [
+        "1) Verificare compatibilità dimmer-lampada: consultare lista produttore",
+        "2) Misurare carico totale: non superare 80% della potenza nominale",
+        "3) Verificare tensione alimentazione: 230VAC ±10%",
+        "4) Controllare connessione neutro: obbligatoria per dimmer moderni a 2 fili",
+        "5) Regolare filtro EMC integrato se lampade sfarfallano a basso livello"
+      ]
+    },
+    {
+      "id": "interruttore-crepuscolare",
+      "category": "twilight_switch",
+      "brand": null,
+      "model": null,
+      "keywords": ["crepuscolare", "fotocellula", "interruttore crepuscolare", "twilight switch", "sensore luce", "foto relè", "comando automatico luce", "LDR"],
+      "visual_cues": [
+        "corpo con sonda fotoelettrica esterna o integrata (cupola trasparente)",
+        "versioni DIN rail con sonda separata su cavo",
+        "potenziometro di soglia lux (1-100 lux regolabile)",
+        "contatto di uscita relè: tipicamente 10A 230VAC"
+      ],
+      "functions": [
+        "accende illuminazione automaticamente al tramonto (luce sotto soglia)",
+        "spegne illuminazione all'alba (luce sopra soglia)",
+        "comando di illuminazione esterna, pubblica, cancelli automatici"
+      ],
+      "typical_faults": [
+        "accende di giorno: sonda in ombra permanente o soglia troppo alta",
+        "non accende di notte: sonda illuminata da luce artificiale (feedback)",
+        "oscillazione acceso/spento al crepuscolo: isteresi insufficiente",
+        "soglia deriva nel tempo: fotoresistenza LDR degradata"
+      ],
+      "field_checks": [
+        "1) Verificare posizione sonda: non illuminata dalla luce che comanda",
+        "2) Regolare soglia lux: più basso = accende prima (con meno luce)",
+        "3) Misurare tensione al carico: 230VAC quando contatto chiuso",
+        "4) Coprire la sonda manualmente per simulare notte e testare"
+      ]
+    },
+    {
+      "id": "rele-monitoraggio",
+      "category": "monitoring_relay",
+      "brand": null,
+      "model": null,
+      "keywords": ["relè di monitoraggio", "relè mancanza fase", "relè sequenza fasi", "relè asimmetria", "relè di tensione", "phase failure relay", "relè trifase", "controllo tensione", "mancanza fase"],
+      "visual_cues": [
+        "corpo modulare DIN 22.5mm o 45mm",
+        "LED di stato: verde=OK, rosso=allarme",
+        "morsetti per le 3 fasi L1, L2, L3 e neutro opzionale",
+        "contatto di uscita relè SPDT per comando o allarme",
+        "potenziometri di regolazione soglie e ritardi su alcuni modelli"
+      ],
+      "functions": [
+        "rileva mancanza di una o più fasi nell'alimentazione trifase",
+        "rileva asimmetria di tensione tra fasi (>10-15%)",
+        "rileva sequenza fasi errata (L1-L2-L3 invertite)",
+        "protegge motori trifase da danni per alimentazione anomala"
+      ],
+      "typical_faults": [
+        "scatta senza causa apparente: asimmetria di rete sopra soglia impostata",
+        "LED rosso fisso: mancanza fase, verificare tutte le tensioni L1/L2/L3",
+        "sequenza fasi errata dopo intervento su rete: invertire due conduttori",
+        "soglia troppo sensibile: abbassare soglia asimmetria se rete instabile",
+        "contatto uscita usurato: sostituzione necessaria"
+      ],
+      "field_checks": [
+        "1) Misurare tensioni L1-L2, L2-L3, L1-L3: devono essere ±5% tra loro",
+        "2) Verificare presenza di tutte e 3 le fasi (L1, L2, L3)",
+        "3) Controllare sequenza fasi con fasimetro o tester di sequenza",
+        "4) Verificare regolazione soglie: tensione min/max e asimmetria %",
+        "5) Testare contatto uscita con multimetro: commuta in stato di allarme"
+      ]
     }
   ]
 }

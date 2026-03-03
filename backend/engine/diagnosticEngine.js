@@ -313,7 +313,110 @@ var SYNONYM_MAP = {
   "pv":              "fotovoltaico",
   "domotica":        "domotica",
   "zigbee":          "zigbee",
-  "zwave":           "z-wave"
+  "zwave":           "z-wave",
+  // MCCB / interruttore di potenza
+  "mccb":            "interruttore scatolato",
+  "scatolato":       "interruttore scatolato",
+  "ns100":           "interruttore scatolato",
+  "ns160":           "interruttore scatolato",
+  "tmax":            "interruttore scatolato",
+  // Fusibili
+  "fusibili":        "fusibile",
+  "cartuccia":       "fusibile",
+  "nh00":            "fusibile",
+  "nh1":             "fusibile",
+  "nh2":             "fusibile",
+  "portafusibile":   "fusibile",
+  // Salvamotore
+  "salvamotore":     "salvamotore",
+  "pkz":             "salvamotore",
+  "protettore":      "salvamotore",
+  // Relè termico
+  "termico":         "rele termico",
+  "bimetallico":     "rele termico",
+  "overload":        "rele termico",
+  // ATS / commutatore
+  "ats":             "commutatore automatico",
+  "commutatore":     "commutatore automatico",
+  "transfer":        "commutatore automatico",
+  "bypass":          "commutatore automatico",
+  // Alimentatore 24VDC
+  "smps":            "alimentatore switching",
+  "psu":             "alimentatore switching",
+  "meanwell":        "alimentatore switching",
+  "sitop":           "alimentatore switching",
+  "alimentatori":    "alimentatore switching",
+  // Trasformatore di corrente TA
+  "ta":              "trasformatore corrente",
+  "toroide":         "trasformatore corrente",
+  "rapporto":        "trasformatore corrente",
+  // Contatore energia
+  "kwh":             "contatore",
+  "contatori":       "contatore",
+  // Pulsante
+  "pulsanti":        "pulsante",
+  "avvio":           "pulsante",
+  "arresto":         "pulsante",
+  // Lampada spia
+  "spia":            "lampada spia",
+  "spie":            "lampada spia",
+  "pilota":          "lampada spia",
+  // Sirena / cicalino
+  "sirena":          "sirena",
+  "cicalino":        "sirena",
+  "buzzer":          "sirena",
+  "allarme acustico":"sirena",
+  // Colonna luminosa
+  "colonna":         "colonna luminosa",
+  "tower":           "colonna luminosa",
+  // Pulsante emergenza
+  "emergenza":       "pulsante emergenza",
+  "estop":           "pulsante emergenza",
+  "fungo":           "pulsante emergenza",
+  // Relè di sicurezza
+  "pilz":            "rele sicurezza",
+  "pnoz":            "rele sicurezza",
+  "sil":             "rele sicurezza",
+  "safety":          "rele sicurezza",
+  // Pompa di calore
+  "pdc":             "pompa calore",
+  "calorifero":      "pompa calore",
+  "climatizzatore":  "pompa calore",
+  // Batteria accumulo
+  "storage":         "batteria accumulo",
+  "accumulatore":    "batteria accumulo",
+  "bess":            "batteria accumulo",
+  "lifepo4":         "batteria accumulo",
+  "powerwall":       "batteria accumulo",
+  // Analizzatore rete
+  "powerquality":    "analizzatore rete",
+  "powermeter":      "analizzatore rete",
+  "cosphi":          "analizzatore rete",
+  "armoniche":       "analizzatore rete",
+  "thd":             "analizzatore rete",
+  // Busbar / pettine
+  "pettine":         "pettine",
+  "busbar":          "pettine",
+  "barra omnibus":   "pettine",
+  // LOTO / sezionatori
+  "loto":            "sezionatore",
+  "lockout":         "sezionatore",
+  // PIR
+  "pir":             "rilevatore presenza",
+  "rilevatore":      "rilevatore presenza",
+  "presenza":        "rilevatore presenza",
+  // Dimmer
+  "dimmer":          "dimmer",
+  "regolatore luce": "dimmer",
+  "variatore luce":  "dimmer",
+  // Crepuscolare
+  "crepuscolare":    "crepuscolare",
+  "fotocellula":     "crepuscolare",
+  // Relè monitoraggio fasi
+  "mancanza fase":   "mancanza fase",
+  "asimmetria":      "mancanza fase",
+  "sequenza fasi":   "mancanza fase",
+  "fasimetro":       "mancanza fase"
 };
 
 function applysynonyms(word) {

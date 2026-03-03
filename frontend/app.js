@@ -55,10 +55,10 @@ console.log('BRIDGE LIVE');
 
   // ====== ROCCO RESPONSE FORMATTER ======
   var KNOWN_SECTIONS = {
-    "OSSERVAZIONI": 1, "COMPONENTI RICONOSCIUTI": 1, "COMPONENTI": 1,
+    "OSSERVAZIONI": 1, "COMPONENTI COINVOLTI": 1, "COMPONENTI RICONOSCIUTI": 1, "COMPONENTI": 1,
     "IPOTESI": 1, "IPOTESI PROBABILE": 1,
-    "VERIFICHE SUL CAMPO": 1, "VERIFICHE CONSIGLIATE": 1, "VERIFICHE": 1,
-    "RISCHI": 1, "RISCHI / SICUREZZA": 1, "SICUREZZA": 1,
+    "VERIFICHE OPERATIVE": 1, "VERIFICHE SUL CAMPO": 1, "VERIFICHE CONSIGLIATE": 1, "VERIFICHE": 1,
+    "RISCHI REALI": 1, "RISCHI": 1, "RISCHI / SICUREZZA": 1, "SICUREZZA": 1,
     "LIVELLO DI CERTEZZA": 1,
     "NEXT STEP": 1, "PROSSIMO PASSO": 1,
     "CONCLUSIONE": 1, "CAUSA PROBABILE": 1, "NOTA": 1, "AVVERTENZE": 1
@@ -69,6 +69,7 @@ console.log('BRIDGE LIVE');
     t = t.replace(/\[CONFERMATO\]/g, '<span class="cert cert-ok">CONFERMATO</span>');
     t = t.replace(/\[PROBABILE\]/g, '<span class="cert cert-prob">PROBABILE</span>');
     t = t.replace(/\[POSSIBILE\]/g, '<span class="cert cert-poss">POSSIBILE</span>');
+    t = t.replace(/\[DA_VERIFICARE\]/g, '<span class="cert cert-poss">DA VERIFICARE</span>');
     return t;
   }
 

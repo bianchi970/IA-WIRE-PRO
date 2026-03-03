@@ -80,9 +80,7 @@ function buildSystemPrompt(plan, ragContext) {
     "\n\n─── REGOLE DI SICUREZZA E TECNICHE ───\n" +
     rules.map((r) => "• " + r).join("\n") +
 
-    "\n\n─── CONTESTO KNOWLEDGE BASE ───\n" +
-    (ragContext ? ragContext : "(nessun contesto disponibile)") +
-    "\n"
+    (ragContext ? "\n\n─── CONTESTO KNOWLEDGE BASE ───\n" + ragContext + "\n" : "")
   );
 }
 
