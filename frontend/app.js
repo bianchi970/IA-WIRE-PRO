@@ -445,6 +445,25 @@ console.log('BRIDGE LIVE');
     return [location.origin + path, "http://localhost:3000" + path];
   }
 
+  function renameConversationApi(convId, title) {
+    var urls = candidateDeleteEndpoints(convId); // stesso path PATCH
+    var lastErr = null;
+    function tryOne(i) {
+      if (i >= urls.length) return Promise.reject(lastErr || new Error("Errore rete"));
+      return fetch(urls[i], {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: title })
+      })
+        .then(function (res) {
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          return res.json();
+        })
+        .catch(function (e) { lastErr = e; return tryOne(i + 1); });
+    }
+    return tryOne(0);
+  }
+
   function deleteConversationApi(convId) {
     var urls = candidateDeleteEndpoints(convId);
     var lastErr = null;
@@ -623,10 +642,11 @@ console.log('BRIDGE LIVE');
         html += '<div class="history-item' + isActive + '" data-conv-id="' + escapeHtml(id) + '">';
         html += '<span class="history-item-icon">💬</span>';
         html += '<div class="history-item-body">';
-        html += '<div class="history-item-title">' + escapeHtml(title) + '</div>';
+        html += '<div class="history-item-title" data-title-id="' + escapeHtml(id) + '">' + escapeHtml(title) + '</div>';
         if (date) html += '<div class="history-item-date">' + escapeHtml(date) + '</div>';
         html += '</div>';
-        html += '<button class="history-item-del" type="button" title="Elimina conversazione" data-del-id="' + escapeHtml(id) + '">✕</button>';
+        html += '<button class="history-item-edit" type="button" title="Rinomina" data-edit-id="' + escapeHtml(id) + '">\u270F</button>';
+        html += '<button class="history-item-del" type="button" title="Elimina conversazione" data-del-id="' + escapeHtml(id) + '">\u2715</button>';
         html += '</div>';
       }
       historyList.innerHTML = html;
@@ -653,6 +673,60 @@ console.log('BRIDGE LIVE');
           });
         })(items[j]);
       }
+      // Click su pulsante modifica titolo — editing inline
+      var editBtns = historyList.querySelectorAll(".history-item-edit");
+      for (var m = 0; m < editBtns.length; m++) {
+        (function (btn) {
+          btn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            var editId = btn.getAttribute("data-edit-id");
+            if (!editId) return;
+
+            var titleDiv = historyList.querySelector(".history-item-title[data-title-id='" + editId + "']");
+            if (!titleDiv || titleDiv.querySelector("input")) return; // già in editing
+
+            var originalText = titleDiv.textContent || "";
+            titleDiv.innerHTML = "";
+            var inp = document.createElement("input");
+            inp.type = "text";
+            inp.className = "history-item-title-input";
+            inp.value = originalText;
+            titleDiv.appendChild(inp);
+            inp.focus();
+            inp.select();
+
+            var saved = false;
+
+            function save() {
+              if (saved) return;
+              saved = true;
+              var newTitle = inp.value.trim().slice(0, 80);
+              if (!newTitle || newTitle === originalText) {
+                titleDiv.innerHTML = escapeHtml(originalText);
+                return;
+              }
+              titleDiv.textContent = newTitle;
+              renameConversationApi(editId, newTitle)
+                .catch(function () {
+                  titleDiv.textContent = originalText; // ripristina su errore
+                });
+            }
+
+            function cancel() {
+              if (saved) return;
+              saved = true;
+              titleDiv.textContent = originalText;
+            }
+
+            inp.addEventListener("keydown", function (ev) {
+              if (ev.key === "Enter") { ev.preventDefault(); save(); }
+              if (ev.key === "Escape") { cancel(); }
+            });
+            inp.addEventListener("blur", save);
+          });
+        })(editBtns[m]);
+      }
+
       // Click su pulsante elimina (due tocchi: prima confirm, poi delete)
       var delBtns = historyList.querySelectorAll(".history-item-del");
       for (var k = 0; k < delBtns.length; k++) {
