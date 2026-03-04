@@ -16,6 +16,7 @@ const rocco = require("./rocco");
 const { fetchKnowledgeContext, getLoadedKnowledge } = require("./knowledge");
 const { analyzeTechnicalRequest, formatDiagnosticContext, formatOfflineAnswer, TEST_CASE } = require("./engine/diagnosticEngine");
 const { normalizeCertainty } = require("./utils/certainty");
+const { extractComponents, formatComponents } = require("./rocco/componentRecognizer");
 // ✅ DB pool (protetto: non deve mai far crashare il server)
 let pool = null;
 try {
@@ -980,6 +981,21 @@ app.post("/api/chat", uploadAny, async (req, res) => {
         components:      _kb.components,
       });
       engineText = formatDiagnosticContext(engineDiag);
+
+      // Component Recognition Engine — arricchisce engineText con componenti riconosciuti
+      try {
+        const recognizedIds = extractComponents(message);
+        if (recognizedIds.length > 0) {
+          const recognizedLabel = formatComponents(recognizedIds);
+          engineText = (engineText ? engineText + "\n\n" : "") +
+            "COMPONENTI RICONOSCIUTI NEL TESTO (pre-analisi automatica):\n" +
+            recognizedLabel + "\n" +
+            "Includi questi componenti nella sezione COMPONENTI COINVOLTI se rilevanti.";
+        }
+      } catch (e) {
+        console.warn("⚠️ Component recognizer non disponibile:", (e && e.message) || e);
+      }
+
       // FASE 5 — Safety Lock: se condizione pericolosa, forza avviso in testa al system prompt
       if (engineDiag && engineDiag.isDangerous && engineText) {
         systemPrompt = "⚠️ SAFETY LOCK ATTIVATO: condizione pericolosa rilevata dal motore di pre-analisi.\n" +
@@ -1070,7 +1086,8 @@ app.post("/api/chat", uploadAny, async (req, res) => {
         matchedPatterns: engineDiag.matchedPatterns,
         matchedRules: engineDiag.matchedRules,
         matchedComponents: engineDiag.matchedComponents,
-      } : { active: false },
+        recognizedComponents: extractComponents(message),
+      } : { active: false, recognizedComponents: extractComponents(message) },
     });
   } catch (err) {
     console.error("❌ /api/chat error:", err);
