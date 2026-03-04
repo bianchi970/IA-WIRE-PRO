@@ -439,6 +439,27 @@ console.log('BRIDGE LIVE');
     return tryOne(0);
   }
 
+  function candidateDeleteEndpoints(convId) {
+    var path = "/api/conversations/" + encodeURIComponent(convId);
+    if (isProdSameOrigin()) return [location.origin + path];
+    return [location.origin + path, "http://localhost:3000" + path];
+  }
+
+  function deleteConversationApi(convId) {
+    var urls = candidateDeleteEndpoints(convId);
+    var lastErr = null;
+    function tryOne(i) {
+      if (i >= urls.length) return Promise.reject(lastErr || new Error("Errore rete"));
+      return fetch(urls[i], { method: "DELETE" })
+        .then(function (res) {
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          return res.json();
+        })
+        .catch(function (e) { lastErr = e; return tryOne(i + 1); });
+    }
+    return tryOne(0);
+  }
+
   function getConversationMessages(convId) {
     var urls = candidateMessagesEndpoints(convId);
     var lastErr = null;
@@ -604,7 +625,9 @@ console.log('BRIDGE LIVE');
         html += '<div class="history-item-body">';
         html += '<div class="history-item-title">' + escapeHtml(title) + '</div>';
         if (date) html += '<div class="history-item-date">' + escapeHtml(date) + '</div>';
-        html += '</div></div>';
+        html += '</div>';
+        html += '<button class="history-item-del" type="button" title="Elimina conversazione" data-del-id="' + escapeHtml(id) + '">✕</button>';
+        html += '</div>';
       }
       historyList.innerHTML = html;
 
@@ -629,6 +652,51 @@ console.log('BRIDGE LIVE');
               .then(function () { setBusy(false); }, function () { setBusy(false); });
           });
         })(items[j]);
+      }
+      // Click su pulsante elimina (due tocchi: prima confirm, poi delete)
+      var delBtns = historyList.querySelectorAll(".history-item-del");
+      for (var k = 0; k < delBtns.length; k++) {
+        (function (btn) {
+          var confirmTimer = null;
+          btn.addEventListener("click", function (e) {
+            e.stopPropagation(); // non aprire la conversazione
+            var delId = btn.getAttribute("data-del-id");
+            if (!delId) return;
+
+            if (btn.classList.contains("confirm")) {
+              // Secondo tocco → elimina davvero
+              clearTimeout(confirmTimer);
+              btn.classList.remove("confirm");
+              btn.disabled = true;
+              btn.textContent = "\u2026";
+              deleteConversationApi(delId)
+                .then(function () {
+                  // Se era la conversazione corrente, resetta chat
+                  if (String(conversationId) === String(delId)) {
+                    conversationId = null;
+                    localStorage.removeItem("conversation_id");
+                    conversationHistory = [];
+                    clearChatUi();
+                    addMessage("ai", "Conversazione eliminata. Puoi iniziarne una nuova.");
+                  }
+                  loadHistoryList();
+                })
+                .catch(function () {
+                  btn.disabled = false;
+                  btn.textContent = "\u2715";
+                  btn.classList.remove("confirm");
+                });
+            } else {
+              // Primo tocco → chiedi conferma
+              btn.classList.add("confirm");
+              btn.textContent = "?";
+              confirmTimer = setTimeout(function () {
+                btn.classList.remove("confirm");
+                btn.textContent = "\u2715";
+              }, 3000);
+            }
+          });
+        })(delBtns[k]);
       }
     }).catch(function () {
       historyList.innerHTML = '<div class="history-empty">Impossibile caricare lo storico.</div>';
