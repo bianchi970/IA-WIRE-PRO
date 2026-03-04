@@ -372,15 +372,14 @@ async function msgInsert({ conversation_id, role, content, content_format = "tex
  * Accetta solo: Confermato | Probabile | Non verificabile
  * Restituisce null se non trovato o non riconosciuto.
  */
-const CERTAINTY_VALID = new Set(["Confermato", "Probabile", "Non verificabile"]);
-
 function extractCertainty(text) {
   const m = String(text || "").match(/LIVELLO DI CERTEZZA\s*:\s*-?\s*([^\n]+)/i);
   if (!m) return null;
-  const raw = m[1].trim();
-  for (const v of CERTAINTY_VALID) {
-    if (raw.toLowerCase().includes(v.toLowerCase())) return v;
-  }
+  // Rimuove punteggiatura finale e normalizza
+  const v = m[1].trim().replace(/[\.\:\;]+$/, "").toLowerCase();
+  if (v.includes("confermato")) return "Confermato";
+  if (v.includes("probabile")) return "Probabile";
+  if (v.includes("non verificabile") || v.includes("da_verificare") || v.includes("da verificare")) return "Non verificabile";
   return null;
 }
 

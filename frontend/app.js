@@ -1,9 +1,9 @@
 console.log('BRIDGE LIVE');
-/* IA Wire Pro - app.js (V1 stable, ITA) - compatibile (no ?., no ??, no replaceAll)
-   TECH MODE: compressione più nitida per quadri elettrici (1800px, 0.85)
-   FIX 400: se invii solo foto, forza message tecnico
-   DEBUG RAG: mostra RAG ON/OFF (status + console)
-   HISTORY: invia ultimi 10 messaggi al backend (DB history ha priorità)
+/* IA Wire Pro - app.js
+   - ES5 puro (no ?., no ??, no replaceAll) — compatibilità massima
+   - TECH MODE: compressione nitida per quadri (1800px, 0.85)
+   - Typing indicator animato (3 puntini)
+   - Placeholder adattivo mobile
 */
 
 (function () {
@@ -173,10 +173,33 @@ console.log('BRIDGE LIVE');
   }
 
   function addTyping(label) {
-    var t = label || "Sto lavorando...";
-    var r = addMessage("ai", t);
-    if (r.bubble) r.bubble.setAttribute("data-typing", "1");
-    return r.bubble;
+    var wrapper = document.createElement("div");
+    wrapper.className = "msg ai";
+
+    var bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.setAttribute("data-typing", "1");
+
+    // Testo + 3 puntini animati CSS
+    var txt = document.createElement("span");
+    txt.textContent = (label || "Sto elaborando") + " ";
+
+    var dots = document.createElement("span");
+    dots.className = "typing-dots";
+    dots.innerHTML = "<span>.</span><span>.</span><span>.</span>";
+
+    bubble.appendChild(txt);
+    bubble.appendChild(dots);
+    wrapper.appendChild(bubble);
+    chat.appendChild(wrapper);
+
+    var _chat = chat;
+    setTimeout(function () {
+      try { _chat.scrollTo({ top: _chat.scrollHeight, behavior: "smooth" }); }
+      catch (e) { _chat.scrollTop = _chat.scrollHeight; }
+    }, 0);
+
+    return bubble;
   }
 
   function removeTyping() {
@@ -643,11 +666,24 @@ console.log('BRIDGE LIVE');
               autoResize();
             }
 
-            if (msg.indexOf("HTTP 413") >= 0) addMessage("ai", "Foto troppo grande. Riducila e riprova (obiettivo < 4-5MB).");
-            else if (msg.indexOf("HTTP 400") >= 0) addMessage("ai", "Richiesta non valida. Se persiste, è un mismatch di campi nel backend.");
-            else addMessage("ai", "Errore: " + msg);
+            if (msg.indexOf("aborted") >= 0 || msg.indexOf("abort") >= 0) {
+              /* annullato dall'utente — nessun messaggio */
+            } else if (msg.indexOf("HTTP 413") >= 0) {
+              addMessage("ai", "Foto troppo grande (max ~4MB). Ritaglia o riduci la risoluzione e riprova.");
+            } else if (msg.indexOf("HTTP 400") >= 0) {
+              addMessage("ai", "Richiesta non valida. Prova a descrivere il problema in modo diverso.");
+            } else if (msg.indexOf("HTTP 429") >= 0) {
+              addMessage("ai", "Troppe richieste. Aspetta qualche secondo e riprova.");
+            } else if (msg.indexOf("HTTP 5") >= 0) {
+              addMessage("ai", "Errore server temporaneo. Riprova tra un momento.");
+            } else if (msg.toLowerCase().indexOf("failed to fetch") >= 0 || msg.toLowerCase().indexOf("network") >= 0) {
+              addMessage("ai", "Connessione assente o server irraggiungibile. Verifica la rete e riprova.");
+            } else {
+              addMessage("ai", "Errore: " + msg);
+            }
 
-            setStatus("Errore");
+            var isAbort = msg.toLowerCase().indexOf("abort") >= 0;
+            setStatus(isAbort ? "Annullato" : "Errore");
             return sleep(750).then(function () { setStatus("Pronto"); });
           })
           .finally(function () {

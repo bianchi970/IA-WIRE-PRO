@@ -17,6 +17,7 @@
 html, body {
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
@@ -27,6 +28,14 @@ body {
     radial-gradient(700px 400px at 85% 0%, rgba(255,140,66,0.07), transparent 55%),
     var(--bg);
   color: var(--text);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Touch: disabilita highlight blu su tap e doppio-tap zoom */
+button, label, [role="button"], a {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* ===== APP — 3 blocchi fissi ===== */
@@ -46,6 +55,8 @@ body {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   z-index: 10;
+  /* Safe area top: notch iPhone X+ */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 .topbar-inner {
@@ -66,11 +77,11 @@ body {
 }
 
 .logo {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
-  font-size: 15px;
+  font-size: 16px;
   border-radius: 9px;
   background: linear-gradient(135deg, rgba(255,140,66,0.25), rgba(0,217,255,0.18));
   border: 1px solid rgba(255,255,255,0.10);
@@ -119,6 +130,7 @@ body {
   min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -126,7 +138,14 @@ body {
   scroll-behavior: smooth;
 }
 
-/* Centering su schermi larghi: padding espanso, nessun wrapper extra */
+/* Scrollbar sottile solo su desktop */
+@media (hover: hover) {
+  .chat-container::-webkit-scrollbar { width: 4px; }
+  .chat-container::-webkit-scrollbar-track { background: transparent; }
+  .chat-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+}
+
+/* Centering su schermi larghi */
 @media (min-width: 1008px) {
   .chat-container {
     padding-left: calc((100% - 980px) / 2);
@@ -140,11 +159,11 @@ body {
 
 .bubble {
   max-width: 88%;
-  padding: 9px 12px;
+  padding: 10px 13px;
   border-radius: var(--radius);
   border: 1px solid rgba(255,255,255,0.10);
   background: rgba(255,255,255,0.04);
-  line-height: 1.45;
+  line-height: 1.5;
   font-size: 14px;
   white-space: pre-wrap;
   word-break: break-word;
@@ -166,23 +185,23 @@ body {
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  padding: 1px 0;
+  padding: 2px 0;
 }
 .bullet-dot {
   color: var(--cyan);
   flex-shrink: 0;
-  margin-top: 1px;
+  margin-top: 2px;
 }
 .rline-num {
   display: flex;
   align-items: flex-start;
   gap: 4px;
-  padding: 1px 0;
+  padding: 2px 0;
 }
 .num-pfx {
   color: var(--muted);
   flex-shrink: 0;
-  min-width: 18px;
+  min-width: 20px;
 }
 .sec-head {
   display: block;
@@ -191,11 +210,12 @@ body {
   letter-spacing: 1px;
   color: var(--cyan);
   text-transform: uppercase;
-  margin-top: 10px;
-  margin-bottom: 3px;
+  margin-top: 12px;
+  margin-bottom: 4px;
   padding-bottom: 3px;
   border-bottom: 1px solid rgba(0,217,255,0.18);
 }
+
 /* Certezza badges */
 .cert {
   display: inline-block;
@@ -210,11 +230,25 @@ body {
 .cert-ok   { background: rgba(0,200,100,0.18); color: #4ade80; border: 1px solid rgba(0,200,100,0.28); }
 .cert-prob { background: rgba(255,180,0,0.15); color: #fbbf24; border: 1px solid rgba(255,180,0,0.28); }
 .cert-poss { background: rgba(144,164,191,0.12); color: var(--muted); border: 1px solid rgba(144,164,191,0.22); }
+
+/* ===== TYPING INDICATOR ===== */
+@keyframes typingBlink {
+  0%, 100% { opacity: 0.2; transform: translateY(0); }
+  50%       { opacity: 1;   transform: translateY(-3px); }
+}
+.typing-dots span {
+  display: inline-block;
+  color: var(--cyan);
+  animation: typingBlink 1.2s ease-in-out infinite;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
 /* Provider badge */
 .provider-badge {
   font-size: 10px;
   color: rgba(144,164,191,0.50);
-  margin-top: 3px;
+  margin-top: 4px;
   padding-left: 4px;
 }
 .prov-fallback {
@@ -228,7 +262,7 @@ body {
   background: rgba(7,19,38,0.96);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  padding: 8px 14px 10px;
+  padding: 8px 14px calc(10px + env(safe-area-inset-bottom, 0px));
 }
 
 .composer-wrap {
@@ -242,7 +276,7 @@ body {
   align-items: center;
   gap: 6px;
   margin-bottom: 6px;
-  padding: 3px 8px 3px 4px;
+  padding: 4px 8px 4px 4px;
   background: rgba(0,217,255,0.06);
   border: 1px solid rgba(0,217,255,0.22);
   border-radius: 8px;
@@ -251,8 +285,8 @@ body {
 }
 
 .preview-wrap img {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: 5px;
   object-fit: cover;
   border: 1px solid rgba(255,255,255,0.14);
@@ -275,50 +309,57 @@ body {
 #imageInput { display: none; }
 
 .cam-btn {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(255,255,255,0.04);
-  font-size: 18px;
+  font-size: 20px;
   cursor: pointer;
   flex-shrink: 0;
   user-select: none;
   transition: background 0.15s, border-color 0.15s;
 }
-.cam-btn:hover { background: rgba(0,217,255,0.08); border-color: rgba(0,217,255,0.28); }
+.cam-btn:hover  { background: rgba(0,217,255,0.08); border-color: rgba(0,217,255,0.28); }
+.cam-btn:active { background: rgba(0,217,255,0.15); }
 
 #textInput {
   flex: 1;
   resize: none;
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 11px 12px;
   border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.04);
+  background: rgba(255,255,255,0.05);
   color: var(--text);
   outline: none;
-  min-height: 40px;
-  max-height: 130px;
+  min-height: 44px;
+  max-height: 120px;
   line-height: 1.4;
   font-family: inherit;
-  font-size: 14px;
+  /* 16px OBBLIGATORIO su iOS — sotto 16px Safari auto-zooma e rompe il layout */
+  font-size: 16px;
   transition: border-color 0.15s;
+  -webkit-appearance: none;
+  appearance: none;
 }
-#textInput:focus        { border-color: rgba(0,217,255,0.35); }
-#textInput::placeholder { color: rgba(144,164,191,0.65); }
+#textInput:focus        { border-color: rgba(0,217,255,0.40); }
+#textInput::placeholder { color: rgba(144,164,191,0.55); }
 
 .hint {
   margin: 5px 0 0;
   font-size: 11px;
   color: var(--muted);
+  line-height: 1.4;
 }
 
 /* ===== BUTTONS ===== */
 .btn {
   border-radius: 12px;
   padding: 10px 14px;
+  min-height: 44px;
   cursor: pointer;
   font-weight: 700;
   font-size: 13px;
@@ -342,9 +383,10 @@ body {
 }
 
 .btn.small {
-  padding: 3px 8px;
-  font-size: 11px;
-  border-radius: 6px;
+  padding: 6px 10px;
+  min-height: 36px;
+  font-size: 12px;
+  border-radius: 8px;
 }
 
 .btn.danger {
@@ -357,14 +399,42 @@ body {
   opacity: 0.45;
   cursor: not-allowed;
 }
+.btn:active:not(:disabled) {
+  opacity: 0.75;
+}
 
-/* ===== RESPONSIVE mobile ===== */
+/* ===== RESPONSIVE: telefoni (≤520px) ===== */
 @media (max-width: 520px) {
-  .topbar-inner   { padding: 0 10px; height: 48px; }
+  .topbar-inner   { padding: 0 12px; height: 50px; }
   .titles .subtitle { display: none; }
-  .chat-container { padding: 8px; }
-  .composer       { padding: 6px 10px 8px; }
-  .bubble         { max-width: 94%; }
+  .chat-container { padding: 8px; gap: 6px; }
+  .composer       { padding: 6px 10px calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .bubble         { max-width: 95%; font-size: 14px; }
   .hint           { display: none; }
   .preview-label  { display: none; }
+  #textInput      { font-size: 16px; max-height: 100px; }
+  .sec-head       { font-size: 10px; margin-top: 10px; }
+}
+
+/* ===== RESPONSIVE: telefoni molto piccoli (≤380px) ===== */
+@media (max-width: 380px) {
+  .topbar-inner   { height: 46px; }
+  .titles .title  { font-size: 13px; }
+  .logo           { width: 30px; height: 30px; font-size: 14px; border-radius: 7px; }
+  .status-pill    { font-size: 10px; padding: 3px 7px; }
+  .btn.small      { padding: 5px 8px; font-size: 11px; }
+  .bubble         { max-width: 97%; padding: 8px 10px; }
+  .cam-btn        { width: 40px; min-width: 40px; font-size: 18px; }
+}
+
+/* ===== LANDSCAPE su telefoni ===== */
+@media (max-height: 500px) and (orientation: landscape) {
+  .topbar-inner   { height: 40px; }
+  .titles .subtitle { display: none; }
+  .chat-container { padding: 4px 8px; gap: 4px; }
+  .composer       { padding: 4px 10px calc(4px + env(safe-area-inset-bottom, 0px)); }
+  #textInput      { max-height: 60px; font-size: 16px; }
+  .preview-wrap   { margin-bottom: 3px; }
+  .hint           { display: none; }
+  .sec-head       { margin-top: 6px; margin-bottom: 2px; }
 }
