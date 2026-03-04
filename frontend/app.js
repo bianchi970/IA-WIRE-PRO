@@ -16,6 +16,7 @@ console.log('BRIDGE LIVE');
   var sendBtn = document.getElementById("sendBtn");
   var statusPill = document.getElementById("statusPill");
   var newChatBtn = document.getElementById("newChatBtn");
+  var exportBtn  = document.getElementById("exportBtn");
   var historyBtn = document.getElementById("historyBtn");
   var historyPanel = document.getElementById("historyPanel");
   var historyOverlay = document.getElementById("historyOverlay");
@@ -781,6 +782,37 @@ console.log('BRIDGE LIVE');
   if (historyCloseBtn) historyCloseBtn.addEventListener("click", closeHistoryPanel);
   if (historyOverlay) historyOverlay.addEventListener("click", closeHistoryPanel);
 
+  // ===== EXPORT CONVERSAZIONE =====
+  if (exportBtn) {
+    exportBtn.addEventListener("click", function () {
+      var msgs = chat ? chat.querySelectorAll(".msg") : [];
+      if (!msgs.length) return;
+      var lines = ["IA Wire Pro — Report Diagnostico", "Data: " + new Date().toLocaleString("it-IT"), ""];
+      for (var i = 0; i < msgs.length; i++) {
+        var m = msgs[i];
+        if (m.id === "welcomeMsg") continue;
+        var isUser = m.classList.contains("user");
+        var bubble = m.querySelector(".bubble");
+        if (!bubble) continue;
+        var txt = (bubble.innerText || bubble.textContent || "").trim();
+        if (!txt) continue;
+        lines.push((isUser ? "TECNICO: " : "ROCCO:   ") + txt);
+        lines.push("");
+      }
+      if (lines.length <= 3) return;
+      var blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      var ts = new Date().toISOString().slice(0, 16).replace("T", "_").replace(":", "-");
+      a.href = url;
+      a.download = "iawire_report_" + ts + ".txt";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+  }
+
   // ===== SUGGESTION CHIPS =====
   var chips = document.querySelectorAll(".chip");
   for (var ci = 0; ci < chips.length; ci++) {
@@ -914,11 +946,14 @@ console.log('BRIDGE LIVE');
               fallback_used: !!data.fallback_used
             });
 
-            // ROCCO chip — mostra pattern/componenti rilevati dal Foundation Engine
+            // ROCCO chip — mostra pattern/ipotesi top rilevati dal Foundation Engine
             if (data.foundation && !data.foundation.outOfScope && msgResult && msgResult.wrapper) {
               var chipParts = [];
               if (data.foundation.patternId) {
                 chipParts.push("⚡ " + String(data.foundation.patternId).replace(/_/g, " "));
+              }
+              if (data.foundation.topHypothesis) {
+                chipParts.push("→ " + String(data.foundation.topHypothesis));
               }
               if (data.foundation.components && data.foundation.components.length) {
                 chipParts.push("🔧 " + data.foundation.components.join(", "));
@@ -926,6 +961,7 @@ console.log('BRIDGE LIVE');
               if (chipParts.length) {
                 var chip = document.createElement("div");
                 chip.className = "rocco-chip";
+                chip.title = chipParts.join(" · ");
                 chip.textContent = chipParts.join("  ·  ");
                 msgResult.wrapper.appendChild(chip);
               }

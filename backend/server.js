@@ -1203,9 +1203,12 @@ app.post("/api/chat", uploadAny, async (req, res) => {
         recognizedComponents: extractComponents(message),
       } : { active: false, recognizedComponents: extractComponents(message) },
       foundation: foundResult && !foundResult.outOfScope ? {
-        patternId:  foundResult.patternId  || null,
-        components: foundResult.components || [],
-        anomalies:  foundResult.anomalies  || [],
+        patternId:    foundResult.patternId  || null,
+        components:   foundResult.components || [],
+        anomalies:    foundResult.anomalies  || [],
+        topHypothesis: (foundResult.hypotheses && foundResult.hypotheses.length)
+          ? foundResult.hypotheses[0].text || null
+          : null,
         outOfScope: false,
       } : (foundResult && foundResult.outOfScope ? { outOfScope: true } : null),
     });
