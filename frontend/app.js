@@ -701,4 +701,13 @@ console.log('BRIDGE LIVE');
 
   setStatus("Pronto");
   loadConversationOnStart();
+
+  // ===== PWA: registra service worker =====
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("/service-worker.js")
+        .then(function (reg) { console.log("SW registrato:", reg.scope); })
+        .catch(function (err) { console.warn("SW non registrato:", err); });
+    });
+  }
 })();
