@@ -15,6 +15,7 @@ const OpenAI = require("openai");
 const rocco = require("./rocco");
 const { fetchKnowledgeContext, getLoadedKnowledge } = require("./knowledge");
 const { analyzeTechnicalRequest, formatDiagnosticContext, formatOfflineAnswer, TEST_CASE } = require("./engine/diagnosticEngine");
+const { normalizeCertainty } = require("./utils/certainty");
 // ✅ DB pool (protetto: non deve mai far crashare il server)
 let pool = null;
 try {
@@ -368,19 +369,14 @@ async function msgInsert({ conversation_id, role, content, content_format = "tex
 }
 
 /**
- * Estrae il valore di "LIVELLO DI CERTEZZA" dal testo della risposta.
- * Accetta solo: Confermato | Probabile | Non verificabile
- * Restituisce null se non trovato o non riconosciuto.
+ * Estrae il valore di "LIVELLO DI CERTEZZA" dal testo della risposta
+ * e lo normalizza verso ALTA | MEDIA | BASSA tramite normalizeCertainty().
+ * Restituisce null se la sezione non è trovata nel testo.
  */
 function extractCertainty(text) {
   const m = String(text || "").match(/LIVELLO DI CERTEZZA\s*:\s*-?\s*([^\n]+)/i);
   if (!m) return null;
-  // Rimuove punteggiatura finale e normalizza
-  const v = m[1].trim().replace(/[\.\:\;]+$/, "").toLowerCase();
-  if (v.includes("confermato")) return "Confermato";
-  if (v.includes("probabile")) return "Probabile";
-  if (v.includes("non verificabile") || v.includes("da_verificare") || v.includes("da verificare")) return "Non verificabile";
-  return null;
+  return normalizeCertainty(m[1]);
 }
 
 /**
