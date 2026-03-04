@@ -678,6 +678,208 @@
         "Non considerare che il PLC potrebbe avere l'uscita in fault o in STOP"
       ],
       "example_case": "Relè 24VDC per apertura elettroserratura non si eccita. Tensione A1-A2 con comando attivo: 24.2VDC — OK. Resistenza bobina: OL (open) — bobina rotta. Sostituzione relè: funzionamento ripristinato."
+    },
+    {
+      "id": "FP-24",
+      "symptom": "Circuito non alimentato a valle del portafusibile — fusibile fuso (cartuccia NH, cilindrico gG/aM)",
+      "likely_causes": [
+        "Sovraccarico prolungato: la corrente ha superato In del fusibile gG per tempo sufficiente a bruciare il filamento",
+        "Cortocircuito a valle: fusibile ha operato correttamente, ma la causa del corto va eliminata prima della sostituzione",
+        "Calibro errato: fusibile sottodimensionato scatta con carichi normali; sovradimensionato non protegge adeguatamente",
+        "Corrente di spunto non coordinata su fusibile aM: fuso durante avvio diretto di motore grande (aM mal scelto)"
+      ],
+      "confidence_logic": [
+        "CONFERMATO: continuità del fusibile con tester dà OL (circuito aperto) — filamento interrotto",
+        "PROBABILE corto: se il fusibile si rifonde subito dopo sostituzione senza carico cambiato",
+        "DA_VERIFICARE: misurare la corrente a regime prima della sostituzione per verificare il calibro"
+      ],
+      "checks": [
+        "1) Con circuito aperto: misurare la resistenza del fusibile — deve essere <1Ω (integro), OL = fuso",
+        "2) Leggere il calibro sull'etichetta: tipo (gG/aM/NH), In (A), tensione (V), potere di interruzione (kA)",
+        "3) Prima di sostituire: misurare la corrente di regime con pinza amperometrica — non deve superare 80% di In",
+        "4) Verificare i morsetti del portafusibile: segni di arco, annerimento o contatti ossidati indicano contatto resistivo",
+        "5) Controllare la causa del guasto (cortocircuito, sovraccarico) prima di inserire un fusibile nuovo",
+        "6) Sostituire SOLO con fusibile dello stesso tipo, calibro e potere di interruzione (gG con gG, aM con aM)"
+      ],
+      "common_mistakes": [
+        "Montare un fusibile di calibro superiore 'tanto per far passare' — si perde la protezione del cavo",
+        "Non cercare la causa prima della sostituzione — il nuovo fusibile si rifonde in secondi",
+        "Sostituire con un tipo diverso (aM al posto di gG) cambiando le caratteristiche di protezione"
+      ],
+      "example_case": "Quadro macchina utensile: fusibile NH00 gG 100A fuso. Corrente di regime misurata: 42A. Causa: guasto avvolgimento motore con dispersione a terra. Dopo riparazione motore + sostituzione fusibile calibro corretto (63A per In motore 40A): impianto ripristinato."
+    },
+    {
+      "id": "FP-25",
+      "symptom": "Motore trifase non si avvia: relè termico (MTR) scattato — indicatore rosso o tasto di reset sporgente",
+      "likely_causes": [
+        "Sovraccarico prolungato: la corrente ha superato In motore per tempo tale da scattare il bimetallico del MTR",
+        "Taratura MTR errata: regolato su valore inferiore alla corrente nominale di targa del motore",
+        "Perdita di fase: con solo 2 fasi il motore assorbiva corrente squilibrata, scattando il relè unilateralmente",
+        "Avviamenti ravvicinati eccessivi: il bimetallico non si è raffreddato tra un avvio e il successivo"
+      ],
+      "confidence_logic": [
+        "CONFERMATO MTR scattato: il tasto di reset è sporgente (rosso visibile) — basta resettare dopo raffreddamento",
+        "PROBABILE taratura errata: se il relè scatta di nuovo a freddo con carico nominale e taratura < In motore targa",
+        "DA_VERIFICARE perdita fase: misurare le 3 correnti di fase con pinza amperometrica durante il funzionamento"
+      ],
+      "checks": [
+        "1) Verificare lo stato del MTR: tasto di reset sporgente = scattato. Attendere 5-10 minuti (raffreddamento bimetallico)",
+        "2) Premere il tasto di reset manuale (o automatico se presente) e verificare se il motore riparte",
+        "3) Se scatta di nuovo: misurare la corrente assorbita sulle 3 fasi con pinza amperometrica a regime",
+        "4) Leggere la taratura attuale del MTR e confrontare con In motore da targa (la taratura deve corrispondere a In motore)",
+        "5) Verificare le 3 tensioni di fase con multimetro: L1-L2, L2-L3, L3-L1 devono essere ~400V ±5%",
+        "6) Controllare il carico meccanico: il motore deve girare liberamente a mano con alimentazione tolta"
+      ],
+      "common_mistakes": [
+        "Aumentare la taratura del MTR per evitare gli scatti — si toglie la protezione termica del motore",
+        "Non controllare la causa del sovraccarico (carico meccanico aumentato, perdita di fase, ventilazione)"
+      ],
+      "example_case": "Motore pompa idraulica 11kW non si avvia: MTR scattato. Taratura MTR: 18A. Corrente targa motore: 22A. Causa: taratura MTR errata impostata dall'installatore precedente. Ricalibrata a 22A, reset, avvio regolare."
+    },
+    {
+      "id": "FP-26",
+      "symptom": "RCD scatta senza carichi attivi, o monitor d'isolamento segnala guasto, o megger misura <1 MΩ verso terra",
+      "likely_causes": [
+        "Cavo BT deteriorato per abrasione, UV, roditori o surriscaldamento: guaina rotta con dispersione verso terra",
+        "Umidità infiltrata nel cavo o nella cassetta di giunzione: riduce la resistenza di isolamento progressivamente",
+        "Avvolgimento motore degradato: invecchiamento dello smalto isolante sulle spire o umidità assorbita",
+        "Connessione o giunzione mal eseguita: conduttore parzialmente esposto a contatto con guaina o involucro metallico"
+      ],
+      "confidence_logic": [
+        "CONFERMATO: megger 500V misura <0.5 MΩ tra fase e terra su tratto isolato — guasto certo",
+        "PROBABILE cavo: se il valore cambia sezionando progressivamente il circuito (localizzazione per esclusione)",
+        "DA_VERIFICARE motore: misurare isolamento avvolgimento a freddo con motore scollegato"
+      ],
+      "checks": [
+        "1) Con circuito completamente de-energizzato: misurare l'isolamento con megger 500V (BT) tra ciascuna fase e terra",
+        "2) Valore atteso minimo: 1 MΩ (impianto vecchio) — nuovo: >100 MΩ. <0.5 MΩ indica guasto certo",
+        "3) Sezionare progressivamente il circuito (isolare tratti) e ripetere la misura fino a trovare il tratto guasto",
+        "4) Per il motore: scollegarlo e misurare isolamento avvolgimento separatamente. Se <0.5 MΩ: esame avvolgimento",
+        "5) Verificare cassette di derivazione, giunti e connettori: aprire e ispezionare visivamente le terminazioni",
+        "6) In caso di umidità: asciugare con aria calda e ripetere la misura dopo 30 minuti"
+      ],
+      "common_mistakes": [
+        "Misurare l'isolamento con tensione di rete invece del megger — risultato non affidabile",
+        "Non sezionare il circuito per localizzare il guasto — sostituire tutto il cavo inutilmente",
+        "Misurare solo con cavi sotto tensione (pericolo e lettura errata)"
+      ],
+      "example_case": "RCD 30mA scatta di notte senza carichi. Megger 500V su linea esterna: 0.15 MΩ tra L1 e terra. Sezionamento: il guasto è nel tratto interrato tra pozzetto e fabbricato. Causa: roditori. Sostituzione cavo + RCD resettato: problema risolto."
+    },
+    {
+      "id": "FP-27",
+      "symptom": "Timer/programmatore orario non comanda l'uscita all'ora programmata — utenza non si accende",
+      "likely_causes": [
+        "Ora e giorno errati sul timer: perdita di sincronizzazione dopo black-out con pila tampone esaurita",
+        "Contatto uscita relè interno ossidato o guasto: timer scatta internamente ma il contatto non chiude il circuito",
+        "Programmazione errata: fascia oraria configurata in modo errato (AM/PM invertiti, giorno sbagliato)",
+        "Timer non alimentato o alimentazione instabile: morsetti allentati o tensione <200V su timer digitale"
+      ],
+      "confidence_logic": [
+        "CONFERMATO alimentazione: tensione ai morsetti timer nella norma (230VAC) ma uscita a 0V con timer ON",
+        "CONFERMATO contatto guasto: con bypass manuale del timer l'utenza si accende — guasto interno al timer",
+        "DA_VERIFICARE programmazione: verificare ora, giorno, fasce orarie sul display del timer"
+      ],
+      "checks": [
+        "1) Controllare il display: ora, giorno e fasce programmate devono essere corretti",
+        "2) Premere il tasto di test/bypass manuale per forzare l'uscita ON — se l'utenza si accende il circuito a valle è OK",
+        "3) Misurare la tensione ai morsetti di uscita del timer (morsetti di carico) con timer in posizione ON",
+        "4) Misurare la tensione di alimentazione del timer: deve essere 230VAC stabile",
+        "5) Se il timer ha un indicatore LED di uscita: controllare se si accende quando previsto",
+        "6) Sostituire la pila tampone (CR2032 o AA a seconda del modello) se il timer perde l'ora dopo black-out"
+      ],
+      "common_mistakes": [
+        "Controllare solo le programmazioni senza testare fisicamente il contatto di uscita",
+        "Non considerare che la pila tampone esaurita causa perdita di ora e programma dopo ogni mancanza rete",
+        "Confondere AM/PM su timer digitale senza visualizzazione 24h"
+      ],
+      "example_case": "Luci esterne non si accendono. Timer DIN analogico: ore sul display corrette, fascia 18:00-23:00 impostata. Test manuale (tasto bypass): luci si accendono. Misura uscita timer in posizione AUTO: 0V. Causa: contatto relè interno ossidato. Sostituzione timer: funzionamento ripristinato."
+    },
+    {
+      "id": "FP-28",
+      "symptom": "LED rosso/indicatore di guasto sull'SPD (scaricatore di sovratensione) — possibile scatto protezione upstream",
+      "likely_causes": [
+        "Fulmine o sovratensione transitoria: lo SPD ha assorbito la scarica (funzionamento corretto) e si è sacrificato",
+        "Fine vita del MOV: ogni SPD ha un numero finito di operazioni — il varistoreha raggiunto il limite",
+        "Installazione errata: conduttori di collegamento >50cm o sezione inadeguata riduce l'efficienza e sovraccarica il MOV",
+        "Mancanza coordinamento: SPD T3 installato senza T1/T2 a monte — ha assorbito energia oltre la propria capacità"
+      ],
+      "confidence_logic": [
+        "CONFERMATO guasto: LED rosso fisso o finestra di ispezione rossa — cartuccia MOV da sostituire",
+        "CONFERMATO fine vita: indicatore rosso dopo evento meteorologico noto (fulmine nella zona)",
+        "DA_VERIFICARE: misurare con tester la continuità tra L e PE (con alimentazione tolta) — bassa resistenza = MOV in corto"
+      ],
+      "checks": [
+        "1) Ispezionare il LED di stato: verde = OK, rosso = guasto, assente = non alimentato o guasto grave",
+        "2) Controllare la finestra di ispezione (se presente): cambiamento di colore indica MOV esaurito",
+        "3) Con alimentazione TOLTA: misurare resistenza tra L-PE e L-N — se <100Ω il MOV è in corto (deve essere >MΩ)",
+        "4) Sostituire la cartuccia guasta (nei modelli a cartuccia estraibile) o l'intero apparecchio",
+        "5) Verificare e resettare l'interruttore di back-up dell'SPD (se scattato durante la sovratensione)",
+        "6) Verificare la lunghezza dei cavi di collegamento: massimo 50cm totali (cavo L + cavo PE) per efficienza ottimale"
+      ],
+      "common_mistakes": [
+        "Non controllare lo stato dello SPD dopo ogni temporale — rimane guasto senza protezione attiva",
+        "Sostituire solo la cartuccia senza verificare il portacartuccia e i morsetti di collegamento",
+        "Installare SPD T3 senza coordinamento con T1/T2 a monte della cabina"
+      ],
+      "example_case": "Dopo temporale con fulmini: sistema domotica in blocco. Quadro: SPD T2 con LED rosso. Misura con alimentazione tolta tra L1 e PE: 0.8Ω (cortocircuito MOV). Sostituzione modulo SPD, reset MT back-up, sistema ripristinato."
+    },
+    {
+      "id": "FP-29",
+      "symptom": "Trasformatore di isolamento o riduzione emette ronzio eccessivo (>60dB) o si surriscalda (carcassa >80°C)",
+      "likely_causes": [
+        "Sovraccarico secondario: corrente erogata supera In — le lamierature del nucleo vibrano amplificando il ronzio",
+        "Nucleo con lamierature allentate: i bulloni di serraggio non tensionati causano risonanza meccanica a 100Hz",
+        "Spira in corto parziale (interturn short): corrente a vuoto elevata, punto surriscaldato localizzato sull'avvolgimento",
+        "Ventilazione ostruita: polvere o posizionamento scorretto impedisce la dissipazione termica naturale"
+      ],
+      "confidence_logic": [
+        "CONFERMATO sovraccarico: corrente secondario > In targa con temperature elevate e ronzio proporzionale al carico",
+        "CONFERMATO spira in corto: corrente a vuoto >8% di In e tensioni secondarie asimmetriche (>5% di differenza)",
+        "DA_VERIFICARE: misurare temperatura carcassa con termometro IR e corrente a vuoto (primario senza carico)"
+      ],
+      "checks": [
+        "1) Misurare la temperatura carcassa con termometro infrarosso: critica >80°C (classe F), >65°C (classe B)",
+        "2) Scollegare tutti i carichi secondari e misurare la corrente primaria a vuoto: non deve superare 3-8% di In",
+        "3) Misurare le tensioni secondarie su tutte le uscite: asimmetria >5% indica spira in corto",
+        "4) Misurare la corrente secondaria a pieno carico con pinza amperometrica e confrontare con targa (VA/A)",
+        "5) Verificare che la ventilazione sia libera: almeno 10cm di spazio laterale e superiore",
+        "6) Serrare i bulloni del nucleo (se accessibili) per ridurre il ronzio meccanico"
+      ],
+      "common_mistakes": [
+        "Considerare normale qualsiasi livello di ronzio — un trafo integro ronza leggermente a 50Hz, non deve disturbare",
+        "Non misurare la corrente a vuoto — è il principale indicatore di spira in corto indipendente dal carico",
+        "Non verificare la classe di isolamento prima di valutare la temperatura massima accettabile"
+      ],
+      "example_case": "Trafo di isolamento 3kVA per sala prove: ronzio intenso e carcassa a 95°C. Corrente a vuoto misurata: 12% di In (normale: 5%). Tensioni secondarie: L1-L2 = 230V, L1-L3 = 219V (asimmetria 4.8%). Diagnosi: spira in corto sull'avvolgimento L3. Sostituzione trasformatore."
+    },
+    {
+      "id": "FP-30",
+      "symptom": "Il sistema mostra errore temperatura (OFF-RANGE, OPEN, SHORT) o blocco per alta/bassa temp non reale — sensore PT100/NTC guasto",
+      "likely_causes": [
+        "Sensore PT100 aperto (interruzione filamento): lettura va a +∞ o valore massimo di scala — circuito interrotto",
+        "Sensore NTC/PTC in cortocircuito: lettura si blocca a 0°C o valore minimo, resistenza <1Ω ai morsetti",
+        "Cavo sonda danneggiato: filo interrotto o in cortocircuito lungo il percorso (vibrazioni, piegature acute)",
+        "Connettore ossidato: resistenza di contatto aggiuntiva (anche solo 2Ω su PT100 causa errore di +5°C)"
+      ],
+      "confidence_logic": [
+        "CONFERMATO PT100 aperto: resistenza ai morsetti OL (circuit aperto) invece di ~107.8Ω a 20°C",
+        "CONFERMATO PT100 in corto: resistenza <80Ω a 20°C oppure valore fisso indipendente dalla temperatura reale",
+        "DA_VERIFICARE cavo: misurare la resistenza del solo cavo (sensore scollegato) — deve essere <0.5Ω a coppie"
+      ],
+      "checks": [
+        "1) Per PT100 a temperatura ambiente (20°C): misurare la resistenza ai morsetti — deve essere circa 107.8Ω ±2Ω",
+        "2) Per NTC: consultare la tabella del costruttore per il valore R atteso a temperatura ambiente (tipico 10kΩ a 25°C)",
+        "3) Con sensore scollegato: misurare la continuità del cavo di collegamento separatamente (coppia per coppia)",
+        "4) Controllare il connettore: pin piegati, ossidazione, contatti allentati. Pulire con spray contatti e riconnettere",
+        "5) Misurare il valore di resistenza del sensore immerso in acqua ghiacciata (0°C): PT100 = 100Ω, NTC = tabella",
+        "6) Sostituire il sensore e verificare che la lettura vari in modo coerente con la temperatura reale"
+      ],
+      "common_mistakes": [
+        "Non misurare la resistenza del sensore separatamente dal cavo — il guasto potrebbe essere sul cavo",
+        "Confondere PT100 (coefficiente positivo, +0.385Ω/°C) con NTC (coefficiente negativo, R diminuisce con T)",
+        "Misurare la resistenza con il circuito di misura dello strumento ancora connesso — lettura errata per corrente circolante"
+      ],
+      "example_case": "Impianto riscaldamento industriale: regolatore mostra OPEN su sonda ingresso caldaia. Resistenza PT100 misurata ai morsetti: OL. Cavo integro (0.3Ω). Sensore PT100 con elemento resistivo interrotto. Sostituzione sonda PT100 Ø6mm, 2 fili: lettura corretta ripristinata."
     }
   ]
 }

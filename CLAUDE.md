@@ -136,7 +136,7 @@ Il valore viene salvato in `messages.certainty` e restituito nell'API response.
 - 7 HARD_SAFETY_RULES, 14 GOLDEN_RULES, 15 BANNED_PHRASES
 
 ### Knowledge Base locale (aggiornata)
-- `failure_patterns.json`: 23 pattern (FP-01 → FP-23)
+- `failure_patterns.json`: 30 pattern (FP-01 → FP-30)
 - `components.json`: 50 componenti
 - `protection_rules.json`: 10 regole
 - `safety_protocols.json`: 7 protocolli

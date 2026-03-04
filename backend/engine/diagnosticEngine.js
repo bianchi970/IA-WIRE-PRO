@@ -465,7 +465,57 @@ var SYNONYM_MAP = {
   "eccita":          "eccita",
   "eccitazione":     "eccita",
   "non scatta":      "eccita",
-  "non chiude":      "eccita"
+  "non chiude":      "eccita",
+  // Fusibile (FP-24)
+  "nh00":            "fusibile",
+  "nh1":             "fusibile",
+  "nh2":             "fusibile",
+  "nh3":             "fusibile",
+  "cilindrico":      "fusibile",
+  "gg":              "fusibile",
+  "am":              "fusibile",
+  "portafusibile":   "fusibile",
+  "fuso":            "fusibile",
+  // Relè termico MTR (FP-25)
+  "mtr":             "rele termico",
+  "bimetallico":     "rele termico",
+  "overload":        "rele termico",
+  "termico":         "rele termico",
+  "reset termico":   "rele termico",
+  // Isolamento/megger (FP-26)
+  "megger":          "isolamento",
+  "megohmetro":      "isolamento",
+  "rigidita":        "isolamento",
+  "dispersione":     "isolamento",
+  "resistenza isolamento": "isolamento",
+  // Timer/programmatore (FP-27)
+  "orologio":        "timer",
+  "programmatore":   "timer",
+  "fasce":           "timer",
+  "fascia oraria":   "timer",
+  "temporizzatore":  "timer",
+  // SPD/scaricatore (FP-28)
+  "scaricatore":     "spd",
+  "limitatore":      "spd",
+  "surge":           "spd",
+  "fulmine":         "spd",
+  "mov":             "spd",
+  "varistori":       "spd",
+  "protezione fulmini": "spd",
+  // Trasformatore (FP-29)
+  "trafo":           "trasformatore",
+  "autotrasformatore": "trasformatore",
+  "zumbante":        "ronzio",
+  "zumba":           "ronzio",
+  "vibrazione":      "ronzio",
+  // Sensore temperatura (FP-30)
+  "pt100":           "sensore temperatura",
+  "ntc":             "sensore temperatura",
+  "ptc":             "sensore temperatura",
+  "termistore":      "sensore temperatura",
+  "sonda":           "sensore temperatura",
+  "off-range":       "sensore temperatura",
+  "open sensor":     "sensore temperatura"
 };
 
 function applysynonyms(word) {
@@ -603,7 +653,44 @@ var PAIR_BOOSTS = [
   ["rele",          "eccita"],
   ["bobina",        "tensione"],
   ["24v",           "bobina"],
-  ["contattore",    "eccita"]
+  ["contattore",    "eccita"],
+  // FP-24: fusibile fuso
+  ["fusibile",      "fuso"],
+  ["fusibile",      "calibro"],
+  ["cartuccia",     "guasto"],
+  ["portafusibile", "sostituire"],
+  ["nh",            "fuso"],
+  // FP-25: relè termico scattato
+  ["mtr",           "scatto"],
+  ["termico",       "reset"],
+  ["motore",        "termico"],
+  ["bimetallico",   "scattato"],
+  // FP-26: isolamento basso
+  ["isolamento",    "basso"],
+  ["megger",        "misura"],
+  ["dispersione",   "terra"],
+  ["isolamento",    "megaohm"],
+  // FP-27: timer non comanda
+  ["timer",         "comando"],
+  ["programmatore", "uscita"],
+  ["orologio",      "fascia"],
+  ["timer",         "reset"],
+  // FP-28: SPD guasto
+  ["spd",           "rosso"],
+  ["scaricatore",   "guasto"],
+  ["fulmine",       "protezione"],
+  ["mov",           "sostituire"],
+  // FP-29: trasformatore
+  ["trasformatore", "zumba"],
+  ["trafo",         "caldo"],
+  ["trafo",         "surriscalda"],
+  ["trasformatore", "ronzio"],
+  // FP-30: sensore PT100/NTC
+  ["pt100",         "fuori"],
+  ["sensore",       "errore"],
+  ["temperatura",   "blocco"],
+  ["ntc",           "guasto"],
+  ["sonda",         "open"]
 ];
 
 // Matching avanzato: stem+sinonimi + prefix matching bidirezionale
