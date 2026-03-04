@@ -16,6 +16,11 @@ console.log('BRIDGE LIVE');
   var sendBtn = document.getElementById("sendBtn");
   var statusPill = document.getElementById("statusPill");
   var newChatBtn = document.getElementById("newChatBtn");
+  var historyBtn = document.getElementById("historyBtn");
+  var historyPanel = document.getElementById("historyPanel");
+  var historyOverlay = document.getElementById("historyOverlay");
+  var historyCloseBtn = document.getElementById("historyCloseBtn");
+  var historyList = document.getElementById("historyList");
 
   var imageInput = document.getElementById("imageInput");
   var previewWrap = document.getElementById("previewWrap");
@@ -525,6 +530,113 @@ console.log('BRIDGE LIVE');
         setBusy(false);
       });
   }
+
+  // ====== STORICO CONVERSAZIONI ======
+  function openHistoryPanel() {
+    if (!historyPanel || !historyOverlay) return;
+    historyOverlay.hidden = false;
+    historyPanel.classList.add("open");
+    historyPanel.setAttribute("aria-hidden", "false");
+    loadHistoryList();
+  }
+
+  function closeHistoryPanel() {
+    if (!historyPanel || !historyOverlay) return;
+    historyPanel.classList.remove("open");
+    historyPanel.setAttribute("aria-hidden", "true");
+    historyOverlay.hidden = true;
+  }
+
+  function formatRelativeDate(isoStr) {
+    if (!isoStr) return "";
+    try {
+      var d = new Date(isoStr);
+      var now = new Date();
+      var diffMs = now - d;
+      var diffDays = Math.floor(diffMs / 86400000);
+      if (diffDays === 0) {
+        var h = d.getHours();
+        var m = String(d.getMinutes()).length === 1 ? "0" + d.getMinutes() : d.getMinutes();
+        return "Oggi " + h + ":" + m;
+      }
+      if (diffDays === 1) return "Ieri";
+      if (diffDays < 7) return diffDays + " giorni fa";
+      return d.getDate() + "/" + (d.getMonth() + 1) + "/" + d.getFullYear();
+    } catch (e) { return ""; }
+  }
+
+  function loadHistoryList() {
+    if (!historyList) return;
+    historyList.innerHTML = '<div class="history-loading">Caricamento...</div>';
+
+    var urls = candidateChatEndpoints().map(function (u) {
+      return u.replace("/api/chat", "/api/conversations") + "?limit=30";
+    });
+    var lastErr = null;
+
+    function tryOne(i) {
+      if (i >= urls.length) return Promise.reject(lastErr || new Error("Nessun endpoint disponibile"));
+      return fetch(urls[i], { method: "GET" })
+        .then(function (res) {
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          return res.json();
+        })
+        .catch(function (e) { lastErr = e; return tryOne(i + 1); });
+    }
+
+    tryOne(0).then(function (data) {
+      var arr = Array.isArray(data) ? data : (data && Array.isArray(data.items) ? data.items : []);
+      if (!arr.length) {
+        historyList.innerHTML = '<div class="history-empty">Nessuna conversazione salvata.</div>';
+        return;
+      }
+
+      var html = "";
+      for (var i = 0; i < arr.length; i++) {
+        var conv = arr[i] || {};
+        var id = String(conv.id || "");
+        var title = String(conv.title || "Conversazione").substring(0, 60);
+        var date = formatRelativeDate(conv.updated_at || conv.created_at);
+        var isActive = (conversationId && String(conversationId) === id) ? " active" : "";
+        html += '<div class="history-item' + isActive + '" data-conv-id="' + escapeHtml(id) + '">';
+        html += '<span class="history-item-icon">💬</span>';
+        html += '<div class="history-item-body">';
+        html += '<div class="history-item-title">' + escapeHtml(title) + '</div>';
+        if (date) html += '<div class="history-item-date">' + escapeHtml(date) + '</div>';
+        html += '</div></div>';
+      }
+      historyList.innerHTML = html;
+
+      // Click su item → carica conversazione
+      var items = historyList.querySelectorAll(".history-item");
+      for (var j = 0; j < items.length; j++) {
+        (function (item) {
+          item.addEventListener("click", function () {
+            var cid = item.getAttribute("data-conv-id");
+            if (!cid) return;
+            closeHistoryPanel();
+            if (conversationId === cid) return; // già aperta
+            conversationId = cid;
+            localStorage.setItem("conversation_id", cid);
+            conversationHistory = [];
+            clearChatUi();
+            setStatus("Carico chat...");
+            setBusy(true);
+            getConversationMessages(cid)
+              .then(function (msgs) { renderLoadedMessages(msgs); setStatus("Pronto"); })
+              .catch(function () { setStatus("Errore caricamento chat"); })
+              .then(function () { setBusy(false); }, function () { setBusy(false); });
+          });
+        })(items[j]);
+      }
+    }).catch(function () {
+      historyList.innerHTML = '<div class="history-empty">Impossibile caricare lo storico.</div>';
+    });
+  }
+
+  if (historyBtn) historyBtn.addEventListener("click", openHistoryPanel);
+  if (historyCloseBtn) historyCloseBtn.addEventListener("click", closeHistoryPanel);
+  if (historyOverlay) historyOverlay.addEventListener("click", closeHistoryPanel);
 
   // ====== EVENTS ======
   if (textInput) {

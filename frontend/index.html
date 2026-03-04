@@ -13,6 +13,18 @@
 </head>
 
 <body>
+  <!-- PANNELLO STORICO CHAT -->
+  <div class="history-overlay" id="historyOverlay" hidden></div>
+  <aside class="history-panel" id="historyPanel" aria-hidden="true">
+    <div class="history-header">
+      <span class="history-title">Storico Chat</span>
+      <button class="btn ghost small" id="historyCloseBtn" type="button">✕</button>
+    </div>
+    <div class="history-list" id="historyList">
+      <div class="history-loading">Caricamento...</div>
+    </div>
+  </aside>
+
   <div class="app">
 
     <!-- BLOCCO 1: HEADER (54px) -->
@@ -26,6 +38,7 @@
           </div>
         </div>
         <div class="topbar-right">
+          <button class="btn ghost small" id="historyBtn" type="button" title="Storico chat">☰</button>
           <button class="btn ghost small" id="newChatBtn" type="button">+ Nuova</button>
           <div class="status-pill" id="statusPill">Pronto</div>
         </div>
