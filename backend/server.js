@@ -54,7 +54,7 @@ const FRONTEND_DIR = path.join(__dirname, "../frontend");
 const JSON_LIMIT = process.env.JSON_LIMIT || "12mb";
 const MULTIPART_FILE_MAX = 5 * 1024 * 1024; // 5MB
 const HISTORY_MAX = Number(process.env.HISTORY_MAX || 10);
-const SUMMARY_THRESHOLD = Number(process.env.SUMMARY_THRESHOLD || 14);
+const SUMMARY_THRESHOLD = Number(process.env.SUMMARY_THRESHOLD || 10);
 const PREFERRED_PROVIDER = (process.env.PREFERRED_PROVIDER || "openai").toLowerCase().trim();
 
 // Provider keys + modelli (trim anti newline)
@@ -416,8 +416,12 @@ async function generateContextSummary(convId, provider) {
     const msgs = r.rows || [];
     if (!msgs.length) return;
 
+    // Utenti: 500 chars — risposte AI: 1200 chars (catturano IPOTESI + VERIFICHE)
     const convText = msgs
-      .map(function (m) { return m.role.toUpperCase() + ": " + String(m.content || "").slice(0, 400); })
+      .map(function (m) {
+        const limit = (m.role === "user") ? 500 : 1200;
+        return m.role.toUpperCase() + ": " + String(m.content || "").slice(0, limit);
+      })
       .join("\n");
 
     const summaryPrompt =
@@ -433,14 +437,14 @@ async function generateContextSummary(convId, provider) {
         model: OPENAI_MODEL,
         messages: [{ role: "user", content: summaryPrompt }],
         temperature: 0.1,
-        max_tokens: 400,
+        max_tokens: 600,
       });
       summary = (completion && completion.choices && completion.choices[0] &&
                  completion.choices[0].message && completion.choices[0].message.content) || null;
     } else if (chosen === "anthropic" && anthropic) {
       const resp = await anthropic.messages.create({
         model: ANTHROPIC_MODEL,
-        max_tokens: 400,
+        max_tokens: 600,
         temperature: 0.1,
         messages: [{ role: "user", content: summaryPrompt }],
       });
