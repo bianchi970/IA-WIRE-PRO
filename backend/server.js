@@ -17,6 +17,7 @@ const { fetchKnowledgeContext, getLoadedKnowledge } = require("./knowledge");
 const { analyzeTechnicalRequest, formatDiagnosticContext, formatOfflineAnswer, TEST_CASE } = require("./engine/diagnosticEngine");
 const { normalizeCertainty } = require("./utils/certainty");
 const { extractComponents, formatComponents } = require("./rocco/componentRecognizer");
+const { extractElectricalValues, formatElectricalValues, checkAnomalies } = require("./rocco/numericRecognizer");
 // ✅ DB pool (protetto: non deve mai far crashare il server)
 let pool = null;
 try {
@@ -994,6 +995,29 @@ app.post("/api/chat", uploadAny, async (req, res) => {
         }
       } catch (e) {
         console.warn("⚠️ Component recognizer non disponibile:", (e && e.message) || e);
+      }
+
+      // Numeric Validation Engine (T4) — estrae valori tecnici per il contesto LLM
+      try {
+        const numVals = extractElectricalValues(message);
+        const numFormatted = formatElectricalValues(numVals);
+        const numWarnings = checkAnomalies(numVals);
+        if (numFormatted) {
+          engineText = (engineText ? engineText + "\n\n" : "") +
+            "VALORI TECNICI ESTRATTI DAL TESTO:\n" + numFormatted;
+        }
+        if (numWarnings.length > 0) {
+          engineText = (engineText ? engineText + "\n" : "") +
+            "⚠️ ANOMALIE RILEVATE: " + numWarnings.join("; ");
+          // Se c'è un'anomalia di tensione pericolosa, attiva safety lock
+          const hasDangerousVoltage = numWarnings.some(function (w) { return w.includes("MT/AT"); });
+          if (hasDangerousVoltage) {
+            systemPrompt = "⚠️ SAFETY LOCK — TENSIONE MT/AT RILEVATA: intervento VIETATO senza abilitazione PES/PAV (CEI 11-27).\n" +
+              "Indicare IMMEDIATAMENTE all'utente che si tratta di Media/Alta Tensione.\n\n" + systemPrompt;
+          }
+        }
+      } catch (e) {
+        console.warn("⚠️ Numeric recognizer non disponibile:", (e && e.message) || e);
       }
 
       // FASE 5 — Safety Lock: se condizione pericolosa, forza avviso in testa al system prompt
