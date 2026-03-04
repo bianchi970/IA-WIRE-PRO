@@ -17,23 +17,36 @@ const { buildQuestions } = require("./questionBuilder");
 const { patterns: basicPatterns } = require("./patterns/basicPatterns");
 
 /**
- * Esegue il pattern matching sui basicPatterns.
+ * Esegue il pattern matching sui basicPatterns con algoritmo best-match.
+ * Ogni pattern riceve un punteggio: somma delle lunghezze delle keyword matchate.
+ * Keyword più lunghe pesano di più → pattern specifici battono quelli generici.
  * @param {string} text
- * @returns {object|null} il primo pattern che fa match, oppure null
+ * @returns {object|null} il pattern con punteggio più alto, oppure null
  */
 function matchBasicPattern(text) {
   if (!text) return null;
   var t = String(text).toLowerCase();
+  var bestPattern = null;
+  var bestScore = 0;
+
   for (var i = 0; i < basicPatterns.length; i++) {
     var p = basicPatterns[i];
     if (!Array.isArray(p.keywords)) continue;
+    var score = 0;
     for (var j = 0; j < p.keywords.length; j++) {
-      if (t.indexOf(String(p.keywords[j]).toLowerCase()) >= 0) {
-        return p;
+      var kw = String(p.keywords[j]).toLowerCase();
+      if (t.indexOf(kw) >= 0) {
+        // keyword più lunghe valgono di più (peso = lunghezza keyword)
+        score += kw.length;
       }
     }
+    if (score > bestScore) {
+      bestScore = score;
+      bestPattern = p;
+    }
   }
-  return null;
+
+  return bestPattern;
 }
 
 /**

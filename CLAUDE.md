@@ -43,7 +43,7 @@ ia-wire-pro/
 │   ├── knowledge/       ← Base di conoscenza locale (no DB required)
 │   │   ├── components.json       ← 50 componenti elettrici con guasti tipici e field_checks
 │   │   ├── protection_rules.json ← 10 regole di protezione con risk_level e verification_steps
-│   │   ├── failure_patterns.json ← 23 pattern di guasto con symptom/causes/checks/confidence_logic
+│   │   ├── failure_patterns.json ← 30 pattern di guasto con symptom/causes/checks/confidence_logic
 │   │   └── safety_protocols.json ← 7 protocolli LOTO/isolamento/misura con stop_conditions
 │   ├── engine/          ← ROCCO diagnostic engine (pre-LLM)
 │   │   └── diagnosticEngine.js  ← analyzeTechnicalRequest() + SYNONYM_MAP + PAIR_BOOSTS + MATCH_THRESHOLD=3
@@ -51,7 +51,14 @@ ia-wire-pro/
 │   │   ├── index.js     ← plan() + buildSystemPrompt() (ROCCO v4 — domain hints, istruzioni precise)
 │   │   ├── policies.js  ← HARD_SAFETY_RULES (7), GOLDEN_RULES (14), BANNED_PHRASES (15)
 │   │   ├── postcheck.js ← Validates/injects sections, cleanSectionHeadings, warnEmptySections
-│   │   └── componentRecognizer.js ← extractComponents() + formatComponents() — 28 categorie
+│   │   ├── componentRecognizer.js ← extractComponents() + formatComponents() — 28 categorie
+│   │   ├── numericRecognizer.js  ← extractElectricalValues() V/A/mA/kV/IP
+│   │   ├── domainGuard.js        ← isOutOfScope() blocca MT/AT (20kV+)
+│   │   ├── scoringEngine.js      ← scoreHypotheses() ALTA>MEDIA>BASSA
+│   │   ├── questionBuilder.js    ← buildQuestions() max 3 per componente
+│   │   ├── engine.js             ← Foundation Engine pipeline (best-match 40 pattern)
+│   │   └── patterns/
+│   │       └── basicPatterns.js  ← 40 pattern BT civili/industriali
 │   ├── utils/           ← Utility condivise
 │   │   └── certainty.js ← normalizeCertainty() → ALTA | MEDIA | BASSA
 │   └── .env             ← dotenv loaded with path.join(__dirname, ".env")
@@ -148,7 +155,7 @@ Il valore viene salvato in `messages.certainty` e restituito nell'API response.
 `doc_chunks` table in PostgreSQL: columns `id, source, chunk_text, created_at`. Populated manually via `node backend/ingest.js` (idempotent — checks exact duplicates before inserting). `fetchDocChunks(query)` uses Italian FTS (`plainto_tsquery`) first; falls back to ILIKE on individual keywords (>3 chars) if FTS returns nothing. Top 3 chunks are formatted under `CONTESTO TECNICO DA MANUALE:` and injected as a separate system message (OpenAI) or appended to the system string (Anthropic). Response `rag` field now includes `usedDocChunks: boolean`. GIN index `idx_doc_chunks_fts` on `to_tsvector('italian', chunk_text)` for fast FTS.
 
 ### Context window + auto-summary (FASE 3)
-`HISTORY_MAX` (default 10, env override) controls how many messages are sent to the AI. When `conversation_id` is available, `/api/chat` loads the last 10 messages directly from DB (ignoring the frontend-supplied `history`). `SUMMARY_THRESHOLD` (default 14, env override): when a conversation reaches this many messages, `generateContextSummary()` runs fire-and-forget after each AI response, calls the AI to summarise the conversation in 5-8 technical bullet points, and stores it in `conversations.summary`. On the next chat turn the summary is prepended to the system prompt as `CONTESTO CONVERSAZIONE PRECEDENTE:`.
+`HISTORY_MAX` (default 10, env override) controls how many messages are sent to the AI. When `conversation_id` is available, `/api/chat` loads the last 10 messages directly from DB (ignoring the frontend-supplied `history`). `SUMMARY_THRESHOLD` (default 10, env override): when a conversation reaches this many messages, `generateContextSummary()` runs fire-and-forget after each AI response, calls the AI to summarise the conversation in 5-8 technical bullet points, and stores it in `conversations.summary`. On the next chat turn the summary is prepended to the system prompt as `CONTESTO CONVERSAZIONE PRECEDENTE:`.
 
 ### Frontend
 Pure ES5 vanilla JS (no `?.`, no `??`, no `replaceAll`) for maximum browser compatibility. Image compression via Canvas API: max 1800px, 0.85 JPEG quality. History capped at 10 messages sent to backend (fallback only — DB history takes priority server-side). `loadConversationOnStart()` fetches `/api/conversations/:id/messages` on page load.
