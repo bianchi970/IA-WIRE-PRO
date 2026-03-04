@@ -1093,8 +1093,9 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       }
 
       // Foundation Engine (domainGuard + basicPatterns + scoreHypotheses + questionBuilder)
+      let foundResult = null;
       try {
-        const foundResult = runFoundationEngine(message);
+        foundResult = runFoundationEngine(message);
         if (foundResult.outOfScope) {
           // Richiesta MT/AT fuori dominio — aggiunge safety lock prominente
           systemPrompt = "⚠️ SAFETY LOCK — RICHIESTA FUORI DOMINIO BT: " +
@@ -1201,6 +1202,12 @@ app.post("/api/chat", uploadAny, async (req, res) => {
         matchedComponents: engineDiag.matchedComponents,
         recognizedComponents: extractComponents(message),
       } : { active: false, recognizedComponents: extractComponents(message) },
+      foundation: foundResult && !foundResult.outOfScope ? {
+        patternId:  foundResult.patternId  || null,
+        components: foundResult.components || [],
+        anomalies:  foundResult.anomalies  || [],
+        outOfScope: false,
+      } : (foundResult && foundResult.outOfScope ? { outOfScope: true } : null),
     });
   } catch (err) {
     console.error("❌ /api/chat error:", err);

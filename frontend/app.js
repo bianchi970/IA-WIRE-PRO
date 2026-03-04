@@ -908,11 +908,28 @@ console.log('BRIDGE LIVE');
             removeTyping();
 
             var ans = ensureStructuredAnswer(data.answer || data.reply || "");
-            addMessage("ai", ans, {
+            var msgResult = addMessage("ai", ans, {
               provider: data.provider,
               model: data.model,
               fallback_used: !!data.fallback_used
             });
+
+            // ROCCO chip — mostra pattern/componenti rilevati dal Foundation Engine
+            if (data.foundation && !data.foundation.outOfScope && msgResult && msgResult.wrapper) {
+              var chipParts = [];
+              if (data.foundation.patternId) {
+                chipParts.push("⚡ " + String(data.foundation.patternId).replace(/_/g, " "));
+              }
+              if (data.foundation.components && data.foundation.components.length) {
+                chipParts.push("🔧 " + data.foundation.components.join(", "));
+              }
+              if (chipParts.length) {
+                var chip = document.createElement("div");
+                chip.className = "rocco-chip";
+                chip.textContent = chipParts.join("  ·  ");
+                msgResult.wrapper.appendChild(chip);
+              }
+            }
 
             pushHistory("assistant", ans);
 

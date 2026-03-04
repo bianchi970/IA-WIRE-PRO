@@ -459,6 +459,16 @@ button, label, [role="button"], a {
 .prov-fallback {
   color: rgba(255,140,66,0.70);
 }
+.rocco-chip {
+  font-size: 10px;
+  color: rgba(96,165,250,0.60);
+  margin-top: 3px;
+  padding-left: 4px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ===== BLOCCO 3: COMPOSER — sempre visibile ===== */
 .composer {
