@@ -416,7 +416,56 @@ var SYNONYM_MAP = {
   "mancanza fase":   "mancanza fase",
   "asimmetria":      "mancanza fase",
   "sequenza fasi":   "mancanza fase",
-  "fasimetro":       "mancanza fase"
+  "fasimetro":       "mancanza fase",
+  // PLC / CPU
+  "cpu":             "plc",
+  "controllore":     "plc",
+  "simatic":         "plc",
+  "tia":             "plc",
+  "step7":           "plc",
+  "unity":           "plc",
+  "zelio":           "plc",
+  "logo":            "plc",
+  "watchdog":        "watchdog",
+  // Cortocircuito
+  "corto circuito":  "cortocircuito",
+  "cc":              "cortocircuito",
+  "guasto franco":   "cortocircuito",
+  // Condensatore
+  "condensator":     "condensatore",
+  "cond":            "condensatore",
+  "capacitor":       "condensatore",
+  // Soft starter
+  "soft starter":    "soft starter",
+  "avviatore":       "soft starter",
+  "avviatore progressivo": "soft starter",
+  // Umidità/condensa
+  "condensa":        "umidita",
+  "umido":           "umidita",
+  "umidita":         "umidita",
+  "igrometro":       "umidita",
+  "anticondensa":    "umidita",
+  // Ronzio motore monofase
+  "ronza":           "ronzio",
+  "ronzio":          "ronzio",
+  "vibra":           "ronzio",
+  // Isolamento
+  "megohm":          "isolamento",
+  "megaohm":         "isolamento",
+  "isolamento":      "isolamento",
+  "megohmetro":      "isolamento",
+  // Wallbox / EV
+  "wallbox":         "wallbox",
+  "colonnina":       "wallbox",
+  "ev":              "wallbox",
+  "auto elettrica":  "wallbox",
+  "ricarica":        "wallbox",
+  // Eccitazione relè/contattore
+  "eccitare":        "eccita",
+  "eccita":          "eccita",
+  "eccitazione":     "eccita",
+  "non scatta":      "eccita",
+  "non chiude":      "eccita"
 };
 
 function applysynonyms(word) {
@@ -519,7 +568,42 @@ var PAIR_BOOSTS = [
   ["pannello",      "tensione"],
   ["sensore",       "npn"],
   ["sensore",       "pnp"],
-  ["finecorsa",     "attivo"]
+  ["finecorsa",     "attivo"],
+  // FP-17: cortocircuito
+  ["magnetoterm",   "scatta"],
+  ["cortocircuito", "linea"],
+  ["resistenza",    "zero"],
+  // FP-18: alimentatore switching
+  ["alimentatore",  "instabil"],
+  ["alimentatore",  "spento"],
+  ["alimentatore",  "oscilla"],
+  ["condensatori",  "degradati"],
+  // FP-19: PLC fault
+  ["plc",           "stop"],
+  ["plc",           "fault"],
+  ["plc",           "bloccat"],
+  ["watchdog",      "scaduto"],
+  ["cpu",           "errore"],
+  // FP-20: condensa
+  ["quadro",        "umido"],
+  ["quadro",        "condensa"],
+  ["pressacavi",    "aperto"],
+  ["guarnizione",   "rotta"],
+  // FP-21: motore monofase
+  ["motore",        "ronza"],
+  ["condensatore",  "guasto"],
+  ["avvolgimento",  "rotto"],
+  ["monofase",      "parte"],
+  // FP-22: RCD tipo errato
+  ["rcd",           "tipo"],
+  ["differenziale", "tipo"],
+  ["inverter",      "dispersione"],
+  ["wallbox",       "differenziale"],
+  // FP-23: relè 24V non eccita
+  ["rele",          "eccita"],
+  ["bobina",        "tensione"],
+  ["24v",           "bobina"],
+  ["contattore",    "eccita"]
 ];
 
 // Matching avanzato: stem+sinonimi + prefix matching bidirezionale
