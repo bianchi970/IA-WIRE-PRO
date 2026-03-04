@@ -566,13 +566,24 @@ app.get("/health", async (req, res) => {
   const activeModel = activeProvider === "openai" ? OPENAI_MODEL : activeProvider === "anthropic" ? ANTHROPIC_MODEL : null;
   const aiConnected = queue.length > 0;
 
+  // Conta knowledge base
+  let kbCounts = { components: 0, patterns: 0, rules: 0, protocols: 0 };
+  try {
+    const kb = getLoadedKnowledge();
+    kbCounts.components = (kb.components || []).length;
+    kbCounts.patterns   = (kb.failurePatterns || []).length;
+    kbCounts.rules      = (kb.protectionRules || []).length;
+    kbCounts.protocols  = (kb.safetyProtocols || []).length;
+  } catch (_) {}
+
   res.json({
     ok: true,
     time: new Date().toISOString(),
+    version: "ROCCO-v4",
     signature: "ROCCO-CHAT-V2",
     runningFile: "backend/server.js",
     strictFormat: STRICT_FORMAT,
-    db: { connected: dbOk, now: dbTime },
+    db: { connected: dbOk, serverTime: dbTime },
     ai: {
       connected: aiConnected,
       activeProvider: activeProvider,
@@ -587,6 +598,62 @@ app.get("/health", async (req, res) => {
       anthropic: ANTHROPIC_MODEL,
       openai: OPENAI_MODEL,
     },
+    knowledge: kbCounts,
+    modules: {
+      componentRecognizer: true,
+      numericRecognizer: true,
+      certaintyNormalizer: true,
+      postcheck: true,
+      rag: Boolean(pool),
+    },
+  });
+});
+
+// Endpoint informativo ROCCO — stato completo del sistema
+app.get("/api/info", (req, res) => {
+  let kbCounts = { components: 0, patterns: 0, rules: 0, protocols: 0 };
+  try {
+    const kb = getLoadedKnowledge();
+    kbCounts.components = (kb.components || []).length;
+    kbCounts.patterns   = (kb.failurePatterns || []).length;
+    kbCounts.rules      = (kb.protectionRules || []).length;
+    kbCounts.protocols  = (kb.safetyProtocols || []).length;
+  } catch (_) {}
+
+  const { TECH_REPORT_SECTIONS, HARD_SAFETY_RULES, GOLDEN_RULES, BANNED_PHRASES } = require("./rocco/policies");
+
+  res.json({
+    system: "IA Wire Pro — ROCCO Diagnostic Engine",
+    version: "4.0",
+    build: new Date().toISOString().split("T")[0],
+    engine: {
+      name: "ROCCO",
+      description: "Tecnico impiantistico AI — diagnosi strutturata pre-LLM + LLM",
+      domains: ["elettrico", "termico", "rete", "domotica", "idraulico"],
+      sections: TECH_REPORT_SECTIONS,
+      safetyRules: HARD_SAFETY_RULES.length,
+      goldenRules: GOLDEN_RULES.length,
+      bannedPhrases: BANNED_PHRASES.length,
+    },
+    knowledge: {
+      components: kbCounts.components,
+      failurePatterns: kbCounts.patterns,
+      protectionRules: kbCounts.rules,
+      safetyProtocols: kbCounts.protocols,
+    },
+    modules: {
+      componentRecognizer: "backend/rocco/componentRecognizer.js",
+      numericRecognizer: "backend/rocco/numericRecognizer.js",
+      certaintyNormalizer: "backend/utils/certainty.js",
+      postcheck: "backend/rocco/postcheck.js",
+      diagnosticEngine: "backend/engine/diagnosticEngine.js",
+    },
+    providers: {
+      primary: PREFERRED_PROVIDER,
+      openai: { configured: Boolean(openai), model: OPENAI_MODEL },
+      anthropic: { configured: Boolean(anthropic), model: ANTHROPIC_MODEL },
+    },
+    certaintyLevels: ["ALTA", "MEDIA", "BASSA"],
   });
 });
 
