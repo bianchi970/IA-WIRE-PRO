@@ -474,6 +474,210 @@
         "Non misurare i cicli al minuto e non quantificare il problema"
       ],
       "example_case": "Pompa autoclave da 1.1kW si avvia ogni 20 secondi. Cicli/minuto: 3. Pressione di start: 2 bar, stop: 2.5 bar. Differenziale: 0.5 bar (troppo stretto). Vaso espansione: rubinetto carica emette solo acqua — membrana rotta. Sostituzione vaso + regolazione pressostato a 1.5-3 bar: cicli scesi a 1 ogni 3 minuti."
+    },
+    {
+      "id": "FP-17",
+      "symptom": "Cortocircuito: magnetotermico scatta istantaneamente alla chiusura o all'avvio",
+      "likely_causes": [
+        "Cortocircuito franco tra fase e neutro o tra fase e terra sul cavo o sull'utenza",
+        "Condensatore di un motore in cortocircuito (avvolgimento monofase)",
+        "Terminazione cavo eseguita male: conduttori spellati si toccano nel morsetto o nella scatola",
+        "Fusibile NT della fase a monte già aperto: flusso squilibrato che appare come cortocircuito"
+      ],
+      "confidence_logic": [
+        "CONFERMATO cortocircuito franco: se la resistenza tra i conduttori è <1Ω con tester",
+        "PROBABILE cortocircuito nel carico: se la resistenza è <1Ω solo con il carico collegato",
+        "DA_VERIFICARE terminazione: se il cavo misura correttamente ma il MT scatta appena chiuso"
+      ],
+      "checks": [
+        "1) Scollegare completamente il cavo dal carico e dal quadro",
+        "2) Con multimetro: misurare resistenza L-N, L-PE, N-PE — deve essere >1MΩ per cavo integro",
+        "3) Misurare resistenza agli avvolgimenti del motore/carico: valore atteso >10Ω per kW",
+        "4) Ispezionare visivamente i morsetti in cerca di conduttori scopert che si toccano",
+        "5) Misurare la capacità del condensatore del motore: aperto = ∞, cortocircuitato = <1Ω",
+        "6) Se il cavo è integro e il carico è OK: sostituire il MT (potrebbe avere la bobina di scatto degradata)"
+      ],
+      "common_mistakes": [
+        "Resettare più volte il MT senza trovare la causa (rischio incendio)",
+        "Non scollegare il carico prima di misurare l'isolamento del cavo",
+        "Sostituire il MT con uno a corrente più alta per 'evitare' il problema"
+      ],
+      "example_case": "MT 16A curva C scatta istantaneamente. Cavo scollegato: resistenza L-N = 0.3Ω — cortocircuito sul cavo. Ispezione: cavo passante sotto un mobile con schiacciamento, isolamento abraso. Sostituzione cavo: MT non scatta più."
+    },
+    {
+      "id": "FP-18",
+      "symptom": "Alimentatore switching non eroga tensione o eroga tensione instabile/oscillante",
+      "likely_causes": [
+        "Sovraccarico: il carico assorbe più della corrente nominale dell'alimentatore (Imax superata)",
+        "Condensatori elettrolitici interni degradati (vita tipica 5-10 anni in ambienti caldi)",
+        "Ventola interna bloccata: surriscaldamento con protezione termica che interviene ciclicamente",
+        "Cortocircuito sul cavo di uscita o sul carico: protezione overcurrent limita la tensione"
+      ],
+      "confidence_logic": [
+        "CONFERMATO sovraccarico: se la tensione si abbassa sotto Vnom con carico pieno ma è OK a carico ridotto",
+        "CONFERMATO condensatori degradati: se la tensione ha un ripple >100mV misurato con oscilloscopio",
+        "PROBABILE surriscaldamento: se il problema scompare dopo raffreddamento e riapparisce sotto carico"
+      ],
+      "checks": [
+        "1) Misurare la tensione di uscita a carico zero: deve essere Vnom ±2%",
+        "2) Misurare la corrente assorbita dal carico con pinza amperometrica: non deve superare il 90% di Imax",
+        "3) Misurare il ripple AC sulla tensione DC con multimetro in AC: deve essere <50mV",
+        "4) Verificare la temperatura del dissipatore: non deve superare 60°C in condizioni normali",
+        "5) Collegare un carico noto (resistenza) e misurare la tensione di uscita sotto carico controllato",
+        "6) Scollegare tutti i carichi tranne uno: se la tensione torna normale, il problema è il carico o il dimensionamento"
+      ],
+      "common_mistakes": [
+        "Sostituire l'alimentatore senza verificare se il carico è in cortocircuito (il nuovo si guasta subito)",
+        "Non misurare la corrente effettiva e presumere che il carico sia nei limiti",
+        "Usare un alimentatore a corrente limite senza verificare la corrente di spunto dei carichi"
+      ],
+      "example_case": "Alimentatore 24VDC 5A per PLC: tensione scende a 18V con quadro in funzione. Corrente misurata: 5.8A — sovraccarico. Aggiunto un secondo alimentatore 24VDC 5A in parallelo (barre +/-). Tensione stabilizzata a 24.1V. Carico ripartito tra i due alimentatori."
+    },
+    {
+      "id": "FP-19",
+      "symptom": "PLC non risponde o CPU in STOP/FAULT — programma bloccato",
+      "likely_causes": [
+        "Watchdog scaduto: un ciclo scan del programma supera il tempo massimo configurato",
+        "Errore di indirizzo: accesso a un'area di memoria non configurata o fuori range",
+        "Alimentazione 24VDC instabile: il PLC si resetta per tensione fuori range",
+        "Batteria tampone scarica: programma e parametri persi dopo una mancanza di rete",
+        "Modulo I/O difettoso o cavo bus interrotto: errore hardware bloccante"
+      ],
+      "confidence_logic": [
+        "CONFERMATO alimentazione: se la tensione 24VDC oscilla o scende <22V",
+        "CONFERMATO watchdog: se il LED CPU lampeggia rosso e il log mostra 'Watchdog timeout'",
+        "DA_VERIFICARE hardware: se il LED di errore è su un modulo periferico specifico"
+      ],
+      "checks": [
+        "1) Leggere il codice di diagnostica dalla CPU (LED frontale: verde=OK, rosso=fault, giallo=stop)",
+        "2) Misurare la tensione di alimentazione 24VDC ai morsetti della CPU: range accettabile 20.4-28.8V",
+        "3) Controllare il log diagnostico tramite software (Step 7, TIA Portal, Unity, ecc.)",
+        "4) Misurare il ripple sull'alimentazione 24VDC con multimetro: deve essere <500mV",
+        "5) Rimuovere e reinserire i moduli I/O uno a uno per isolare il modulo difettoso",
+        "6) Verificare che la batteria tampone abbia tensione >2.5V (batteria AA o Litio secondo modello)"
+      ],
+      "common_mistakes": [
+        "Spegnere e riaccendere il PLC senza leggere prima il codice di diagnostica (si perde l'informazione)",
+        "Non fare il backup del programma prima di sostituire CPU o batteria",
+        "Cambiare la CPU senza verificare l'alimentazione (il problema si ripropone)"
+      ],
+      "example_case": "PLC Siemens S7-300 CPU 314 in STOP improvviso. LED SF rosso. Log TIA Portal: 'Watchdog exceeded'. Tempo ciclo scan configurato: 150ms. Ciclo effettivo: 230ms. Causa: nuovo blocco FB aggiunto con ciclo FOR su 10.000 iterazioni. Ottimizzato il codice: ciclo scan sceso a 85ms. PLC torna in RUN stabile."
+    },
+    {
+      "id": "FP-20",
+      "symptom": "Condensa o umidità nel quadro elettrico: apparecchiature umide, tracce di ruggine",
+      "likely_causes": [
+        "Pressacavi non stagni o aperture non chiuse: aria umida entra nel quadro durante sbalzi termici",
+        "Quadro installato in ambiente con umidità >80%: senza resistenza anticondensa",
+        "Guarnizioni perimetrali deteriorate: perdita della tenuta IP dichiarata",
+        "Differenza termica elevata notte/giorno: l'aria interna si raffredda e condensa sull'elettronica"
+      ],
+      "confidence_logic": [
+        "CONFERMATO ingresso aria: se i pressacavi non sono serrati o ci sono fori scoperti",
+        "CONFERMATO umidità ambiente: se l'igrometro locale misura >75% UR",
+        "PROBABILE guarnizioni: se il quadro è vecchio (>10 anni) e la guarnizione è secca/frantumata"
+      ],
+      "checks": [
+        "1) Ispezionare visivamente tutti i pressacavi: devono essere stretti e il gommino deve aderire al cavo",
+        "2) Misurare l'umidità relativa interna con igrometro: target <60% UR",
+        "3) Controllare le guarnizioni perimetrali: devono essere elastiche, senza crepe",
+        "4) Verificare la presenza e il funzionamento della resistenza anticondensa (10-20W tipicamente)",
+        "5) Misurare la resistenza di isolamento dei cavi con megohmetro 500V: deve essere >1MΩ",
+        "6) Verificare che i fori di passaggio cavi siano chiusi con materiale idoneo (schiuma, guarnizioni)"
+      ],
+      "common_mistakes": [
+        "Asciugare il quadro senza risolvere l'ingresso di umidità (il problema si ripresenta)",
+        "Installare una resistenza anticondensa in un quadro non ermetico (inutile senza tenuta)",
+        "Non misurare l'isolamento dopo un episodio di umidità (rischio cortocircuito latente)"
+      ],
+      "example_case": "Quadro pompe in pozzo: differenziale scatta ogni mattina. Ispezione: interno bagnato, ruggine sui morsetti. Pressacavi inferiori allentati + foro di passaggio cavi non chiuso. Intervento: serraggio pressacavi, chiusura fori con schiuma espansa, installazione resistenza anticondensa 20W con termostato. Problema risolto."
+    },
+    {
+      "id": "FP-21",
+      "symptom": "Motore monofase non si avvia o ronza senza girare",
+      "likely_causes": [
+        "Condensatore di avvio aperto o in cortocircuito: l'avvolgimento ausiliario non fornisce la coppia iniziale",
+        "Avvolgimento di avvio interrotto: resistenza infinita tra i morsetti dell'ausiliario",
+        "Motore inceppato meccanicamente: cuscinetti bloccati, carico inceppato",
+        "Tensione di alimentazione insufficiente: il motore non ha abbastanza coppia per avviarsi sotto carico"
+      ],
+      "confidence_logic": [
+        "CONFERMATO condensatore guasto: se la capacità misurata differisce >20% dalla taratura o è 0",
+        "CONFERMATO avvolgimento interrotto: se la resistenza del secondario è >infinito (OL sul multimetro)",
+        "PROBABILE blocco meccanico: se il rotore non gira manualmente anche senza tensione"
+      ],
+      "checks": [
+        "1) Scollegare l'alimentazione e verificare che il rotore giri manualmente (nessuna resistenza eccessiva)",
+        "2) Misurare la capacità del condensatore con capamitometro: confrontare con il valore targa (±10%)",
+        "3) Misurare la resistenza degli avvolgimenti principale e ausiliario (valori tipici 1-50Ω secondo potenza)",
+        "4) Misurare la tensione di alimentazione sotto carico: non deve scendere sotto il 90% della Vnom",
+        "5) Verificare la corrente assorbita durante il tentativo di avvio con pinza amperometrica (non deve superare In×6)",
+        "6) Sostituire il condensatore con uno dello stesso valore microfarad e stessa tensione nominale"
+      ],
+      "common_mistakes": [
+        "Sostituire il condensatore senza misurare prima gli avvolgimenti",
+        "Usare un condensatore con capacità diversa (altera la coppia e la corrente di avvio)",
+        "Non verificare il blocco meccanico prima di diagnosticare il guasto elettrico"
+      ],
+      "example_case": "Compressore monovite monofase 1.1kW: ronza e si ferma in 3-4 secondi. MT non scatta (I normale). Condensatore 25µF misurato: 8µF — gravemente degradato. Sostituzione con condensatore 25µF 400V: compressore si avvia regolarmente al primo tentativo."
+    },
+    {
+      "id": "FP-22",
+      "symptom": "Interruttore differenziale di tipo errato: scatti in presenza di inverter, VFD o carichi elettronici",
+      "likely_causes": [
+        "RCD tipo AC installato su circuito con carichi non lineari (inverter, switching): non intercetta correnti DC pulsanti",
+        "RCD tipo A non sufficiente per inverter trifase o wallbox: servono tipo B (intercetta DC liscio)",
+        "Soglia 30mA troppo bassa per la somma delle correnti di dispersione dei carichi EMC filtrati",
+        "RCD istantaneo su impianto con spike di commutazione: serve RCD selettivo tipo G o S"
+      ],
+      "confidence_logic": [
+        "CONFERMATO tipo errato: se l'RCD tipo AC scatta con inverter e non scatta dopo sostituzione con tipo A",
+        "PROBABILE soglia: se la somma delle correnti di fuga dichiarate dai costruttori supera 10mA (metà soglia RCD)",
+        "DA_VERIFICARE: misurare la corrente di dispersione con pinza differenziale (clamp sui conduttori attivi)"
+      ],
+      "checks": [
+        "1) Leggere il tipo di RCD installato (tipo AC / A / F / B stampato sul corpo del dispositivo)",
+        "2) Identificare il tipo di carico: inverter monofase = tipo A minimo, trifase = tipo B",
+        "3) Misurare la corrente di dispersione con pinza differenziale (clamp su tutti i conduttori attivi)",
+        "4) Sommare le correnti di fuga dichiarate in tabella tecnica di ogni utenza collegata",
+        "5) Se la somma supera 10mA: suddividere il circuito o usare RCD a soglia più alta (300mA) a monte + RCD 30mA a valle per singoli circuiti",
+        "6) Verificare se il produttore del VFD specifica il tipo di RCD da usare (spesso tipo B o filtro EMC dedicato)"
+      ],
+      "common_mistakes": [
+        "Sostituire il RCD 30mA con uno da 300mA perdendo la protezione personale",
+        "Installare un RCD tipo A su wallbox o inverter fotovoltaico senza verificare il manuale",
+        "Non considerare la somma delle correnti di dispersione di tutti i carichi"
+      ],
+      "example_case": "Quadro pompe industriale: RCD tipo AC 25A 30mA scatta ogni volta che si avvia il VFD 7.5kW. Sostituzione con RCD tipo B 25A 30mA: nessun scatto. Corrente di dispersione misurata durante avvio: picco di 12mA (componente DC pulsante non intercettata da tipo AC)."
+    },
+    {
+      "id": "FP-23",
+      "symptom": "Relè di controllo (24VDC) non si eccita o non mantiene l'eccitazione",
+      "likely_causes": [
+        "Tensione bobina assente o fuori range: alimentatore 24VDC scarico o cavo interrotto",
+        "Bobina relè in cortocircuito o aperta: resistenza anormale misurata ai morsetti A1-A2",
+        "Contatto di autoalimentazione (latch) interrotto: il relè si eccita ma non si mantiene",
+        "Segnale di comando dal PLC o da scheda assente: uscita digitale del PLC in fault o non configurata"
+      ],
+      "confidence_logic": [
+        "CONFERMATO tensione assente: se ai morsetti A1-A2 misuro 0V con comando attivo",
+        "CONFERMATO bobina guasta: se la resistenza bobina è <10Ω o >infinito rispetto al valore nominale",
+        "PROBABILE segnale PLC: se l'uscita digitale del PLC non commuta nonostante il programma lo ordini"
+      ],
+      "checks": [
+        "1) Misurare la tensione ai morsetti A1-A2 del relè durante il comando: deve essere 24VDC ±10%",
+        "2) Con relè scollegato: misurare la resistenza della bobina (tipicamente 150-800Ω per relè 24VDC)",
+        "3) Verificare il cavo di comando: continuità dal PLC o dal contatto di controllo al morsetto A1",
+        "4) Verificare il contatto di autoalimentazione (se previsto): deve chiudersi quando il relè si eccita",
+        "5) Misurare la tensione sull'uscita digitale del PLC con il programma in comando",
+        "6) Verificare che l'alimentatore 24VDC abbia tensione stabile sotto carico (>22V)"
+      ],
+      "common_mistakes": [
+        "Misurare la tensione solo a riposo senza attivare il comando (ovvio che è 0V)",
+        "Sostituire il relè senza verificare se il segnale di comando arriva",
+        "Non considerare che il PLC potrebbe avere l'uscita in fault o in STOP"
+      ],
+      "example_case": "Relè 24VDC per apertura elettroserratura non si eccita. Tensione A1-A2 con comando attivo: 24.2VDC — OK. Resistenza bobina: OL (open) — bobina rotta. Sostituzione relè: funzionamento ripristinato."
     }
   ]
 }
