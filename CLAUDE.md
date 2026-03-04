@@ -43,19 +43,24 @@ ia-wire-pro/
 │   ├── knowledge/       ← Base di conoscenza locale (no DB required)
 │   │   ├── components.json       ← 50 componenti elettrici con guasti tipici e field_checks
 │   │   ├── protection_rules.json ← 10 regole di protezione con risk_level e verification_steps
-│   │   ├── failure_patterns.json ← 16 pattern di guasto con symptom/causes/checks/confidence_logic
+│   │   ├── failure_patterns.json ← 23 pattern di guasto con symptom/causes/checks/confidence_logic
 │   │   └── safety_protocols.json ← 7 protocolli LOTO/isolamento/misura con stop_conditions
 │   ├── engine/          ← ROCCO diagnostic engine (pre-LLM)
-│   │   └── diagnosticEngine.js  ← analyzeTechnicalRequest() + formatOfflineAnswer() + MATCH_THRESHOLD=3
+│   │   └── diagnosticEngine.js  ← analyzeTechnicalRequest() + SYNONYM_MAP + PAIR_BOOSTS + MATCH_THRESHOLD=3
 │   ├── rocco/           ← IA pipeline module
-│   │   ├── index.js     ← plan() + buildSystemPrompt() + buildUserPayload()
-│   │   ├── policies.js  ← HARD_SAFETY_RULES, GOLDEN_RULES, TECH_REPORT_SECTIONS
-│   │   └── postcheck.js ← Validates/injects missing sections in AI output
+│   │   ├── index.js     ← plan() + buildSystemPrompt() (ROCCO v4 — domain hints, istruzioni precise)
+│   │   ├── policies.js  ← HARD_SAFETY_RULES (7), GOLDEN_RULES (14), BANNED_PHRASES (15)
+│   │   ├── postcheck.js ← Validates/injects sections, cleanSectionHeadings, warnEmptySections
+│   │   └── componentRecognizer.js ← extractComponents() + formatComponents() — 28 categorie
+│   ├── utils/           ← Utility condivise
+│   │   └── certainty.js ← normalizeCertainty() → ALTA | MEDIA | BASSA
 │   └── .env             ← dotenv loaded with path.join(__dirname, ".env")
 └── frontend/
-    ├── app.js           ← Vanilla JS IIFE, no framework
-    ├── index.html
-    └── style.css
+    ├── app.js           ← Vanilla JS IIFE, no framework, PWA SW registration
+    ├── index.html       ← viewport-fit=cover, manifest, apple-mobile-web-app-*
+    ├── style.css        ← safe-area-inset, touch targets 44px, typing dots animation
+    ├── manifest.json    ← PWA manifest (standalone, theme #071326)
+    └── service-worker.js ← Cache-first static, network-only /api/, offline fallback
 ```
 
 ## Key Architectural Decisions
@@ -109,8 +114,32 @@ PostgreSQL full-text search (`plainto_tsquery('italian', ...)`) over `components
 ### Routing multi-IA + fallback (FASE 6)
 `buildProviderQueue(requested)` ritorna la coda ordinata dei provider disponibili. Il primario è determinato da `PREFERRED_PROVIDER` env (default `"openai"`) oppure dalla richiesta esplicita del frontend (`provider: "anthropic"`). Se il provider primario lancia eccezione (rate limit, errore rete, quota) il sistema ritenta automaticamente con il secondario. La risposta include `fallback_used: boolean`. Helper di chiamata isolati: `callOpenAI()` e `callAnthropic()`. Env var opzionale: `PREFERRED_PROVIDER=openai|anthropic`.
 
-### certainty extraction
-`extractCertainty(answer)` parses `LIVELLO DI CERTEZZA:` from the answer text and maps to one of: `Confermato | Probabile | Non verificabile`. Saved in `messages.certainty`. Requires server restart to take effect after code changes.
+### certainty extraction (T1 — aggiornato)
+`extractCertainty(answer)` in `server.js` chiama `normalizeCertainty()` da `backend/utils/certainty.js`.
+Mappa qualsiasi valore verso: `ALTA | MEDIA | BASSA`.
+- ALTA: confermato, probabile, molto probabile, alta
+- MEDIA: media, possibile, non verificabile, da_verificare (default)
+- BASSA: bassa, improbabile
+Il valore viene salvato in `messages.certainty` e restituito nell'API response.
+
+### Component Recognition Engine (T3)
+`backend/rocco/componentRecognizer.js` — `extractComponents(text)`:
+- 28 categorie di componenti elettrici/impiantistici
+- Keyword matching con padding spazi per evitare falsi positivi su sigle corte (ta, tv, mt, mcb)
+- Integrato in `server.js`: aggiunge i componenti riconosciuti all'`engineText` passato all'LLM
+- Risposta API include `engine.recognizedComponents[]`
+
+### ROCCO v4 (rocco/index.js)
+- Persona potenziata: 25 anni esperienza, tecnico diretto e pratico
+- Domain hints per ogni dominio (CEI 64-8, UNI, IEEE 802.3, ecc.)
+- Classificazione domini ampliata (50+ keyword)
+- 7 HARD_SAFETY_RULES, 14 GOLDEN_RULES, 15 BANNED_PHRASES
+
+### Knowledge Base locale (aggiornata)
+- `failure_patterns.json`: 23 pattern (FP-01 → FP-23)
+- `components.json`: 50 componenti
+- `protection_rules.json`: 10 regole
+- `safety_protocols.json`: 7 protocolli
 
 ### Enciclopedia tecnica components/issues (FASE 5)
 `components` e `issues` sono tabelle PostgreSQL pre-esistenti NON gestite da schema.sql. Vengono create (se assenti) e popolate da `backend/ingest_encyclopedia.js`, che legge `backend/data/encyclopedia.json` (15 componenti, ~42 guasti, 5 domini: protezione, riscaldamento, rete, domotica, idraulica/sicurezza). La chiave di deduplicazione è `(name, brand, model)` per components e `(component_id, title)` per issues. Il RAG `fetchEncyclopediaContext()` già in `server.js` interroga queste tabelle con FTS italiano e inietta il contesto nel system prompt come `CONTESTO TECNICO (DAL DB INTERNO IA WIRE PRO):`.
