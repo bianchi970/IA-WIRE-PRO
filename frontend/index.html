@@ -47,15 +47,22 @@
 
     <!-- BLOCCO 2: CHAT — unica area scrollabile -->
     <div class="chat-container" id="chat">
-      <div class="msg ai">
-        <div class="bubble">Ciao! 👋
-1) Scrivi il problema in modo pratico (cosa succede + quando).
-2) Se puoi, carica una foto nitida (📷 in basso a sinistra).
-
-Rispondo sempre con:
-• Osservazioni (fatti)
-• Ipotesi (con livello di certezza)
-• Verifiche consigliate (passo passo)</div>
+      <div class="msg ai" id="welcomeMsg">
+        <div class="bubble bubble-formatted">
+          <div class="rline" style="margin-top:0"><strong class="sec-head" style="margin-top:0">ROCCO — Tecnico Impiantistico AI</strong></div>
+          <div class="rline">Descrivi il problema: <strong>cosa succede</strong>, <strong>quando</strong> e su quale impianto.</div>
+          <div class="rline rline-bullet"><span class="bullet-dot">•</span><span>Foto del quadro o del componente? Caricala con 📷</span></div>
+          <div class="rline rline-bullet"><span class="bullet-dot">•</span><span>Marca/modello e misure già effettuate? Scrivile</span></div>
+          <div class="rline rline-bullet"><span class="bullet-dot">•</span><span>Ricevo risposta strutturata: osservazioni, ipotesi con certezza, verifiche paso passo</span></div>
+          <div id="suggestionChips" class="suggestion-chips">
+            <button class="chip" type="button" data-text="Il differenziale scatta appena richiuso. Linea cucina 16A.">⚡ Differenziale scatta</button>
+            <button class="chip" type="button" data-text="Il motore trifase non si avvia. Il contattore si chiude ma il motore non gira.">⚙️ Motore non parte</button>
+            <button class="chip" type="button" data-text="Il magnetotermico scatta dopo pochi minuti di funzionamento. È caldo al tatto.">🌡️ MT si surriscalda</button>
+            <button class="chip" type="button" data-text="L'inverter mostra un codice di errore. Qual è il guasto?">📟 Errore inverter</button>
+            <button class="chip" type="button" data-text="La caldaia non si accende. Mi appare un codice di errore sul display.">🔥 Caldaia non parte</button>
+            <button class="chip" type="button" data-text="Il relè 24VDC non si eccita nonostante arrivi tensione sulla bobina A1-A2.">🔌 Relè non eccita</button>
+          </div>
+        </div>
       </div>
     </div>
 

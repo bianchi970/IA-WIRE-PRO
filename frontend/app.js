@@ -261,7 +261,8 @@ console.log('BRIDGE LIVE');
     }
     if (textInput) { textInput.disabled = false; textInput.value = ""; autoResize(); }
     if (imageInput) imageInput.disabled = false;
-    addMessage("ai", "Nuova conversazione avviata. Descrivi il problema.");
+    addMessage("ai", "Nuova conversazione avviata. Descrivi il problema tecnico.");
+    // Ripristina i chip nel messaggio di benvenuto (non è più visibile — non serve)
   }
 
   // ✅ History helpers
@@ -637,6 +638,23 @@ console.log('BRIDGE LIVE');
   if (historyBtn) historyBtn.addEventListener("click", openHistoryPanel);
   if (historyCloseBtn) historyCloseBtn.addEventListener("click", closeHistoryPanel);
   if (historyOverlay) historyOverlay.addEventListener("click", closeHistoryPanel);
+
+  // ===== SUGGESTION CHIPS =====
+  var chips = document.querySelectorAll(".chip");
+  for (var ci = 0; ci < chips.length; ci++) {
+    (function (chip) {
+      chip.addEventListener("click", function () {
+        var text = chip.getAttribute("data-text");
+        if (!text || !textInput) return;
+        textInput.value = text;
+        autoResize();
+        textInput.focus();
+        // Rimuove i chip dopo il click (il messaggio di benvenuto rimane)
+        var chipsEl = document.getElementById("suggestionChips");
+        if (chipsEl) chipsEl.style.display = "none";
+      });
+    })(chips[ci]);
+  }
 
   // ====== EVENTS ======
   if (textInput) {
