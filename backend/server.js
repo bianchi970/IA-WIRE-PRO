@@ -18,6 +18,7 @@ const { analyzeTechnicalRequest, formatDiagnosticContext, formatOfflineAnswer, T
 const { normalizeCertainty } = require("./utils/certainty");
 const { extractComponents, formatComponents } = require("./rocco/componentRecognizer");
 const { extractElectricalValues, formatElectricalValues, checkAnomalies } = require("./rocco/numericRecognizer");
+const { runFoundationEngine } = require("./rocco/engine");
 // ✅ DB pool (protetto: non deve mai far crashare il server)
 let pool = null;
 try {
@@ -1089,6 +1090,23 @@ app.post("/api/chat", uploadAny, async (req, res) => {
         }
       } catch (e) {
         console.warn("⚠️ Numeric recognizer non disponibile:", (e && e.message) || e);
+      }
+
+      // Foundation Engine (domainGuard + basicPatterns + scoreHypotheses + questionBuilder)
+      try {
+        const foundResult = runFoundationEngine(message);
+        if (foundResult.outOfScope) {
+          // Richiesta MT/AT fuori dominio — aggiunge safety lock prominente
+          systemPrompt = "⚠️ SAFETY LOCK — RICHIESTA FUORI DOMINIO BT: " +
+            "La richiesta riguarda Media/Alta Tensione. IA Wire Pro gestisce SOLO impianti BT 230/400V.\n" +
+            "Comunicare all'utente che è necessario un tecnico abilitato (CEI 11-27 PES/PAV).\n\n" + systemPrompt;
+        } else if (foundResult.formattedContext) {
+          // Aggiunge analisi Foundation Engine al contesto (basicPatterns + domande)
+          engineText = (engineText ? engineText + "\n\n" : "") +
+            "ANALISI FOUNDATION ENGINE:\n" + foundResult.formattedContext;
+        }
+      } catch (e) {
+        console.warn("⚠️ Foundation Engine non disponibile:", (e && e.message) || e);
       }
 
       // FASE 5 — Safety Lock: se condizione pericolosa, forza avviso in testa al system prompt
