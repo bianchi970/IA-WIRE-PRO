@@ -3,10 +3,11 @@
  * Node + Express + (Anthropic / OpenAI) + Multer + Static Frontend + Postgres (Enciclopedia)
  */
 
-const path = require("path");
+const path   = require("path");
+const logger = require("./logger");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 if (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
-  console.warn("Warning: no AI API key configured");
+  logger.warn("no AI API key configured");
 }
 
 const express = require("express");
@@ -1401,7 +1402,7 @@ app.post("/api/admin/upload-pdf", requireAdmin, uploadAny, async (req, res) => {
 
     res.json({ ok: true, pages: data.numpages, chunks: chunks.length, inserted, skipped });
   } catch (err) {
-    console.error("❌ /api/admin/upload-pdf error:", err);
+    logger.error("/api/admin/upload-pdf error: " + err.message);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -1423,7 +1424,7 @@ app.use((req, res, next) => {
 
 // Error handler
 app.use((err, req, res, next) => {
-  console.error("SERVER ERROR:", err);
+  logger.error("SERVER ERROR: " + (err && err.message ? err.message : String(err)));
   res.status(500).json({ error: err.message || "Internal Server Error" });
 });
 
@@ -1457,8 +1458,8 @@ app.listen(PORT, () => {
       "╚══════════════════════════════════════╝\n"
   );
   // FASE 7 — Console Validation
-  console.log("ROCCO ENGINE: ACTIVE");
-  console.log(
+  logger.info("ROCCO ENGINE: ACTIVE");
+  logger.info(
     "KNOWLEDGE ITEMS: " +
     _knowledgeCounts.components + " components, " +
     _knowledgeCounts.patterns + " failure_patterns, " +
@@ -1471,20 +1472,20 @@ app.listen(PORT, () => {
     pool.query("SELECT COUNT(*) AS n FROM doc_chunks").then(function (res) {
       var n = parseInt((res.rows[0] && res.rows[0].n) || "0", 10);
       if (n === 0) {
-        console.log("🔄 doc_chunks vuoto — avvio ingest automatico...");
+        logger.info("doc_chunks vuoto — avvio ingest automatico...");
         var { execFile } = require("child_process");
         execFile("node", [path.join(__dirname, "ingest.js")], function (err, stdout) {
           if (err) {
-            console.warn("⚠️ Auto-ingest fallito:", err.message);
+            logger.warn("Auto-ingest fallito: " + err.message);
           } else {
-            console.log("✅ Auto-ingest completato.\n" + (stdout || "").trim());
+            logger.info("Auto-ingest completato.\n" + (stdout || "").trim());
           }
         });
       } else {
-        console.log("DOC CHUNKS: " + n + " chunk disponibili nel RAG");
+        logger.info("DOC CHUNKS: " + n + " chunk disponibili nel RAG");
       }
     }).catch(function (e) {
-      console.warn("⚠️ doc_chunks check fallito:", e.message);
+      logger.warn("doc_chunks check fallito: " + e.message);
     });
   }
 });
