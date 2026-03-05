@@ -1368,6 +1368,44 @@ app.delete("/api/admin/conversations/:id", requireAdmin, async (req, res) => {
   }
 });
 
+// POST /api/admin/upload-pdf — carica un PDF e lo inserisce in doc_chunks (protetto)
+app.post("/api/admin/upload-pdf", requireAdmin, uploadAny, async (req, res) => {
+  if (!pool) return res.status(503).json({ ok: false, error: "DB non disponibile" });
+
+  const file = Array.isArray(req.files) ? req.files.find((f) => f.mimetype === "application/pdf" || f.originalname.endsWith(".pdf")) : null;
+  if (!file) return res.status(400).json({ ok: false, error: "Nessun file PDF ricevuto (campo: pdf)" });
+
+  let pdfParse;
+  try { pdfParse = require("pdf-parse"); } catch (e) {
+    return res.status(500).json({ ok: false, error: "pdf-parse non installato sul server" });
+  }
+
+  try {
+    const { chunkText } = require("./ingest_pdf");
+    const data = await pdfParse(file.buffer);
+    const sourceName = req.body.source || file.originalname;
+    const chunks = chunkText(data.text, sourceName);
+
+    let inserted = 0, skipped = 0;
+    const client = await pool.connect();
+    try {
+      for (const chunk of chunks) {
+        const ex = await client.query("SELECT id FROM doc_chunks WHERE source=$1 AND chunk_text=$2 LIMIT 1", [chunk.source, chunk.chunk_text]);
+        if (ex.rowCount > 0) { skipped++; continue; }
+        await client.query("INSERT INTO doc_chunks (source, chunk_text) VALUES ($1,$2)", [chunk.source, chunk.chunk_text]);
+        inserted++;
+      }
+    } finally {
+      client.release();
+    }
+
+    res.json({ ok: true, pages: data.numpages, chunks: chunks.length, inserted, skipped });
+  } catch (err) {
+    console.error("❌ /api/admin/upload-pdf error:", err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // =========================
 // STATIC FRONTEND + SPA FALLBACK (alla fine)
 // =========================
