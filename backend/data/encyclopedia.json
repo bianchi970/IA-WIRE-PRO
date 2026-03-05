@@ -915,6 +915,200 @@
           "certainty_logic": "Confermato batteria scarica se accompagnato da bip sonoro intermittente"
         }
       ]
+    },
+    {
+      "category": "protezione",
+      "name": "Scaricatore di sovratensione T2 40kA",
+      "type": "SPD",
+      "brand": "Phoenix Contact",
+      "model": "VAL-MS 230",
+      "technical_specs": { "Imax": "40kA", "In": "20kA", "Up": "1.5kV", "Uc": "275V", "poli": 1 },
+      "issues": [
+        {
+          "title": "Indicatore di guasto rosso (cartuccia esaurita)",
+          "symptoms": ["finestra di ispezione rossa o verde assente", "LED di stato spento", "cartuccia non si reinserisce"],
+          "probable_causes": ["impulso di sovratensione ha scaricato la cartuccia", "scaricatore a fine vita (>10 anni)", "cortocircuito interno"],
+          "tests": ["ispezionare visivamente la finestra colorata", "misurare continuità tra L e N con cartuccia estratta: deve essere aperta", "sostituire la cartuccia e verificare che non scatti subito il fusibile a monte"],
+          "fixes": ["sostituire la cartuccia SPD (stessa classe T2)", "se il fusibile a monte salta: verificare cortocircuito nel cablaggio"],
+          "certainty_logic": "Confermato guasto se finestra rossa e/o cartuccia non si inserisce"
+        },
+        {
+          "title": "SPD causa scatto continuо del differenziale",
+          "symptoms": ["differenziale scatta appena richiuso", "problema si risolve scollegando il filo di terra dello SPD"],
+          "probable_causes": ["corrente di dispersione SPD >30mA verso PE (normale ma eccessiva per il diff installato)", "SPD danneggiato con perdita verso terra"],
+          "tests": ["misurare la corrente di dispersione con pinza clamp attorno ai cavi L+N dello SPD", "sostituire temporaneamente il differenziale con tipo A o selettivo"],
+          "fixes": ["installare differenziale selettivo (tipo S) a monte dello SPD", "sostituire SPD se in cortocircuito verso PE"],
+          "certainty_logic": "Probabile se il differenziale smette di scattare scollegando il PE dello SPD"
+        }
+      ]
+    },
+    {
+      "category": "riscaldamento",
+      "name": "Termostato digitale da incasso 230V",
+      "type": "THERMOSTAT",
+      "brand": "Siemens",
+      "model": "RDH10RF",
+      "technical_specs": { "tensione": "230V", "corrente_max": "8A", "display": "LCD", "comunicazione": "RF" },
+      "issues": [
+        {
+          "title": "Display spento o schermo bianco",
+          "symptoms": ["display completamente spento", "schermo illuminato ma senza testo", "non risponde ai tasti"],
+          "probable_causes": ["alimentazione 230V assente o interrotta", "fusibile interno bruciato", "guasto al display LCD"],
+          "tests": ["misurare tensione 230V sui morsetti L-N del termostato", "verificare continuità del fusibile interno (se accessibile)", "fare reset factory (tenere tasto MODE 10s)"],
+          "fixes": ["ripristinare alimentazione o sostituire fusibile a monte", "sostituire il termostato se display guasto"],
+          "certainty_logic": "Confermato mancanza alimentazione se 230V assente ai morsetti"
+        },
+        {
+          "title": "Caldaia non si accende nonostante set-point raggiunto",
+          "symptoms": ["termostato mostra temperatura richiesta ma caldaia non parte", "contatto uscita non si chiude"],
+          "probable_causes": ["contatto relè interno usurato o aperto", "polarità cablaggio invertita", "modalità vacanza attiva"],
+          "tests": ["cortocircuitare i morsetti di uscita del termostato: se la caldaia parte, il guasto è nel termostato", "verificare modalità sul display (icona casetta/luna)"],
+          "fixes": ["sostituire il termostato", "verificare e correggere il cablaggio"],
+          "certainty_logic": "Confermato guasto relè se corto dei morsetti fa partire la caldaia"
+        }
+      ]
+    },
+    {
+      "category": "riscaldamento",
+      "name": "Resistenza elettrica industriale a cartuccia 1kW",
+      "type": "HEATING_ELEMENT",
+      "brand": "Vulcanic",
+      "model": "CR-1000-230",
+      "technical_specs": { "potenza": "1kW", "tensione": "230V", "corrente": "4.35A", "temperatura_max": "300°C" },
+      "issues": [
+        {
+          "title": "Resistenza bruciata (circuito aperto)",
+          "symptoms": ["nessun calore prodotto", "corrente assente misurando in AC", "resistenza ohmmetro → infinita"],
+          "probable_causes": ["surriscaldamento per mancanza di fluido/contatto termico", "impulso di sovratensione", "fine vita (>5000h)"],
+          "tests": ["misurare resistenza ohmica a freddo (attesa): deve corrispondere a V²/P = 52.9Ω per 1kW 230V", "ispezione visiva: ossidazione eccessiva o deformazione"],
+          "fixes": ["sostituire la cartuccia con stessa potenza e tensione", "verificare e ripristinare il contatto termico prima di inserire la nuova resistenza"],
+          "certainty_logic": "Confermato guasto se resistenza ohmmetro è ∞ o >10× il valore nominale"
+        }
+      ]
+    },
+    {
+      "category": "rete",
+      "name": "Switch PoE 8 porte Gigabit",
+      "type": "POE_SWITCH",
+      "brand": "TP-Link",
+      "model": "TL-SG1008P",
+      "technical_specs": { "porte": 8, "PoE_budget": "53W", "standard_PoE": "IEEE 802.3af/at", "velocita": "1Gbps" },
+      "issues": [
+        {
+          "title": "Dispositivo PoE non si alimenta (LED porta spento)",
+          "symptoms": ["IP camera o AP non si accendono", "LED porta verde assente", "switch raggiungibile da altri dispositivi"],
+          "probable_causes": ["budget PoE esaurito (>53W totali)", "dispositivo richiede PoE+ (at) ma switch fornisce solo af", "cavo Cat5e non adatto o tropo lungo (>100m)", "porta PoE guasta"],
+          "tests": ["verificare consumo totale PoE da interfaccia web switch", "testare con cavo corto (<5m) e dispositivo noto", "spostare il dispositivo su un'altra porta"],
+          "fixes": ["ridurre il numero di dispositivi PoE o aggiungere injector esterno", "sostituire switch con budget PoE maggiore", "sostituire il cavo se >100m o Cat3/Cat4"],
+          "certainty_logic": "Confermato budget PoE esaurito se altri dispositivi smettono di funzionare aggiungendo nuovi"
+        },
+        {
+          "title": "Velocità di rete ridotta (100Mbps invece di 1Gbps)",
+          "symptoms": ["trasferimento file lento", "interfaccia web mostra link speed 100Mbps", "LED porta verde (non giallo/arancione)"],
+          "probable_causes": ["cavo Cat5e con coppie danneggiate", "connettore RJ45 ossidato o mal crimpato", "scheda NIC del dispositivo a valle limitata a 100Mbps"],
+          "tests": ["testare con cavo certificato Cat6 su tratta corta", "verificare specifiche NIC del dispositivo a valle", "controllare wiring con tester di cavo (verifica delle 8 coppie)"],
+          "fixes": ["sostituire il cavo o ricrimpare il connettore", "se la NIC è il limite: accettare 100Mbps o sostituire il dispositivo"],
+          "certainty_logic": "Probabile cavo difettoso se cambio cavo ripristina 1Gbps"
+        }
+      ]
+    },
+    {
+      "category": "rete",
+      "name": "Access Point WiFi 6 (802.11ax) PoE",
+      "type": "ACCESS_POINT",
+      "brand": "Ubiquiti",
+      "model": "UniFi U6-Lite",
+      "technical_specs": { "standard": "802.11ax", "bande": "2.4GHz+5GHz", "PoE": "802.3af", "potenza_PoE": "12W" },
+      "issues": [
+        {
+          "title": "AP non si adotta al controller (LED lampeggia bianco)",
+          "symptoms": ["LED bianco lampeggiante in modo continuo", "non visibile nel controller UniFi", "SSID non broadcast"],
+          "probable_causes": ["IP controller non raggiungibile dall'AP", "AP su firmware diverso incompatibile", "AP già associato a un altro controller"],
+          "tests": ["SSH sull'AP (ubnt/ubnt) e pingare l'IP del controller", "verificare VLAN di management", "eseguire factory reset (tasto reset 10s)"],
+          "fixes": ["configurare il server inform: set-inform http://<IP_CONTROLLER>:8080/inform", "aggiornare il firmware da SSH", "fare factory reset e readottare"],
+          "certainty_logic": "Confermato problema di adozione se il set-inform risolve il LED"
+        }
+      ]
+    },
+    {
+      "category": "domotica",
+      "name": "Attuatore KNX 4 canali 16A",
+      "type": "KNX_ACTUATOR",
+      "brand": "Schneider Electric",
+      "model": "MTN6730-0004",
+      "technical_specs": { "bus": "KNX/EIB", "canali": 4, "corrente_per_canale": "16A", "tensione_bus": "29V DC" },
+      "issues": [
+        {
+          "title": "Attuatore non risponde ai telegrammi KNX",
+          "symptoms": ["carichi non si accendono da switch KNX", "LED bus assente o rosso", "nessuna risposta in ETS monitoring"],
+          "probable_causes": ["alimentazione bus 29V assente (alimentatore KNX guasto)", "indirizzo fisico non programmato o conflitto", "condensatore di accoppiamento bus danneggiato"],
+          "tests": ["misurare tensione sul bus KNX (morsetti + e -): deve essere 29V±1V", "controllare in ETS se l'attuatore risponde al telegram di lettura", "verificare unicità dell'indirizzo fisico"],
+          "fixes": ["sostituire l'alimentatore bus se tensione assente", "riprogrammare l'indirizzo fisico in ETS", "sostituire l'attuatore se condensatore danneggiato"],
+          "certainty_logic": "Confermato guasto bus se tensione 29V assente"
+        }
+      ]
+    },
+    {
+      "category": "domotica",
+      "name": "Gateway Modbus RTU/TCP",
+      "type": "MODBUS_GATEWAY",
+      "brand": "Moxa",
+      "model": "MGate MB3170",
+      "technical_specs": { "protocolli": ["Modbus RTU", "Modbus TCP"], "porte_seriali": 1, "RS485": true, "Ethernet": "10/100Mbps" },
+      "issues": [
+        {
+          "title": "Slave Modbus non risponde (timeout)",
+          "symptoms": ["master riceve exception code 0x0B (gateway target device failed to respond)", "LED TX lampeggia ma RX fermo", "dati letti come 0 o NaN"],
+          "probable_causes": ["slave address errato nel master", "velocità baud non corrispondente (es. master 9600, slave 19200)", "terminazione RS485 mancante su tratta lunga", "slave in modalità sleep o guasto"],
+          "tests": ["verificare baud rate, parity e stop bit identici su master e slave", "misurare tensione differenziale RS485 (A-B) durante trasmissione: deve essere >0.2V", "verificare resistenza di terminazione (120Ω) alle due estremità del bus"],
+          "fixes": ["allineare i parametri di comunicazione", "aggiungere resistenza di terminazione 120Ω", "sostituire il cavo se >500m o con impedenza errata"],
+          "certainty_logic": "Probabile disallineamento parametri se LED TX lampeggia ma RX è fermo"
+        }
+      ]
+    },
+    {
+      "category": "idraulica",
+      "name": "Pressostato digitale 0-10 bar",
+      "type": "PRESSURE_SWITCH",
+      "brand": "Danfoss",
+      "model": "MBS 3000",
+      "technical_specs": { "range": "0-10 bar", "uscita": "4-20mA", "alimentazione": "24V DC", "IP": "IP67" },
+      "issues": [
+        {
+          "title": "Uscita 4-20mA bloccata a 4mA (pressione letta sempre 0)",
+          "symptoms": ["PLC legge sempre 0 bar indipendentemente dalla pressione reale", "segnale mA fisso a 4mA", "non varia con variazioni di pressione"],
+          "probable_causes": ["alimentazione 24V assente o sotto-tensione (<20V)", "cablaggio loop aperto (filo disconnesso)", "membrana del sensore ostruita da depositi"],
+          "tests": ["misurare 24V DC sui morsetti di alimentazione", "misurare mA in serie sul loop con multimetro", "smontare il sensore e pulire la membrana con aria compressa"],
+          "fixes": ["ripristinare alimentazione 24V", "ricollegare il cavo interrotto", "pulire la membrana o sostituire il pressostato"],
+          "certainty_logic": "Confermato loop aperto se mA=4 e alimentazione presente"
+        }
+      ]
+    },
+    {
+      "category": "idraulica",
+      "name": "Pompa circolatore monofase 230V",
+      "type": "CIRCULATOR_PUMP",
+      "brand": "Grundfos",
+      "model": "UPS 25-60",
+      "technical_specs": { "tensione": "230V", "corrente": "0.7A", "potenza": "40-60W", "prevalenza_max": "6m" },
+      "issues": [
+        {
+          "title": "Pompa non parte (silenzio totale)",
+          "symptoms": ["nessun ronzio né vibrazione", "corrente assorbita = 0A", "impianto freddo nonostante caldaia accesa"],
+          "probable_causes": ["alimentazione 230V assente", "condensatore di avvio guasto (pompe monofase)", "motore bloccato (girante incrostata dopo fermo estivo)"],
+          "tests": ["misurare 230V AC ai morsetti di alimentazione", "sbloccare manualmente la girante con cacciavite dall'apposita vite frontale (se presente)", "misurare capacità del condensatore: deve corrispondere al valore targa ±10%"],
+          "fixes": ["ripristinare alimentazione", "sbloccare la girante manualmente", "sostituire il condensatore o l'intera pompa se il motore è guasto"],
+          "certainty_logic": "Confermato blocco meccanico se girante ruota liberamente dopo sblocco manuale e la pompa riparte"
+        },
+        {
+          "title": "Pompa rumorosa (rumore metallico o cavitazione)",
+          "symptoms": ["rumore anomalo durante funzionamento", "temperatura mandata e ritorno simili (bassa portata)", "bollicine visibili nello sfiato"],
+          "probable_causes": ["aria nell'impianto (cavitazione)", "girante usurata o con depositi di calcare", "pressione di sistema troppo bassa (<0.5 bar)"],
+          "tests": ["sfiata l'impianto tramite valvola di sfiato sulla pompa", "misurare pressione statica impianto (deve essere >0.5 bar)", "controllare filtro a Y a monte della pompa"],
+          "fixes": ["sfiatare completamente l'impianto", "pulire il filtro a Y", "regolare la pressione del vaso di espansione"],
+          "certainty_logic": "Probabile aria se il rumore cessa dopo sfiatamento"
+        }
+      ]
     }
   ]
 }
