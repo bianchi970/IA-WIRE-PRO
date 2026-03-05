@@ -11,6 +11,25 @@
   --radius: 14px;
 }
 
+/* ===== LIGHT MODE ===== */
+body.light-mode {
+  --bg:     #f0f4f9;
+  --surface:#ffffff;
+  --text:   #1a2a3a;
+  --muted:  #5a7a9a;
+  --navy:   #dde5f0;
+  --border: rgba(0,0,0,0.09);
+}
+body.light-mode {
+  background:
+    radial-gradient(900px 500px at 15% 0%, rgba(0,180,220,0.06), transparent 55%),
+    radial-gradient(700px 400px at 85% 0%, rgba(255,140,66,0.06), transparent 55%),
+    var(--bg);
+}
+body.light-mode .bubble-formatted { box-shadow: 0 1px 6px rgba(0,0,0,0.08); }
+body.light-mode .topbar           { background: #e8edf5; border-bottom-color: rgba(0,0,0,0.1); }
+body.light-mode .history-panel    { background: #e8edf5; }
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 /* ===== BASE ===== */

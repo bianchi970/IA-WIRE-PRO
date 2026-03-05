@@ -17,6 +17,7 @@ console.log('BRIDGE LIVE');
   var statusPill = document.getElementById("statusPill");
   var newChatBtn = document.getElementById("newChatBtn");
   var exportBtn  = document.getElementById("exportBtn");
+  var themeBtn   = document.getElementById("themeBtn");
   var historyBtn = document.getElementById("historyBtn");
   var historyPanel = document.getElementById("historyPanel");
   var historyOverlay = document.getElementById("historyOverlay");
@@ -796,6 +797,22 @@ console.log('BRIDGE LIVE');
   }
 
   if (historyBtn) historyBtn.addEventListener("click", openHistoryPanel);
+
+  // ===== DARK / LIGHT MODE TOGGLE =====
+  (function () {
+    var saved = localStorage.getItem("theme") || "dark";
+    if (saved === "light") {
+      document.body.classList.add("light-mode");
+      if (themeBtn) themeBtn.textContent = "☀";
+    }
+    if (themeBtn) {
+      themeBtn.addEventListener("click", function () {
+        var isLight = document.body.classList.toggle("light-mode");
+        themeBtn.textContent = isLight ? "☀" : "🌙";
+        localStorage.setItem("theme", isLight ? "light" : "dark");
+      });
+    }
+  }());
   if (historyCloseBtn) historyCloseBtn.addEventListener("click", closeHistoryPanel);
   if (historyOverlay) historyOverlay.addEventListener("click", closeHistoryPanel);
 
