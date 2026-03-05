@@ -71,6 +71,9 @@ const OPENAI_MODEL = (process.env.OPENAI_MODEL || "gpt-4o-mini").trim();
 // Modalità formato (sempre consigliata)
 const STRICT_FORMAT = String(process.env.STRICT_FORMAT || "1").trim() !== "0";
 
+// Admin token (opzionale — se non configurato l'admin è disabilitato)
+const ADMIN_TOKEN = (process.env.ADMIN_TOKEN || "").trim();
+
 // =========================
 // MIDDLEWARE
 // =========================
@@ -92,6 +95,22 @@ const uploadAny = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MULTIPART_FILE_MAX },
 }).any(); // <-- prende qualunque field file
+
+// =========================
+// MIDDLEWARE ADMIN AUTH
+// =========================
+function requireAdmin(req, res, next) {
+  if (!ADMIN_TOKEN) {
+    return res.status(401).json({ ok: false, error: "ADMIN_TOKEN non configurato nel server" });
+  }
+  const auth = req.headers["authorization"] || "";
+  const queryToken = (req.query && req.query.token) || "";
+  const supplied = auth.startsWith("Bearer ") ? auth.slice(7).trim() : queryToken.trim();
+  if (!supplied || supplied !== ADMIN_TOKEN) {
+    return res.status(401).json({ ok: false, error: "Token admin non valido" });
+  }
+  next();
+}
 
 // =========================
 // CLIENTS
@@ -1281,6 +1300,71 @@ app.get("/api/engine/test", (req, res) => {
   } catch (err) {
     console.error("❌ /api/engine/test error:", err);
     res.status(500).json({ ok: false, error: err && err.message ? err.message : String(err) });
+  }
+});
+
+// =========================
+// ROUTES — Admin
+// =========================
+
+// GET /admin — serve la dashboard admin (HTML statico, non protetto)
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(FRONTEND_DIR, "admin.html"));
+});
+
+// GET /api/admin/stats — statistiche sistema (protetto)
+app.get("/api/admin/stats", requireAdmin, async (req, res) => {
+  if (!pool) return res.json({ ok: false, error: "DB non disponibile" });
+  try {
+    const [convR, msgR, chunkR, compR] = await Promise.all([
+      pool.query("SELECT COUNT(*) AS n FROM conversations"),
+      pool.query("SELECT COUNT(*) AS n FROM messages"),
+      pool.query("SELECT COUNT(*) AS n FROM doc_chunks"),
+      pool.query("SELECT COUNT(*) AS n FROM components"),
+    ]);
+    res.json({
+      ok: true,
+      stats: {
+        conversations: parseInt(convR.rows[0].n, 10),
+        messages: parseInt(msgR.rows[0].n, 10),
+        doc_chunks: parseInt(chunkR.rows[0].n, 10),
+        components: parseInt(compR.rows[0].n, 10),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// GET /api/admin/conversations — lista completa (protetto)
+app.get("/api/admin/conversations", requireAdmin, async (req, res) => {
+  if (!pool) return res.json({ ok: false, error: "DB non disponibile" });
+  try {
+    const limit = Math.min(parseInt(req.query.limit || "100", 10) || 100, 500);
+    const r = await pool.query(
+      `SELECT id, title, user_id, is_archived, created_at, updated_at,
+              (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS msg_count
+       FROM conversations c
+       ORDER BY updated_at DESC
+       LIMIT $1`,
+      [limit]
+    );
+    res.json({ ok: true, count: r.rowCount, items: r.rows });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// DELETE /api/admin/conversations/:id — elimina (protetto)
+app.delete("/api/admin/conversations/:id", requireAdmin, async (req, res) => {
+  if (!pool) return res.status(503).json({ ok: false, error: "DB non disponibile" });
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!id) return res.status(400).json({ ok: false, error: "id non valido" });
+    await pool.query("DELETE FROM conversations WHERE id = $1", [id]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 

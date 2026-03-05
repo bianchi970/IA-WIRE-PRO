@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IA Wire Pro — Admin</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #071326; color: #d7e2f0; min-height: 100vh; }
+  .topbar { background: #0b1c33; border-bottom: 1px solid rgba(255,255,255,0.08); padding: 12px 20px; display: flex; align-items: center; gap: 12px; }
+  .topbar h1 { font-size: 1.1rem; color: #00D9FF; }
+  .topbar span { font-size: 0.8rem; color: #90a4bf; margin-left: auto; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+  .token-form { background: #0b1c33; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 20px; margin-bottom: 24px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .token-form label { font-size: 0.85rem; color: #90a4bf; white-space: nowrap; }
+  .token-form input { flex: 1; min-width: 200px; background: #071326; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #d7e2f0; padding: 8px 12px; font-size: 0.9rem; outline: none; }
+  .token-form input:focus { border-color: #00D9FF; }
+  .btn { padding: 8px 18px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.85rem; font-weight: 600; transition: opacity 0.15s; }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary { background: #00D9FF; color: #071326; }
+  .btn-danger { background: #e05252; color: #fff; }
+  .btn-sm { padding: 5px 12px; font-size: 0.78rem; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin-bottom: 28px; }
+  .stat-card { background: #0b1c33; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 18px 20px; }
+  .stat-card .val { font-size: 2rem; font-weight: 700; color: #00D9FF; line-height: 1; }
+  .stat-card .lbl { font-size: 0.78rem; color: #90a4bf; margin-top: 6px; }
+  .section-title { font-size: 1rem; font-weight: 600; color: #d7e2f0; margin-bottom: 14px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th { text-align: left; color: #90a4bf; font-weight: 600; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.08); white-space: nowrap; }
+  td { padding: 9px 12px; border-bottom: 1px solid rgba(255,255,255,0.05); vertical-align: middle; }
+  tr:hover td { background: rgba(255,255,255,0.03); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 0.72rem; font-weight: 600; }
+  .badge-active { background: rgba(0,217,255,0.15); color: #00D9FF; }
+  .badge-arch { background: rgba(255,255,255,0.07); color: #90a4bf; }
+  .msg { padding: 10px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 0.85rem; }
+  .msg-err { background: rgba(224,82,82,0.15); border: 1px solid rgba(224,82,82,0.3); color: #f5a0a0; }
+  .msg-ok { background: rgba(0,217,255,0.1); border: 1px solid rgba(0,217,255,0.2); color: #90e8f8; }
+  #status { display: none; }
+  .ts { color: #90a4bf; font-size: 0.75rem; }
+  .title-cell { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <h1>⚡ IA Wire Pro — Admin</h1>
+  <span id="connInfo">Non connesso</span>
+</div>
+<div class="container">
+
+  <!-- Token Form -->
+  <div class="token-form">
+    <label for="tokenInput">Admin Token:</label>
+    <input type="password" id="tokenInput" placeholder="Incolla il tuo ADMIN_TOKEN" autocomplete="off" />
+    <button class="btn btn-primary" onclick="connect()">Connetti</button>
+    <button class="btn" style="background:#1a2a3a;color:#d7e2f0" onclick="clearToken()">Reset</button>
+  </div>
+
+  <div id="status"></div>
+
+  <!-- Stats -->
+  <div class="stats" id="statsGrid" style="display:none"></div>
+
+  <!-- Conversations table -->
+  <div id="convSection" style="display:none">
+    <div class="section-title">Conversazioni</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>ID</th><th>Titolo</th><th>Utente</th><th>Msg</th><th>Stato</th><th>Aggiornata</th><th></th>
+        </tr></thead>
+        <tbody id="convBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var token = '';
+
+  function showStatus(msg, isErr) {
+    var el = document.getElementById('status');
+    el.style.display = 'block';
+    el.className = 'msg ' + (isErr ? 'msg-err' : 'msg-ok');
+    el.textContent = msg;
+  }
+
+  function authHeader() {
+    return { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+  }
+
+  function connect() {
+    token = document.getElementById('tokenInput').value.trim();
+    if (!token) { showStatus('Inserisci il token prima.', true); return; }
+    localStorage.setItem('adminToken', token);
+    loadAll();
+  }
+
+  function clearToken() {
+    token = '';
+    localStorage.removeItem('adminToken');
+    document.getElementById('tokenInput').value = '';
+    document.getElementById('statsGrid').style.display = 'none';
+    document.getElementById('convSection').style.display = 'none';
+    document.getElementById('status').style.display = 'none';
+    document.getElementById('connInfo').textContent = 'Non connesso';
+  }
+
+  function loadAll() {
+    loadStats();
+    loadConversations();
+  }
+
+  function loadStats() {
+    fetch('/api/admin/stats', { headers: authHeader() })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) { showStatus('Errore: ' + d.error, true); return; }
+        var g = document.getElementById('statsGrid');
+        g.style.display = 'grid';
+        var s = d.stats;
+        g.innerHTML = stat('Conversazioni', s.conversations) + stat('Messaggi', s.messages) + stat('Doc Chunks', s.doc_chunks) + stat('Componenti DB', s.components);
+        document.getElementById('connInfo').textContent = 'Connesso ✓';
+        showStatus('Connesso con successo.', false);
+      })
+      .catch(function (e) { showStatus('Errore connessione: ' + e.message, true); });
+  }
+
+  function stat(label, val) {
+    return '<div class="stat-card"><div class="val">' + val + '</div><div class="lbl">' + label + '</div></div>';
+  }
+
+  function loadConversations() {
+    fetch('/api/admin/conversations?limit=100', { headers: authHeader() })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) return;
+        var section = document.getElementById('convSection');
+        section.style.display = 'block';
+        var tbody = document.getElementById('convBody');
+        tbody.innerHTML = '';
+        (d.items || []).forEach(function (c) {
+          var tr = document.createElement('tr');
+          var ts = c.updated_at ? new Date(c.updated_at).toLocaleDateString('it-IT') : '-';
+          var badge = c.is_archived
+            ? '<span class="badge badge-arch">Archiviata</span>'
+            : '<span class="badge badge-active">Attiva</span>';
+          tr.innerHTML = '<td>' + c.id + '</td>'
+            + '<td class="title-cell" title="' + esc(c.title || '') + '">' + esc(c.title || '(senza titolo)') + '</td>'
+            + '<td>' + esc(c.user_id || '-') + '</td>'
+            + '<td>' + (c.msg_count || 0) + '</td>'
+            + '<td>' + badge + '</td>'
+            + '<td class="ts">' + ts + '</td>'
+            + '<td><button class="btn btn-danger btn-sm" onclick="delConv(' + c.id + ', this)">Elimina</button></td>';
+          tbody.appendChild(tr);
+        });
+      });
+  }
+
+  function delConv(id, btn) {
+    if (!confirm('Eliminare la conversazione #' + id + ' e tutti i suoi messaggi?')) return;
+    btn.disabled = true;
+    btn.textContent = '...';
+    fetch('/api/admin/conversations/' + id, { method: 'DELETE', headers: authHeader() })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.ok) {
+          var tr = btn.closest('tr');
+          if (tr) tr.remove();
+        } else {
+          btn.disabled = false;
+          btn.textContent = 'Elimina';
+          alert('Errore: ' + d.error);
+        }
+      });
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  window.connect = connect;
+  window.clearToken = clearToken;
+  window.delConv = delConv;
+
+  // Auto-load se token salvato
+  var saved = localStorage.getItem('adminToken');
+  if (saved) {
+    token = saved;
+    document.getElementById('tokenInput').value = saved;
+    loadAll();
+  }
+})();
+</script>
+</body>
+</html>
