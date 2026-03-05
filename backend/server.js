@@ -5,6 +5,9 @@
 
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
+if (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+  console.warn("Warning: no AI API key configured");
+}
 
 const express = require("express");
 const cors = require("cors");
@@ -1298,8 +1301,8 @@ app.use((req, res, next) => {
 
 // Error handler
 app.use((err, req, res, next) => {
-  console.error("❌ Express error:", err);
-  res.status(500).json({ error: "Errore server", details: err?.message ? err.message : String(err) });
+  console.error("SERVER ERROR:", err);
+  res.status(500).json({ error: err.message || "Internal Server Error" });
 });
 
 // =========================
