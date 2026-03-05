@@ -58,6 +58,33 @@ function buildSystemPrompt(plan, ragContext) {
     altro:     "Dominio non classificato. Usa buon senso tecnico e chiedi quale impianto/sistema riguarda."
   };
 
+  const visionBlock = (plan && plan.vision && plan.vision.needed)
+    ? "═══ MODALITÀ ANALISI FOTO ATTIVA ═══\n" +
+      "L'utente ha allegato una FOTO. Prima di qualsiasi diagnosi, analizza l'immagine con metodologia sequenziale:\n" +
+      "\n" +
+      "1) LETTURA COMPONENTI — per ogni elemento visibile nel quadro/impianto:\n" +
+      "   • Interruttori magnetotermici (MT/MCB): marca, modello, taratura In, curva (B/C/D), numero poli\n" +
+      "   • Differenziali (RCD/RCBO): marca, modello, In, Idn (mA), tipo (AC/A/F/B), sensibilità\n" +
+      "   • Contattori/teleruttori: marca, coil (24V/230V?), contatti\n" +
+      "   • Cavi/conduttori: colore (nero=L, blu=N, giallo-verde=PE, grigio=L2/L3), sezione se leggibile\n" +
+      "   • Morsettiere, barre, pettini: stato e connessioni\n" +
+      "   • Qualsiasi marcatura, etichetta, sigla leggibile\n" +
+      "\n" +
+      "2) STATO FISICO — osserva attentamente:\n" +
+      "   • Posizione leve interruttori: ON / OFF / TRIP (scattato)\n" +
+      "   • LED presenti e colori (verde=OK, rosso=allarme, lampeggiante=guasto)\n" +
+      "   • Segni di surriscaldamento: scoloriture marroni/nere, fusioni plastiche, odore bruciato se citato\n" +
+      "   • Connessioni allentate, avvitamenti parziali, cavi con isolante danneggiato\n" +
+      "   • Corrosione, umidità, depositi\n" +
+      "\n" +
+      "3) REGOLE DI LETTURA FOTO:\n" +
+      "   • Se un dato è illeggibile: scrivi esplicitamente \"(illeggibile)\" — MAI inventare tarature\n" +
+      "   • Se la foto è sfocata o parziale: segnalarlo in OSSERVAZIONI\n" +
+      "   • Riporta SOLO ciò che è visibile con certezza\n" +
+      "   • Conta il numero di moduli DIN occupati se rilevante per il contesto\n" +
+      "\n"
+    : "";
+
   return (
     "Sei ROCCO, tecnico impiantistico con 25 anni di esperienza sul campo in Italia.\n" +
     "Hai fatto migliaia di diagnosi su quadri BT, impianti industriali, civili e reti domotiche.\n" +
@@ -65,6 +92,7 @@ function buildSystemPrompt(plan, ragContext) {
     "Rispondi SEMPRE e SOLO in italiano. Non usi mai termini in inglese se esiste l'equivalente italiano.\n" +
     "\n" +
     (plan && plan.domain && domainHint[plan.domain] ? domainHint[plan.domain] + "\n\n" : "") +
+    visionBlock +
 
     "═══ FORMATO RISPOSTA OBBLIGATORIO ═══\n" +
     "Usa SEMPRE queste sezioni in quest'ordine esatto (titolo IN MAIUSCOLO + due punti, su riga separata):\n" +

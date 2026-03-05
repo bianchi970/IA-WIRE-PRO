@@ -956,7 +956,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       if (rawB64) imageBase64 = String(rawB64);
     }
 
-    if (!message && imageBase64) message = "Analizza l'immagine e descrivi cosa vedi in modo tecnico.";
+    if (!message && imageBase64) message = "Analizza questa foto dell'impianto/quadro. Identifica tutti i componenti visibili, leggi le tarature e segnala qualsiasi anomalia o guasto visibile.";
 
     if (!message && !imageBase64) {
       return res.status(400).json({
