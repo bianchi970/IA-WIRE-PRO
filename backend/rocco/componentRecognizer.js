@@ -4,8 +4,20 @@
  * Component Recognition Engine — ROCCO
  * Identifica componenti elettrici/impiantistici nel testo dell'utente.
  * Usato per arricchire il contesto prima della chiamata LLM.
+ *
+ * Due modalità:
+ *  1) extractComponents(text)  — backward-compatible, keyword matching semplice (28 cat.)
+ *  2) recognizeComponents(text) / buildRoccoContext(text) — v2 scoring 0..1
+ *     delegano a recognitionEngine.js (SSOT catalogo + pattern library >= 60)
  */
 
+// ── v2 recognition engine (new) ──────────────────────────────────────────
+var _recEng = require("./recognitionEngine");
+var recognizeComponents = _recEng.recognizeComponents;
+var buildRoccoContext   = _recEng.buildRoccoContext;
+var THRESHOLDS          = _recEng.THRESHOLDS;
+
+// ── v1 backward-compatible keyword DB (28 + 2 new) ───────────────────────
 const componentsDB = {
   rcd:              ["differenziale", "salvavita", "rcd", "rcbo", "id", "interruttore differenziale"],
   magnetotermico:   ["magnetotermico", " mt ", "interruttore automatico", " mccb", " mcb", "curva c", "curva b", "curva d", "salvamotore"],
@@ -35,6 +47,9 @@ const componentsDB = {
   cavo:             ["cavo", "conduttore", "filo", "fune", "fg7", "fror", "n07", "h07"],
   quadro:           ["quadro", "quadro elettrico", "pannello", "centralino", "armadio elettrico", "carpenteria"],
   misuratore:       ["multimetro", "tester", "pinza amperometrica", "megohmetro", "sequenzimetro", "oscilloscopio"],
+  // ── aggiunto da FASE 1 ──
+  alimentatore:     ["alimentatore", "alimentatore switching", "power supply", "smps", "psu", "24vdc", "alimentatore din"],
+  scheda_controllo: ["scheda controllo", "scheda elettronica", "control board", "scheda di controllo", "scheda pompa", "scheda caldaia"],
 };
 
 /**
@@ -95,6 +110,8 @@ const LABELS = {
   cavo:                "Cavo/Conduttore",
   quadro:              "Quadro elettrico",
   misuratore:          "Strumento di misura",
+  alimentatore:        "Alimentatore DC",
+  scheda_controllo:    "Scheda di Controllo",
 };
 
 function formatComponents(componentIds) {
@@ -102,4 +119,13 @@ function formatComponents(componentIds) {
   return componentIds.map(function (id) { return LABELS[id] || id; }).join(", ");
 }
 
-module.exports = { componentsDB, extractComponents, formatComponents };
+module.exports = {
+  // v1 backward-compatible
+  componentsDB,
+  extractComponents,
+  formatComponents,
+  // v2 scoring (delegate to recognitionEngine)
+  recognizeComponents,
+  buildRoccoContext,
+  THRESHOLDS
+};

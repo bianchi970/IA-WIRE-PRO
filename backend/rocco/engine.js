@@ -15,6 +15,7 @@ const { extractElectricalValues, formatElectricalValues, checkAnomalies } = requ
 const { scoreHypotheses } = require("./scoringEngine");
 const { buildQuestions } = require("./questionBuilder");
 const { patterns: basicPatterns } = require("./patterns/basicPatterns");
+const { recognizeComponents, buildRoccoContext } = require("./recognitionEngine");
 
 /**
  * Esegue il pattern matching sui basicPatterns con algoritmo best-match.
@@ -58,12 +59,18 @@ function formatFoundationContext(result) {
   if (!result || result.outOfScope) return "";
   var lines = [];
 
-  if (result.components && result.components.length) {
-    lines.push("COMPONENTI RILEVATI (Foundation): " + result.components.join(", "));
+  // ── Contratto ROCCO v2 (ha priorità, include scoring + regole risposta) ──
+  if (result.roccoContract) {
+    lines.push(result.roccoContract);
+    lines.push("");
   }
+
+  // ── Valori elettrici ──
   if (result.numericSummary) {
     lines.push("VALORI ELETTRICI: " + result.numericSummary);
   }
+
+  // ── Pattern matching (v1) ──
   if (result.patternId) {
     lines.push("PATTERN TROVATO: " + result.patternId);
   }
@@ -101,13 +108,33 @@ function runFoundationEngine(userMessage) {
     return oos;
   }
 
-  // 2) Estrazione componenti
+  // 2) Estrazione componenti (v1 backward compat)
   var components = [];
   try {
     components = extractComponents(text) || [];
   } catch (e) {
     console.warn("⚠️ Foundation: extractComponents error:", e && e.message);
   }
+
+  // 2b) Recognition engine v2: scoring 0..1 con contratto ROCCO
+  var recResults = [];
+  var recContext = "";
+  try {
+    recResults = recognizeComponents(text) || [];
+    recContext  = buildRoccoContext(text)  || "";
+  } catch (e) {
+    console.warn("⚠️ Foundation: recognitionEngine v2 error:", e && e.message);
+  }
+
+  // Integra componenti v2 (HIGH/MEDIUM) nella lista v1 per backward compat
+  try {
+    recResults.forEach(function(r) {
+      if ((r.band === "HIGH" || r.band === "MEDIUM") &&
+          components.indexOf(r.component_id) < 0) {
+        components.push(r.component_id);
+      }
+    });
+  } catch (e) { /* silent */ }
 
   // 3) Estrazione valori elettrici
   var numericValues = {};
@@ -142,6 +169,12 @@ function runFoundationEngine(userMessage) {
   var result = {
     outOfScope: false,
     components: components,
+    // v2 recognition
+    componentScores: recResults,
+    highComponents:  recResults.filter(function(r) { return r.band === "HIGH";   }),
+    mediumComponents:recResults.filter(function(r) { return r.band === "MEDIUM"; }),
+    lowComponents:   recResults.filter(function(r) { return r.band === "LOW";    }),
+    roccoContract:   recContext,
     numericValues: numericValues,
     numericSummary: numericSummary,
     anomalies: anomalies,
