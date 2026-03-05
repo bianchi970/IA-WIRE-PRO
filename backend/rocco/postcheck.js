@@ -14,7 +14,7 @@ function normalizeNewlines(text) {
 function hasSection(text, section) {
   const escaped = section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(
-    "(?:^|\\n)\\s*\\*{0,2}" + escaped + "\\*{0,2}\\s*:",
+    "(?:^|\\n)\\s*(?:\\d+[\\)\\.\\s]\\s*)?\\*{0,2}" + escaped + "\\*{0,2}\\s*:",
     "i"
   );
   return pattern.test(text);
