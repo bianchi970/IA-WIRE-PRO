@@ -30,16 +30,30 @@ function ensureSection(text, section) {
 }
 
 // Normalizza LIVELLO DI CERTEZZA verso uno dei 3 valori canonici
+// Gestisce sia "LIVELLO DI CERTEZZA: Probabile" che "LIVELLO DI CERTEZZA:\nProbabile — testo"
 function normalizeCertaintySection(text) {
-  return text.replace(
+  // Caso 1: valore sulla stessa riga
+  var replaced = text.replace(
     /^(LIVELLO DI CERTEZZA\s*:\s*-?\s*)([^\n]+)/m,
     function (match, prefix, raw) {
-      const v = raw.trim().replace(/[\.\:\;\*]+$/, "").toLowerCase();
+      var v = raw.trim().replace(/[\.\:\;\*]+$/, "").toLowerCase();
+      if (!v || v === "(dato non disponibile)" || v === "(da compilare)") return match; // gestito dal Caso 2
       if (v.includes("confermato")) return prefix + "Confermato";
       if (v.includes("probabile")) return prefix + "Probabile";
       return prefix + "Non verificabile";
     }
   );
+  // Caso 2: valore sulla riga successiva (heading da solo, poi \n + valore)
+  replaced = replaced.replace(
+    /^(LIVELLO DI CERTEZZA\s*:\s*-?\s*)\n\s*([^\n]+)/m,
+    function (match, prefix, raw) {
+      var v = raw.trim().replace(/[\.\:\;\*]+$/, "").toLowerCase();
+      if (v.includes("confermato")) return prefix.trimEnd() + " Confermato";
+      if (v.includes("probabile")) return prefix.trimEnd() + " Probabile";
+      return prefix.trimEnd() + " Non verificabile";
+    }
+  );
+  return replaced;
 }
 
 // Garantisce almeno un badge di confidenza in IPOTESI

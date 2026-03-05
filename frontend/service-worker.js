@@ -1,8 +1,8 @@
 /* IA Wire Pro — Service Worker PWA
-   Cache-first per asset statici, network-first per API.
+   Network-first per asset statici (evita cache stale), network-only per API.
    Versione del cache: aggiornare CACHE_VERSION ad ogni deploy.
 */
-var CACHE_NAME = "iawire-v1";
+var CACHE_NAME = "iawire-v2";
 var STATIC_ASSETS = [
   "/",
   "/index.html",
@@ -46,21 +46,22 @@ self.addEventListener("fetch", function (event) {
     return;
   }
 
-  /* Asset statici: cache-first, poi network */
+  /* Asset statici: network-first, poi cache (evita JS/CSS stale) */
   event.respondWith(
-    caches.match(event.request).then(function (cached) {
-      if (cached) return cached;
-      return fetch(event.request).then(function (response) {
-        /* Salva in cache solo risposte valide e non-API */
-        if (response && response.status === 200 && response.type === "basic") {
-          var cloned = response.clone();
-          caches.open(CACHE_NAME).then(function (cache) {
-            cache.put(event.request, cloned);
-          });
-        }
-        return response;
-      }).catch(function () {
-        /* Offline fallback per navigazione */
+    fetch(event.request).then(function (response) {
+      /* Salva in cache solo risposte valide per fallback offline */
+      if (response && response.status === 200 && response.type === "basic") {
+        var cloned = response.clone();
+        caches.open(CACHE_NAME).then(function (cache) {
+          cache.put(event.request, cloned);
+        });
+      }
+      return response;
+    }).catch(function () {
+      /* Offline: usa cache se disponibile */
+      return caches.match(event.request).then(function (cached) {
+        if (cached) return cached;
+        /* Fallback navigazione → index.html */
         if (event.request.mode === "navigate") {
           return caches.match("/index.html");
         }

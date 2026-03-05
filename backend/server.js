@@ -377,9 +377,13 @@ async function msgInsert({ conversation_id, role, content, content_format = "tex
  * Restituisce null se la sezione non è trovata nel testo.
  */
 function extractCertainty(text) {
-  const m = String(text || "").match(/LIVELLO DI CERTEZZA\s*:\s*-?\s*([^\n]+)/i);
-  if (!m) return null;
-  return normalizeCertainty(m[1]);
+  // Caso 1: valore sulla stessa riga
+  var m = String(text || "").match(/LIVELLO DI CERTEZZA\s*:\s*-?\s*([^\n]+)/i);
+  if (m && m[1].trim() && m[1].trim() !== "(dato non disponibile)") return normalizeCertainty(m[1]);
+  // Caso 2: valore su riga successiva
+  var m2 = String(text || "").match(/LIVELLO DI CERTEZZA\s*:\s*\n\s*([^\n]+)/i);
+  if (m2) return normalizeCertainty(m2[1]);
+  return null;
 }
 
 /**
@@ -486,13 +490,21 @@ function isNetworkError(err) {
 // AI CALL HELPERS (FASE 6)
 // =========================
 
-async function callOpenAI({ systemPrompt, shortHistory, imageBase64, message, dbContextText, docChunksText, knowledgeText, engineText }) {
+/**
+ * T2: Assembla TUTTO il contesto tecnico in un unico blocco.
+ * Ordine: encyclopedia DB → doc chunks → knowledge locale → engine diagnostico.
+ * Ogni sezione è separata da doppio newline. Sezioni vuote sono omesse.
+ */
+function buildContextBlock({ dbContextText, docChunksText, knowledgeText, engineText }) {
+  return [dbContextText, docChunksText, knowledgeText, engineText]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+async function callOpenAI({ systemPrompt, shortHistory, imageBase64, message, contextBlock }) {
   if (!openai) throw new Error("OpenAI non configurato");
   const messages = [{ role: "system", content: systemPrompt }].concat(shortHistory);
-  if (dbContextText) messages.push({ role: "system", content: dbContextText });
-  if (docChunksText) messages.push({ role: "system", content: docChunksText });
-  if (knowledgeText) messages.push({ role: "system", content: knowledgeText });
-  if (engineText) messages.push({ role: "system", content: engineText });
+  if (contextBlock) messages.push({ role: "system", content: contextBlock });
 
   if (imageBase64) {
     const img = normalizeBase64Image(imageBase64);
@@ -517,7 +529,7 @@ async function callOpenAI({ systemPrompt, shortHistory, imageBase64, message, db
   return { answer, model: OPENAI_MODEL };
 }
 
-async function callAnthropic({ systemPrompt, shortHistory, imageBase64, message, dbContextText, docChunksText, knowledgeText, engineText }) {
+async function callAnthropic({ systemPrompt, shortHistory, imageBase64, message, contextBlock }) {
   if (!anthropic) throw new Error("Anthropic non configurato");
   const msgs = shortHistory.slice();
 
@@ -534,7 +546,7 @@ async function callAnthropic({ systemPrompt, shortHistory, imageBase64, message,
     msgs.push({ role: "user", content: message });
   }
 
-  const sysContent = [systemPrompt, dbContextText, docChunksText, knowledgeText, engineText].filter(Boolean).join("\n\n");
+  const sysContent = [systemPrompt, contextBlock].filter(Boolean).join("\n\n");
   const resp = await anthropic.messages.create({
     model: ANTHROPIC_MODEL,
     max_tokens: 1800,
@@ -1041,6 +1053,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
     let knowledgeText = "";
     let engineText = "";
     let engineDiag = null;
+    let foundResult = null;
     try {
       knowledgeText = fetchKnowledgeContext(message);
     } catch (e) {
@@ -1093,7 +1106,6 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       }
 
       // Foundation Engine (domainGuard + basicPatterns + scoreHypotheses + questionBuilder)
-      let foundResult = null;
       try {
         foundResult = runFoundationEngine(message);
         if (foundResult.outOfScope) {
@@ -1128,7 +1140,8 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       });
     }
 
-    const callParams = { systemPrompt, shortHistory, imageBase64, message, dbContextText, docChunksText, knowledgeText, engineText };
+    const contextBlock = buildContextBlock({ dbContextText, docChunksText, knowledgeText, engineText });
+    const callParams = { systemPrompt, shortHistory, imageBase64, message, contextBlock };
 
     let answer = null;
     let usedProvider = null;
@@ -1192,7 +1205,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       answer,
       conversation_id: convId,
       signature: "ROCCO-CHAT-V2",
-      rag: { usedDbContext: Boolean(dbContextText), usedDocChunks: Boolean(docChunksText), usedKnowledge: Boolean(knowledgeText) },
+      rag: { usedDbContext: Boolean(dbContextText), usedDocChunks: Boolean(docChunksText), usedKnowledge: Boolean(knowledgeText), contextBlockLen: contextBlock.length },
       engine: engineDiag ? {
         active: true,
         isTechnical: engineDiag.isTechnical,

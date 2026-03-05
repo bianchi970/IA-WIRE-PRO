@@ -825,6 +825,22 @@ function buildIpotesiFromPattern(pattern) {
 function analyzeTechnicalRequest(input, knowledge) {
   var message  = String((input && input.message) || "").trim();
   var hasImage = !!(input && input.hasImage);
+
+  // T3: Input validation
+  if (!message && !hasImage) {
+    return validateDiagOutput({
+      isTechnical: false, isDangerous: false,
+      matchedKeywords: [], matchedPatterns: [], matchedRules: [], matchedComponents: [],
+      extractedValues: [], osservazioni: ["Nessun messaggio ricevuto."],
+      ipotesi: [], verifiche: [], rischi: [],
+      conclusione: "Input vuoto. Inviare descrizione del problema o foto."
+    });
+  }
+  // Tronca messaggi estremamente lunghi per evitare regex catastrophic backtracking
+  if (message.length > 5000) {
+    message = message.slice(0, 5000);
+  }
+
   var lower    = normalize(message);
   var tokens   = tokenize(message);
 
@@ -1003,7 +1019,7 @@ function analyzeTechnicalRequest(input, knowledge) {
     conclusione = "Domanda tecnica generica. Richiedere dati specifici: marca/modello, misure, foto.";
   }
 
-  return {
+  return validateDiagOutput({
     isTechnical:        isTechnical,
     isDangerous:        isDangerous,
     matchedKeywords:    matchedKeywords,
@@ -1016,7 +1032,7 @@ function analyzeTechnicalRequest(input, knowledge) {
     verifiche:          verifiche.slice(0, 12),
     rischi:             rischi,
     conclusione:        conclusione
-  };
+  });
 }
 
 // ============================================================
@@ -1112,6 +1128,19 @@ function formatOfflineAnswer(diag, message) {
     lines.push("  Fornire marca/modello, misure effettuate e foto del componente.");
   }
 
+  // --- LIVELLO DI CERTEZZA ---
+  lines.push("");
+  lines.push("LIVELLO DI CERTEZZA:");
+  if (diag.isDangerous) {
+    lines.push("Probabile — condizione pericolosa rilevata, richiede conferma strumentale");
+  } else if (diag.matchedPatterns.length >= 2 && diag.ipotesi.length >= 2) {
+    lines.push("Probabile — pattern multipli identificati, misure necessarie per conferma");
+  } else if (diag.matchedPatterns.length >= 1) {
+    lines.push("Non verificabile — singolo pattern identificato, servono dati aggiuntivi");
+  } else {
+    lines.push("Non verificabile — analisi locale senza dati sufficienti");
+  }
+
   // --- VERIFICHE OPERATIVE ---
   lines.push("");
   lines.push("VERIFICHE OPERATIVE:");
@@ -1147,6 +1176,32 @@ function formatOfflineAnswer(diag, message) {
   return lines.join("\n");
 }
 
+/**
+ * T3: Valida l'output diagnostico prima di restituirlo.
+ * Corregge campi mancanti e impone limiti ragionevoli.
+ */
+function validateDiagOutput(diag) {
+  if (!diag) return {
+    isTechnical: false, isDangerous: false,
+    matchedKeywords: [], matchedPatterns: [], matchedRules: [], matchedComponents: [],
+    extractedValues: [], osservazioni: [], ipotesi: [], verifiche: [], rischi: [],
+    conclusione: "Nessun dato diagnostico prodotto."
+  };
+  // Assicura che tutti i campi array esistano
+  var fields = ["matchedKeywords", "matchedPatterns", "matchedRules", "matchedComponents",
+                "extractedValues", "osservazioni", "ipotesi", "verifiche", "rischi"];
+  fields.forEach(function (f) {
+    if (!Array.isArray(diag[f])) diag[f] = [];
+  });
+  // Limita lunghezze per evitare prompt troppo grandi
+  diag.ipotesi = diag.ipotesi.slice(0, 8);
+  diag.verifiche = diag.verifiche.slice(0, 12);
+  diag.osservazioni = diag.osservazioni.slice(0, 10);
+  diag.rischi = diag.rischi.slice(0, 6);
+  if (!diag.conclusione) diag.conclusione = "Diagnosi incompleta.";
+  return diag;
+}
+
 // ============================================================
 // Test case per /api/engine/test
 // ============================================================
@@ -1159,5 +1214,6 @@ module.exports = {
   analyzeTechnicalRequest: analyzeTechnicalRequest,
   formatDiagnosticContext: formatDiagnosticContext,
   formatOfflineAnswer:     formatOfflineAnswer,
+  validateDiagOutput:      validateDiagOutput,
   TEST_CASE:               TEST_CASE
 };

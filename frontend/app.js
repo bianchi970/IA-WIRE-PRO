@@ -225,6 +225,18 @@ console.log('BRIDGE LIVE');
     var max = 140;
     var h = textInput.scrollHeight;
     textInput.style.height = (h > max ? max : h) + "px";
+    // T4: disable send quando non c'è nulla da inviare
+    updateSendState();
+  }
+
+  // T4: aggiorna stato del sendBtn in base al contenuto
+  function updateSendState() {
+    if (!sendBtn) return;
+    if (_busy) return; // durante busy il bottone è "Annulla"
+    var hasText = textInput && textInput.value && textInput.value.trim().length > 0;
+    var hasImg = !!selectedBlob;
+    sendBtn.disabled = !(hasText || hasImg);
+    sendBtn.style.opacity = (hasText || hasImg) ? "1" : "0.4";
   }
 
   function setBusy(busy) {
@@ -237,11 +249,12 @@ console.log('BRIDGE LIVE');
         sendBtn.classList.add("danger");
         sendBtn.classList.remove("primary");
         sendBtn.disabled = false;
+        sendBtn.style.opacity = "1";
       } else {
         sendBtn.textContent = "Invia";
         sendBtn.classList.remove("danger");
         sendBtn.classList.add("primary");
-        sendBtn.disabled = false;
+        updateSendState();
       }
     }
   }
@@ -263,6 +276,7 @@ console.log('BRIDGE LIVE');
     }
     if (textInput) { textInput.disabled = false; textInput.value = ""; autoResize(); }
     if (imageInput) imageInput.disabled = false;
+    updateSendState();
     addMessage("ai", "Nuova conversazione avviata. Descrivi il problema tecnico.");
     // Ripristina i chip nel messaggio di benvenuto (non è più visibile — non serve)
   }
@@ -378,6 +392,7 @@ console.log('BRIDGE LIVE');
     if (imageInput) imageInput.value = "";
     if (previewWrap) previewWrap.hidden = true;
     if (previewImg) previewImg.src = "";
+    updateSendState();
   }
 
   // ====== API ENDPOINTS ======
@@ -851,8 +866,17 @@ console.log('BRIDGE LIVE');
     textInput.addEventListener("keydown", function (e) {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        if (sendBtn) sendBtn.click();
+        if (sendBtn && !sendBtn.disabled) sendBtn.click();
       }
+    });
+    // T4: su mobile, quando la tastiera si apre, scroll chat al fondo
+    textInput.addEventListener("focus", function () {
+      setTimeout(function () {
+        if (chat) {
+          try { chat.scrollTo({ top: chat.scrollHeight, behavior: "smooth" }); }
+          catch (e) { chat.scrollTop = chat.scrollHeight; }
+        }
+      }, 300);
     });
     autoResize();
   }
@@ -871,6 +895,7 @@ console.log('BRIDGE LIVE');
           if (previewImg) previewImg.src = r.previewUrl || "";
           if (previewWrap) previewWrap.hidden = false;
           setStatus("Pronto");
+          updateSendState();
         })
         .catch(function (err) {
           console.error(err);
@@ -1040,6 +1065,7 @@ console.log('BRIDGE LIVE');
   }
 
   setStatus("Pronto");
+  updateSendState();
   loadConversationOnStart();
 
   // ===== PWA: registra service worker =====

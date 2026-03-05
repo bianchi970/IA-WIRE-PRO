@@ -193,3 +193,17 @@ Pure ES5 vanilla JS (no `?.`, no `??`, no `replaceAll`) for maximum browser comp
 - **Render.com**: Root directory `backend`, Build `npm install`, Start `npm start`
 - **Environment variables on Render**: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `DATABASE_URL`, `PORT`
 - DB hosted on Render PostgreSQL (Frankfurt). SSL with `rejectUnauthorized: false`.
+
+## Bugfix Log (2026-03-05)
+
+### BUG-01: pg mancante da package.json (CRITICO)
+Il driver PostgreSQL `pg` non era listato in `dependencies`. Su Render `npm install` non lo installava → `pool = null` → tutte le feature DB (persistence, conversations, RAG, enciclopedia) disabilitate. **Fix**: aggiunto `"pg": "^8.13.1"` a `backend/package.json`.
+
+### BUG-02: foundResult ReferenceError (CRITICO)
+`let foundResult = null` era dichiarato DENTRO un `try` block (block-scoped) ma referenziato FUORI nella risposta JSON. Ogni richiesta `/api/chat` crashava con ReferenceError → HTTP 500. **Fix**: spostato `let foundResult = null` fuori dal try, al livello della funzione handler.
+
+### BUG-03: extractCertainty multiline
+Il regex per estrarre il livello di certezza non gestiva il caso in cui il valore fosse sulla riga successiva al heading. **Fix**: aggiunto Caso 2 sia in `postcheck.js/normalizeCertaintySection()` che in `server.js/extractCertainty()`.
+
+### BUG-04: Service Worker cache stale
+`CACHE_NAME` fermo a `iawire-v1` con strategia cache-first → aggiornamenti JS/CSS non caricati. **Fix**: bump a `iawire-v2` + switch a network-first (cache come fallback offline).
