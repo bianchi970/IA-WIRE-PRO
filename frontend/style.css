@@ -672,3 +672,33 @@ button, label, [role="button"], a {
   .hint           { display: none; }
   .sec-head       { margin-top: 6px; margin-bottom: 2px; }
 }
+
+/* ===== EXPORT DROPDOWN ===== */
+.export-wrap { position: relative; display: inline-block; }
+.export-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  z-index: 200;
+  min-width: 160px;
+  overflow: hidden;
+}
+.export-menu.open { display: block; }
+.export-menu button {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text);
+  padding: 10px 16px;
+  text-align: left;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.export-menu button:hover { background: rgba(255,255,255,0.07); }

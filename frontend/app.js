@@ -812,12 +812,33 @@ console.log('BRIDGE LIVE');
   }
   if (historySearch) historySearch.addEventListener("input", filterHistoryList);
 
-  // ===== EXPORT CONVERSAZIONE =====
+  // ===== EXPORT CONVERSAZIONE (TXT / JSON / PDF) =====
   if (exportBtn) {
-    exportBtn.addEventListener("click", function () {
+    // Wrap button in .export-wrap and create dropdown
+    var exportWrap = document.createElement("div");
+    exportWrap.className = "export-wrap";
+    exportBtn.parentNode.insertBefore(exportWrap, exportBtn);
+    exportWrap.appendChild(exportBtn);
+
+    var exportMenu = document.createElement("div");
+    exportMenu.className = "export-menu";
+    exportMenu.innerHTML =
+      "<button id=\"exportTxt\">📄 Testo (.txt)</button>" +
+      "<button id=\"exportJson\">📦 JSON</button>" +
+      "<button id=\"exportPdf\">📕 PDF</button>";
+    exportWrap.appendChild(exportMenu);
+
+    exportBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      exportMenu.classList.toggle("open");
+    });
+    document.addEventListener("click", function () {
+      exportMenu.classList.remove("open");
+    });
+
+    function collectLines() {
       var msgs = chat ? chat.querySelectorAll(".msg") : [];
-      if (!msgs.length) return;
-      var lines = ["IA Wire Pro — Report Diagnostico", "Data: " + new Date().toLocaleString("it-IT"), ""];
+      var lines = ["IA Wire Pro — Report Diagnostico", "Data: " + new Date().toLocaleString("it-IT"), "---", ""];
       for (var i = 0; i < msgs.length; i++) {
         var m = msgs[i];
         if (m.id === "welcomeMsg") continue;
@@ -826,20 +847,91 @@ console.log('BRIDGE LIVE');
         if (!bubble) continue;
         var txt = (bubble.innerText || bubble.textContent || "").trim();
         if (!txt) continue;
-        lines.push((isUser ? "TECNICO: " : "ROCCO:   ") + txt);
+        lines.push((isUser ? "[TU]     " : "[ROCCO]  ") + txt);
         lines.push("");
       }
-      if (lines.length <= 3) return;
-      var blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+      return lines;
+    }
+
+    function triggerDownload(blob, filename) {
       var url = URL.createObjectURL(blob);
       var a = document.createElement("a");
-      var ts = new Date().toISOString().slice(0, 16).replace("T", "_").replace(":", "-");
       a.href = url;
-      a.download = "iawire_report_" + ts + ".txt";
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+    }
+
+    function exportTs() {
+      return new Date().toISOString().slice(0, 16).replace("T", "_").replace(/:/g, "-");
+    }
+
+    document.getElementById("exportTxt").addEventListener("click", function () {
+      exportMenu.classList.remove("open");
+      var lines = collectLines();
+      if (lines.length <= 4) return;
+      triggerDownload(new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" }), "iawire_" + exportTs() + ".txt");
+    });
+
+    document.getElementById("exportJson").addEventListener("click", function () {
+      exportMenu.classList.remove("open");
+      if (!conversationHistory.length) return;
+      var payload = JSON.stringify({
+        conversation_id: conversationId,
+        exported_at: new Date().toISOString(),
+        messages: conversationHistory
+      }, null, 2);
+      triggerDownload(new Blob([payload], { type: "application/json" }), "iawire_" + exportTs() + ".json");
+    });
+
+    document.getElementById("exportPdf").addEventListener("click", function () {
+      exportMenu.classList.remove("open");
+      var lines = collectLines();
+      if (lines.length <= 4) return;
+      try {
+        var jsPDF = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+        if (!jsPDF) { alert("jsPDF non caricato. Verifica la connessione internet."); return; }
+        var doc = new jsPDF({ unit: "mm", format: "a4" });
+        var margin = 15;
+        var pageW = 210;
+        var maxW = pageW - margin * 2;
+        var y = margin;
+        var lineH = 5.5;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(14);
+        doc.setTextColor(10, 30, 60);
+        doc.text("IA Wire Pro — Report Diagnostico", margin, y);
+        y += 8;
+        doc.setFontSize(9);
+        doc.setTextColor(100, 120, 140);
+        doc.text("Generato: " + new Date().toLocaleString("it-IT"), margin, y);
+        y += 8;
+        doc.setDrawColor(0, 180, 220);
+        doc.line(margin, y, pageW - margin, y);
+        y += 6;
+        for (var i = 3; i < lines.length; i++) {
+          var raw = lines[i];
+          if (!raw) { y += 3; continue; }
+          var isRocco = raw.indexOf("[ROCCO]") === 0;
+          var isUser  = raw.indexOf("[TU]") === 0;
+          doc.setFontSize(9);
+          if (isRocco) { doc.setTextColor(0, 140, 180); }
+          else if (isUser) { doc.setTextColor(200, 100, 20); }
+          else { doc.setTextColor(60, 60, 60); }
+          var wrapped = doc.splitTextToSize(raw, maxW);
+          if (y + wrapped.length * lineH > 280) {
+            doc.addPage();
+            y = margin;
+          }
+          doc.text(wrapped, margin, y);
+          y += wrapped.length * lineH;
+        }
+        doc.save("iawire_" + exportTs() + ".pdf");
+      } catch (e) {
+        alert("Errore generazione PDF: " + e.message);
+      }
     });
   }
 
