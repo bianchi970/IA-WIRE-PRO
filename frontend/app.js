@@ -22,6 +22,7 @@ console.log('BRIDGE LIVE');
   var historyOverlay = document.getElementById("historyOverlay");
   var historyCloseBtn = document.getElementById("historyCloseBtn");
   var historyList = document.getElementById("historyList");
+  var historySearch = document.getElementById("historySearch");
 
   var imageInput = document.getElementById("imageInput");
   var previewWrap = document.getElementById("previewWrap");
@@ -651,6 +652,7 @@ console.log('BRIDGE LIVE');
         html += '</div>';
       }
       historyList.innerHTML = html;
+      filterHistoryList();
 
       // Click su item → carica conversazione
       var items = historyList.querySelectorAll(".history-item");
@@ -781,6 +783,19 @@ console.log('BRIDGE LIVE');
   if (historyBtn) historyBtn.addEventListener("click", openHistoryPanel);
   if (historyCloseBtn) historyCloseBtn.addEventListener("click", closeHistoryPanel);
   if (historyOverlay) historyOverlay.addEventListener("click", closeHistoryPanel);
+
+  // ===== RICERCA STORICO =====
+  function filterHistoryList() {
+    if (!historySearch || !historyList) return;
+    var q = (historySearch.value || "").toLowerCase().trim();
+    var items = historyList.querySelectorAll(".history-item");
+    for (var i = 0; i < items.length; i++) {
+      var titleEl = items[i].querySelector(".history-item-title");
+      var text = titleEl ? (titleEl.textContent || "").toLowerCase() : "";
+      items[i].style.display = (!q || text.indexOf(q) !== -1) ? "" : "none";
+    }
+  }
+  if (historySearch) historySearch.addEventListener("input", filterHistoryList);
 
   // ===== EXPORT CONVERSAZIONE =====
   if (exportBtn) {

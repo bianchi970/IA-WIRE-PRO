@@ -1327,4 +1327,26 @@ app.listen(PORT, () => {
     _knowledgeCounts.rules + " protection_rules, " +
     _knowledgeCounts.protocols + " safety_protocols"
   );
+
+  // Auto-ingest doc_chunks se DB disponibile e tabella vuota
+  if (pool) {
+    pool.query("SELECT COUNT(*) AS n FROM doc_chunks").then(function (res) {
+      var n = parseInt((res.rows[0] && res.rows[0].n) || "0", 10);
+      if (n === 0) {
+        console.log("🔄 doc_chunks vuoto — avvio ingest automatico...");
+        var { execFile } = require("child_process");
+        execFile("node", [path.join(__dirname, "ingest.js")], function (err, stdout) {
+          if (err) {
+            console.warn("⚠️ Auto-ingest fallito:", err.message);
+          } else {
+            console.log("✅ Auto-ingest completato.\n" + (stdout || "").trim());
+          }
+        });
+      } else {
+        console.log("DOC CHUNKS: " + n + " chunk disponibili nel RAG");
+      }
+    }).catch(function (e) {
+      console.warn("⚠️ doc_chunks check fallito:", e.message);
+    });
+  }
 });

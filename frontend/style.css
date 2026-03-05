@@ -307,6 +307,25 @@ button, label, [role="button"], a {
   letter-spacing: 0.4px;
 }
 
+.history-search-wrap {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.history-search {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 6px 10px;
+  outline: none;
+}
+.history-search:focus { border-color: var(--cyan); }
+.history-search::placeholder { color: var(--text-dim); }
+
 .history-list {
   flex: 1;
   overflow-y: auto;
