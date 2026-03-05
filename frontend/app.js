@@ -27,11 +27,12 @@ console.log('BRIDGE LIVE');
 
   var imageInput = document.getElementById("imageInput");
   var previewWrap = document.getElementById("previewWrap");
-  var previewImg = document.getElementById("previewImg");
+  var previewThumbs = document.getElementById("previewThumbs");
+  var previewLabel = document.getElementById("previewLabel");
   var removeImageBtn = document.getElementById("removeImageBtn");
 
   // ====== STATE ======
-  var selectedBlob = null;
+  var selectedBlobs = []; // array di Blob (max 3)
   var abortCtrl = null;
   var _busy = false;
 
@@ -235,7 +236,7 @@ console.log('BRIDGE LIVE');
     if (!sendBtn) return;
     if (_busy) return; // durante busy il bottone è "Annulla"
     var hasText = textInput && textInput.value && textInput.value.trim().length > 0;
-    var hasImg = !!selectedBlob;
+    var hasImg = selectedBlobs.length > 0;
     sendBtn.disabled = !(hasText || hasImg);
     sendBtn.style.opacity = (hasText || hasImg) ? "1" : "0.4";
   }
@@ -389,10 +390,10 @@ console.log('BRIDGE LIVE');
   }
 
   function clearImage() {
-    selectedBlob = null;
+    selectedBlobs = [];
     if (imageInput) imageInput.value = "";
+    if (previewThumbs) previewThumbs.innerHTML = "";
     if (previewWrap) previewWrap.hidden = true;
-    if (previewImg) previewImg.src = "";
     updateSendState();
   }
 
@@ -412,18 +413,23 @@ console.log('BRIDGE LIVE');
     return [location.origin + path, "http://localhost:3000" + path];
   }
 
-  function postToChatApi(payload, imageBlob, signal) {
+  function postToChatApi(payload, imageBlobs, signal) {
     var formData = new FormData();
+    // imageBlobs può essere un Blob singolo, un array di Blob, o null
+    var blobsArr = Array.isArray(imageBlobs) ? imageBlobs : (imageBlobs ? [imageBlobs] : []);
 
     var rawMsg = ((payload && (payload.message || payload.text)) || "").trim();
-    var safeMsg = rawMsg || (imageBlob ? "Analizza la foto in modo tecnico: elenca componenti (RCD/RCBO/MT), pettini, morsettiere, e indica cosa non è leggibile e che zoom serve." : "");
+    var safeMsg = rawMsg || (blobsArr.length > 0 ? "Analizza la foto in modo tecnico: elenca componenti (RCD/RCBO/MT), pettini, morsettiere, e indica cosa non è leggibile e che zoom serve." : "");
     formData.append("message", safeMsg);
 
     if (payload && payload.history) formData.append("history", JSON.stringify(payload.history));
     if (payload && payload.mode) formData.append("mode", payload.mode);
     if (payload && payload.conversation_id) formData.append("conversation_id", String(payload.conversation_id));
 
-    if (imageBlob) formData.append("image", imageBlob, "photo_" + Date.now() + ".jpg");
+    var ts = Date.now();
+    blobsArr.forEach(function (blob, i) {
+      formData.append("image_" + i, blob, "photo_" + ts + "_" + i + ".jpg");
+    });
 
     var urls = candidateChatEndpoints();
     var lastErr = null;
@@ -992,22 +998,35 @@ console.log('BRIDGE LIVE');
 
   if (imageInput) {
     imageInput.addEventListener("change", function (e) {
-      var file = e.target.files && e.target.files[0];
-      if (!file) return;
+      var files = e.target.files ? Array.prototype.slice.call(e.target.files, 0, 3) : [];
+      if (!files.length) return;
 
-      setStatus("Analisi immagine...");
+      setStatus("Compressione foto...");
       setBusy(true);
+      selectedBlobs = [];
+      if (previewThumbs) previewThumbs.innerHTML = "";
 
-      compressImageFile(file, { maxSize: 1800, quality: 0.85 })
-        .then(function (r) {
-          selectedBlob = r.blob;
-          if (previewImg) previewImg.src = r.previewUrl || "";
+      var promises = files.map(function (file) {
+        return compressImageFile(file, { maxSize: 1800, quality: 0.85 });
+      });
+
+      Promise.all(promises)
+        .then(function (results) {
+          results.forEach(function (r) {
+            selectedBlobs.push(r.blob);
+            if (previewThumbs) {
+              var img = document.createElement("img");
+              img.src = r.previewUrl || "";
+              img.alt = "Anteprima";
+              previewThumbs.appendChild(img);
+            }
+          });
+          if (previewLabel) previewLabel.textContent = selectedBlobs.length === 1 ? "1 foto" : selectedBlobs.length + " foto";
           if (previewWrap) previewWrap.hidden = false;
           setStatus("Pronto");
           updateSendState();
         })
         .catch(function (err) {
-          console.error(err);
           clearImage();
           setStatus("Errore");
           addMessage("ai", "Non riesco a leggere/comprimere la foto. Prova con un’altra immagine (nitida e ravvicinata).");
@@ -1042,14 +1061,15 @@ console.log('BRIDGE LIVE');
         }
 
         var text = (textInput && textInput.value ? textInput.value : "").trim();
-        if (!text && !selectedBlob) return;
+        if (!text && selectedBlobs.length === 0) return;
 
         // ✅ se solo foto, messaggio tecnico
-        if (!text && selectedBlob) {
+        if (!text && selectedBlobs.length > 0) {
           text = "Analizza la foto in modo tecnico: elenca componenti (RCD/RCBO/MT), pettini, morsettiere, e indica cosa non è leggibile e che zoom serve.";
         }
 
-        if (selectedBlob && text.indexOf("Analizza la foto") === 0) addMessage("user", "📷 Foto inviata");
+        var hasPhotos = selectedBlobs.length > 0;
+        if (hasPhotos && text.indexOf("Analizza la foto") === 0) addMessage("user", "📷 " + selectedBlobs.length + (selectedBlobs.length === 1 ? " foto inviata" : " foto inviate"));
         else addMessage("user", text);
 
         pushHistory("user", text);
@@ -1057,17 +1077,17 @@ console.log('BRIDGE LIVE');
         var pendingText = text;
 
         setBusy(true);
-        setStatus(selectedBlob ? "Analisi..." : "Elaborazione...");
+        setStatus(hasPhotos ? "Analisi..." : "Elaborazione...");
 
         removeTyping();
-        addTyping(selectedBlob ? "Sto analizzando la foto..." : "Sto rispondendo...");
+        addTyping(hasPhotos ? "Sto analizzando " + (selectedBlobs.length === 1 ? "la foto..." : "le foto...") : "Sto rispondendo...");
 
         if (abortCtrl) abortCtrl.abort();
         abortCtrl = new AbortController();
 
         postToChatApi(
           { message: text, history: conversationHistory, conversation_id: conversationId },
-          selectedBlob,
+          selectedBlobs,
           abortCtrl.signal
         )
           .then(function (r) {

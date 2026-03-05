@@ -77,14 +77,14 @@
 
         <!-- Preview chip: appare solo quando foto caricata -->
         <div class="preview-wrap" id="previewWrap" hidden>
-          <img id="previewImg" alt="Anteprima" />
-          <span class="preview-label">Foto pronta</span>
+          <div id="previewThumbs" class="preview-thumbs"></div>
+          <span class="preview-label" id="previewLabel">Foto pronta</span>
           <button class="btn ghost small" id="removeImageBtn" type="button">✕</button>
         </div>
 
         <!-- Riga: 📷 | textarea | Invia -->
         <form id="chatForm" class="composer-row">
-          <input id="imageInput" type="file" accept="image/*" />
+          <input id="imageInput" type="file" accept="image/*" multiple />
           <label class="cam-btn" for="imageInput" title="Carica foto">📷</label>
 
           <textarea

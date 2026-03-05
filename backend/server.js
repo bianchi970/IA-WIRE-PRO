@@ -192,6 +192,15 @@ function pickFirstImageFile(files) {
   return arr[0] || null;
 }
 
+/** Ritorna tutti i file immagine caricati (max 3) in ordine di fieldname. */
+function pickAllImageFiles(files) {
+  const arr = Array.isArray(files) ? files : [];
+  const imgs = arr.filter((f) =>
+    String(f.mimetype || "").startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp)$/i.test(f.originalname || "")
+  );
+  return imgs.slice(0, 3);
+}
+
 // =========================
 // DB HELPERS (Enciclopedia "RAG" keyword → FULL TEXT)
 // =========================
@@ -524,20 +533,23 @@ function buildContextBlock({ dbContextText, docChunksText, knowledgeText, engine
     .join("\n\n");
 }
 
-async function callOpenAI({ systemPrompt, shortHistory, imageBase64, message, contextBlock }) {
+async function callOpenAI({ systemPrompt, shortHistory, imageBase64, imagesBase64, message, contextBlock }) {
   if (!openai) throw new Error("OpenAI non configurato");
   const messages = [{ role: "system", content: systemPrompt }].concat(shortHistory);
   if (contextBlock) messages.push({ role: "system", content: contextBlock });
 
-  if (imageBase64) {
-    const img = normalizeBase64Image(imageBase64);
-    messages.push({
-      role: "user",
-      content: [
-        { type: "text", text: message },
-        { type: "image_url", image_url: { url: "data:" + img.mime + ";base64," + img.b64 } },
-      ],
-    });
+  // Usa imagesBase64 (array) se disponibile, altrimenti fallback su imageBase64 singolo
+  const imgs = Array.isArray(imagesBase64) && imagesBase64.length > 0
+    ? imagesBase64
+    : (imageBase64 ? [imageBase64] : []);
+
+  if (imgs.length > 0) {
+    const content = [{ type: "text", text: message }];
+    for (const raw of imgs) {
+      const img = normalizeBase64Image(raw);
+      if (img) content.push({ type: "image_url", image_url: { url: "data:" + img.mime + ";base64," + img.b64 } });
+    }
+    messages.push({ role: "user", content });
   } else {
     messages.push({ role: "user", content: message });
   }
@@ -552,19 +564,21 @@ async function callOpenAI({ systemPrompt, shortHistory, imageBase64, message, co
   return { answer, model: OPENAI_MODEL };
 }
 
-async function callAnthropic({ systemPrompt, shortHistory, imageBase64, message, contextBlock }) {
+async function callAnthropic({ systemPrompt, shortHistory, imageBase64, imagesBase64, message, contextBlock }) {
   if (!anthropic) throw new Error("Anthropic non configurato");
   const msgs = shortHistory.slice();
 
-  if (imageBase64) {
-    const img = normalizeBase64Image(imageBase64);
-    msgs.push({
-      role: "user",
-      content: [
-        { type: "text", text: message },
-        { type: "image", source: { type: "base64", media_type: img.mime, data: img.b64 } },
-      ],
-    });
+  const imgs = Array.isArray(imagesBase64) && imagesBase64.length > 0
+    ? imagesBase64
+    : (imageBase64 ? [imageBase64] : []);
+
+  if (imgs.length > 0) {
+    const content = [{ type: "text", text: message }];
+    for (const raw of imgs) {
+      const img = normalizeBase64Image(raw);
+      if (img) content.push({ type: "image", source: { type: "base64", media_type: img.mime, data: img.b64 } });
+    }
+    msgs.push({ role: "user", content });
   } else {
     msgs.push({ role: "user", content: message });
   }
@@ -965,21 +979,25 @@ app.post("/api/chat", uploadAny, async (req, res) => {
     const user_id = body.user_id || null;
     let convId = body.conversation_id ? parseInt(body.conversation_id, 10) || null : null;
 
-    // ✅ immagini: prende il primo file immagine tra qualsiasi field
-    let imageBase64 = null;
-    const file = pickFirstImageFile(req.files);
-
-    if (file?.buffer) {
-      const base64 = file.buffer.toString("base64");
-      imageBase64 = "data:" + (file.mimetype || "image/png") + ";base64," + base64;
+    // ✅ immagini: raccoglie tutti i file immagine (max 3) — supporta upload multiplo
+    let imagesBase64 = [];
+    const imageFiles = pickAllImageFiles(req.files);
+    for (const f of imageFiles) {
+      if (f && f.buffer) {
+        imagesBase64.push("data:" + (f.mimetype || "image/jpeg") + ";base64," + f.buffer.toString("base64"));
+      }
     }
 
-    if (!imageBase64) {
+    // Fallback: immagine singola da JSON body (backward compat)
+    if (imagesBase64.length === 0) {
       const rawB64 = body.imageBase64 || body.image_base64 || body.image || null;
-      if (rawB64) imageBase64 = String(rawB64);
+      if (rawB64) imagesBase64 = [String(rawB64)];
     }
 
-    if (!message && imageBase64) message = "Analizza questa foto dell'impianto/quadro. Identifica tutti i componenti visibili, leggi le tarature e segnala qualsiasi anomalia o guasto visibile.";
+    // Alias singolo per compatibilità con codice esistente
+    const imageBase64 = imagesBase64[0] || null;
+
+    if (!message && imagesBase64.length > 0) message = "Analizza questa foto dell'impianto/quadro. Identifica tutti i componenti visibili, leggi le tarature e segnala qualsiasi anomalia o guasto visibile.";
 
     if (!message && !imageBase64) {
       return res.status(400).json({
@@ -1164,7 +1182,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
     }
 
     const contextBlock = buildContextBlock({ dbContextText, docChunksText, knowledgeText, engineText });
-    const callParams = { systemPrompt, shortHistory, imageBase64, message, contextBlock };
+    const callParams = { systemPrompt, shortHistory, imageBase64, imagesBase64, message, contextBlock };
 
     let answer = null;
     let usedProvider = null;

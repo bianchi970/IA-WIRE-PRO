@@ -692,6 +692,17 @@ button, label, [role="button"], a {
   .sec-head       { margin-top: 6px; margin-bottom: 2px; }
 }
 
+/* ===== PREVIEW MULTI-FOTO ===== */
+.preview-thumbs { display: flex; gap: 6px; align-items: center; }
+.preview-thumbs img {
+  width: 46px;
+  height: 46px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
 /* ===== EXPORT DROPDOWN ===== */
 .export-wrap { position: relative; display: inline-block; }
 .export-menu {
