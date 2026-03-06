@@ -485,3 +485,260 @@ PBT-Q/PROJEX → ROCCO: MOTORE CALCOLO (Ib, Iz, ΔV%, Icc, protezioni)
 ---
 
 *Patch v2 — Fonte: analisi GWSoftware (PBT-Q, PROJEX), sito GEWISS, manuali tecnici ufficiali, CEI-UNEL 35024/1, CEI 64-8*
+
+---
+## AGGIORNAMENTO v3 — LOGICA ROCCO INTELLIGENTE
+
+### REGOLA 1 — Selezione automatica tipo differenziale
+
+ROCCO deve scegliere automaticamente il tipo di differenziale in base al carico:
+```
+SE carico contiene [pompa calore, inverter, UPS, variatore velocità (VFD)]
+  → Differenziale Tipo A  (AC + correnti pulsanti)
+SE carico contiene [lavatrice, lavastoviglie, VFD trifase]
+  → Differenziale Tipo F  (AC + pulsante + frequenza variabile)
+SE carico contiene [wallbox, colonnina EV, ricarica veicolo elettrico]
+  → Differenziale Tipo B  (obbligatorio CEI 64-8 Sez.722)
+  → OBBLIGATORIO anche se il cliente non lo chiede
+SE carico contiene [pannelli fotovoltaici, inverter FV]
+  → Differenziale Tipo A o B  (dipende dall'inverter, verificare scheda tecnica)
+ALTRIMENTI (luci, prese standard, riscaldamento resistivo)
+  → Differenziale Tipo AC  (sufficiente)
+```
+Soglie Idn per applicazione:
+```
+30 mA  → protezione persone
+         OBBLIGATORIO per: bagni, prese ≤20A uso generale, cantieri
+300 mA → protezione incendi
+         per circuiti dove Idn=30mA non è richiesto
+500 mA / 1A → protezione impianto (grandi quadri)
+```
+
+---
+
+### REGOLA 2 — Calcolo automatico sezione PE
+
+ROCCO calcola automaticamente la sezione del conduttore di protezione:
+```
+SE sezione fase S ≤ 16 mm²:
+  → PE = S (uguale alla fase)
+SE 16 mm² < S ≤ 35 mm²:
+  → PE = 16 mm²
+SE S > 35 mm²:
+  → PE = S / 2
+
+Esempi pratici:
+  Fase 1.5 mm² → PE 1.5 mm²
+  Fase 2.5 mm² → PE 2.5 mm²
+  Fase 4 mm²   → PE 4 mm²
+  Fase 6 mm²   → PE 6 mm²
+  Fase 10 mm²  → PE 10 mm²
+  Fase 16 mm²  → PE 16 mm²
+  Fase 25 mm²  → PE 16 mm²
+  Fase 35 mm²  → PE 16 mm²
+  Fase 50 mm²  → PE 25 mm²
+  Fase 70 mm²  → PE 35 mm²
+  Fase 95 mm²  → PE 50 mm²
+  Fase 120 mm² → PE 70 mm²
+```
+
+---
+
+### REGOLA 3 — Riconoscimento tipo locale → norma applicabile
+
+ROCCO identifica il tipo di locale e applica automaticamente la norma specifica:
+```
+PAROLE CHIAVE → NORMA → REGOLE SPECIALI
+
+"bagno" / "doccia" / "vasca"
+  → CEI 64-8 Sezione 701
+  → Zone 0/1/2 con distanze precise
+  → IP minimo: Zona 0=IPX7, Zona 1=IPX5, Zona 2=IPX4
+  → Differenziale 30mA OBBLIGATORIO per tutti i circuiti
+  → VIETATO: interruttori e prese in Zona 0 e 1
+  → Equipotenziale supplementare OBBLIGATORIO
+
+"piscina" / "vasca idromassaggio" / "fontana"
+  → CEI 64-8 Sezione 702
+  → IP minimo IPX8 in zona 0
+  → PELV obbligatorio in zona 0
+
+"sauna" / "bagno turco"
+  → CEI 64-8 Sezione 703
+  → Temperatura ambiente fino a 125°C
+  → Solo cavi adatti alle alte temperature
+
+"garage" / "autorimessa" / "parcheggio"
+  → CEI 64-8 Sezione 722 (se presente ricarica EV)
+  → Differenziale Tipo B se presente wallbox
+  → Circuito dedicato 32A per ogni wallbox
+
+"cantiere" / "costruzione"
+  → CEI 64-8 Sezione 704
+  → Differenziale 30mA OBBLIGATORIO tutte le prese
+  → Quadri EN 61439-4
+
+"esterno" / "giardino" / "terrazza"
+  → CEI 64-7
+  → IP minimo IP44 per apparecchiature
+  → Differenziale 30mA per tutte le prese esterne
+
+"ufficio" / "negozio" / "commerciale"
+  → CEI 64-8 standard + DM 37/08 progetto obbligatorio se >200m²
+  → Valutare UPS per continuità
+
+"ospedale" / "ambulatorio" / "studio medico"
+  → CEI 64-8 Sezione 710
+  → Gruppi IT medicali
+  → Illuminazione emergenza obbligatoria
+
+"cucina" / "zona cottura"
+  → Circuiti dedicati: piano cottura (4-6kW), forno (2-3kW)
+  → Sezione minima 4 mm² per piano cottura
+  → Interruttore bipolare per piano cottura
+
+"fotovoltaico" / "FV" / "solare"
+  → CEI 82-25
+  → Protezione lato DC separata
+  → Inverter con certificazione CEI EN 62116
+```
+
+---
+
+### REGOLA 4 — Selezione curva interruttore automatica
+
+ROCCO seleziona la curva giusta in base al tipo di carico:
+```
+CARICO → CURVA CONSIGLIATA → MOTIVO
+
+Luci, prese, riscaldamento resistivo
+  → Curva B (3-5×In)
+  → Bassa corrente di spunto
+
+Uso generale, piccoli motori, carichi misti
+  → Curva C (5-10×In)  ← default residenziale/commerciale
+  → Corrente di spunto moderata
+
+Motori, trasformatori, compressori, pompe
+  → Curva D (10-20×In)
+  → Alta corrente di spunto
+
+Motori industriali ad alto momento di inerzia
+  → Curva K (8-15×In)
+  → Protezione ottimizzata motori
+
+Circuiti elettronici, PLC, strumentazione
+  → Curva Z (2-3×In)
+  → Massima protezione dispositivi sensibili
+```
+
+---
+
+### REGOLA 5 — Calcolo dotazioni minime residenziali (CEI 64-8 Cap.37)
+
+ROCCO calcola automaticamente le dotazioni minime per appartamenti:
+```
+INPUT: superficie appartamento in m²
+
+CALCOLO PUNTI LUCE minimi:
+  Ogni locale: minimo 1 punto luce
+  Soggiorno >14m²: 2 punti luce
+  Cucina: 1 punto luce + presa cappa
+
+CALCOLO PRESE minime per locale:
+  Corridoio ≤5m²: 1 presa
+  Corridoio >5m²: 2 prese
+  Bagno: 1 presa (Zona 2, min 0.6m dalla vasca)
+  Camera singola: 4 prese (CEI 64-8 livello base)
+  Camera doppia: 6 prese
+  Soggiorno ≤30m²: 6 prese
+  Soggiorno >30m²: 8 prese
+  Cucina: 4 prese + 1 presa dedicata frigo + 1 lavastoviglie
+
+LIVELLI PRESTAZIONALI (Capitolo 37):
+  ★   Base:     dotazioni minime norma
+  ★★  Standard: +30% punti presa, predisposizioni domotica
+  ★★★ Comfort:  domotica integrata, gestione energetica
+
+CIRCUITI DEDICATI obbligatori o consigliati:
+  - Piano cottura:      1 circuito dedicato 4mm² / 32A curva C
+  - Forno:              1 circuito dedicato 2.5mm² / 16A curva C
+  - Lavatrice:          1 circuito dedicato 2.5mm² / 16A curva C
+  - Lavastoviglie:      1 circuito dedicato 2.5mm² / 16A curva C
+  - Frigorifero:        1 circuito dedicato 2.5mm² / 16A curva C
+  - Boiler/scaldabagno: 1 circuito dedicato 2.5-4mm² / 16-20A
+  - Condizionatore:     1 circuito dedicato 2.5-4mm² / 16-20A
+  - Wallbox EV:         1 circuito dedicato 6mm² / 32A curva C + diff. Tipo B
+```
+
+---
+
+### REGOLA 6 — Verifica automatica conformità DM 37/08
+
+ROCCO verifica automaticamente se serve il progetto firmato:
+```
+QUANDO è obbligatorio il progetto firmato da professionista iscritto all'albo?
+
+Unità abitativa singola:
+  SE potenza > 6 kW  → progetto OBBLIGATORIO
+  SE superficie > 400 m² → progetto OBBLIGATORIO
+  ALTRIMENTI → firma responsabile tecnico impresa sufficiente
+
+Attività commerciale/industriale:
+  SE potenza > 6 kW  → progetto OBBLIGATORIO
+  SE superficie > 200 m² → progetto OBBLIGATORIO
+
+SEMPRE obbligatorio (indipendentemente da potenza/superficie):
+  - Condomini
+  - Luoghi medici (ambulatori, studi dentistici)
+  - Ambienti a rischio esplosione (ATEX)
+  - Protezione contro i fulmini (LPS)
+  - Impianti di terra di nuova realizzazione
+
+Dichiarazione di Conformità (DiCo) SEMPRE obbligatoria per:
+  - Nuovi impianti
+  - Ampliamenti
+  - Manutenzione straordinaria
+  NB: non obbligatoria per manutenzione ordinaria
+```
+
+---
+
+### REGOLA 7 — Logica diagnostica completa ROCCO
+
+Sequenza domande che ROCCO deve fare all'utente:
+```
+STEP 1 — Identificazione impianto
+  Q: "Tipo di intervento?" → nuovo / ampliamento / manutenzione straordinaria
+  Q: "Tipo di locale?" → residenziale / commerciale / industriale / speciale
+  Q: "Superficie?" → per verifica obbligo progetto firmato
+  Q: "Potenza totale prevista (kW)?" → per verifica obbligo progetto
+
+STEP 2 — Parametri elettrici
+  Q: "Sistema di distribuzione?" → TT (default Italia residenziale) / TN-S / IT
+  Q: "Tensione nominale?" → 230V monofase / 400V trifase
+  Q: "Corrente disponibile dal contatore (A)?" → 3/4.5/6/10/16/25/32A
+
+STEP 3 — Carichi
+  Q: "Elenca i carichi principali con potenza"
+  → ROCCO calcola Ib per ogni circuito
+  → ROCCO identifica automaticamente carichi speciali (EV, motori, ecc.)
+
+STEP 4 — Ambiente
+  Q: "Temperatura massima ambiente?" → per fattore K1
+  Q: "Tipo di posa cavi?" → tubo incassato / aria libera / interrato
+  Q: "Numero circuiti in parallelo?" → per fattore K2
+
+STEP 5 — Output automatico
+  → Sezioni cavi per ogni circuito
+  → Tipo e taglia interruttore per ogni circuito
+  → Tipo e soglia differenziale per ogni circuito
+  → Sezione conduttore PE
+  → Verifica caduta di tensione totale
+  → Checklist DM 37/08 (42+8 verifiche)
+  → Indica se serve progetto firmato
+```
+
+---
+
+*Patch v3 — Logica ROCCO intelligente: selezione automatica componenti e riconoscimento contesto*
