@@ -742,3 +742,301 @@ STEP 5 — Output automatico
 ---
 
 *Patch v3 — Logica ROCCO intelligente: selezione automatica componenti e riconoscimento contesto*
+
+---
+## AGGIORNAMENTO v4 — DATI MANCANTI + NUOVE NORMATIVE
+
+---
+
+### PARTE 14 — PORTATE CAVI ALLUMINIO (CEI-UNEL 35024/1)
+
+#### Metodo B — Tubo incassato
+| Sezione mm² | 1 circuito mono | 1 circuito tri | 2 circuiti | 3+ circuiti |
+|---|---|---|---|---|
+| 16  | 47A | 43A | 37A | 33A |
+| 25  | 62A | 56A | 49A | 44A |
+| 35  | 77A | 69A | 60A | 54A |
+| 50  | 92A | 83A | 73A | 65A |
+| 70  | 117A |105A | 92A | 83A |
+| 95  | 141A |127A |111A |100A |
+| 120 | 162A |146A |128A |115A |
+| 150 | 185A |166A |146A |131A |
+| 185 | 211A |189A |166A |149A |
+| 240 | 248A |222A |195A |175A |
+
+#### Metodo E — Aria libera
+| Sezione mm² | Monofase | Trifase |
+|---|---|---|
+| 16  | 73A | 59A |
+| 25  | 92A | 76A |
+| 35  | 114A | 94A |
+| 50  | 138A |114A |
+| 70  | 178A |147A |
+| 95  | 216A |179A |
+| 120 | 251A |208A |
+| 150 | 287A |238A |
+| 185 | 326A |271A |
+| 240 | 384A |318A |
+
+Sezione minima alluminio: **16 mm²** (non usare alluminio sotto questa soglia)
+Resistività alluminio: ρ = 0.0291 Ω·mm²/m (20°C)
+
+---
+
+### PARTE 15 — PORTATE CAVI INTERRATI (CEI-UNEL 35026 — Metodo D)
+
+Condizioni di riferimento: 20°C, resistività terreno 1.0 K·m/W, profondità 0.7m
+
+#### Cavi rame interrati — circuito singolo
+| Sezione mm² | Monofase | Trifase |
+|---|---|---|
+| 1.5  | 26A | 22A |
+| 2.5  | 34A | 29A |
+| 4    | 44A | 38A |
+| 6    | 56A | 48A |
+| 10   | 73A | 64A |
+| 16   | 95A | 83A |
+| 25   | 121A |106A |
+| 35   | 146A |128A |
+| 50   | 173A |153A |
+| 70   | 213A |189A |
+| 95   | 252A |224A |
+| 120  | 287A |255A |
+| 150  | 323A |288A |
+| 185  | 363A |324A |
+| 240  | 416A |372A |
+
+#### Fattore K3 — Resistività terreno
+| Tipo terreno | Resistività K·m/W | K3 |
+|---|---|---|
+| Molto umido (vicino acqua) | 0.5 | 1.18 |
+| Umido | 0.7 | 1.10 |
+| Normale (riferimento) | 1.0 | 1.00 |
+| Asciutto | 1.5 | 0.89 |
+| Molto secco (sabbioso) | 3.0 | 0.76 |
+
+Formula: Iz_interrato = I0 × K1 × K3
+Profondità interramento: standard 0.7m. Per profondità diverse applicare fattore aggiuntivo.
+
+---
+
+### PARTE 16 — CALCOLO IMPIANTO DI TERRA
+
+#### 16.1 Tipi di dispersore
+```
+PICCHETTO VERTICALE (più comune)
+  Materiale: acciaio zincato ∅18mm o ∅40mm
+  Lunghezza standard: 1.5m / 2m / 3m
+  Resistenza singolo picchetto: RE = ρ / (2π × L) × ln(4L/d)
+  Approssimazione pratica: RE ≈ ρ/L
+  Con ρ=50 Ω·m e L=2m: RE ≈ 25 Ω
+
+ANELLO PERIMETRALE (dispersore fondazione)
+  Più efficace del picchetto singolo
+  Resistenza: RE = ρ / (2 × diametro)
+  Per edificio 10×10m (perimetro 40m): RE ≈ ρ/12 ≈ 4 Ω (con ρ=50Ω·m)
+
+TIP DI FONDAZIONE
+  Trefolo nudo ∅8mm in fondazione
+  Più efficace in assoluto
+  RE ≈ 1-5 Ω in terreno normale
+```
+
+#### 16.2 Resistività tipica terreni italiani
+| Tipo terreno | ρ (Ω·m) |
+|---|---|
+| Terreno paludoso | 10-50 |
+| Argilla umida | 30-100 |
+| Terreno agricolo | 50-200 |
+| Sabbia umida | 100-500 |
+| Ghiaia asciutta | 500-1000 |
+| Roccia | >1000 |
+
+#### 16.3 Verifica impianto terra sistema TT
+```
+Condizione CEI 64-8 Art. 413:
+RE × Idn ≤ 50V  (ambienti ordinari)
+RE × Idn ≤ 25V  (ambienti speciali: medici, EV)
+
+Con Idn = 30mA:  RE ≤ 1667 Ω
+Con Idn = 300mA: RE ≤ 167 Ω
+Con Idn = 500mA: RE ≤ 100 Ω
+Con Idn = 1A:    RE ≤ 50 Ω
+
+In Italia con sistema TT quasi sempre soddisfatta con Idn=30mA
+```
+
+#### 16.4 Sezioni minime conduttori terra
+```
+Conduttore di terra (da nodo a dispersore):
+  Se protetto meccanicamente: ≥16 mm² Cu / ≥16 mm² Fe
+  Se non protetto:            ≥25 mm² Cu / ≥50 mm² Fe
+  Interrato non protetto:     ≥25 mm² Cu / ≥50 mm² Fe
+
+Conduttore equipotenziale principale:
+  ≥ 6 mm² Cu
+  ≥ metà del conduttore di terra
+  MAX: non necessario oltre 25 mm² Cu
+
+Conduttore equipotenziale supplementare (bagni):
+  Tra due masse: ≥ PE del circuito più piccolo
+  Massa-massa estranea: ≥ metà PE del circuito
+  MIN: 2.5 mm² (protetto) / 4 mm² (non protetto)
+```
+
+---
+
+### PARTE 17 — CEI 64-8 SEZ. 722 — RICARICA VEICOLI ELETTRICI (EV)
+
+```
+QUANDO si applica:
+  Qualsiasi installazione di punti di ricarica per EV
+  (wallbox domestiche, colonnine, prese dedicate)
+
+REQUISITI OBBLIGATORI:
+1. DIFFERENZIALE TIPO B obbligatorio
+   Motivo: gli inverter dei caricabatterie EV generano corrente
+   continua residua che rende inefficace il Tipo AC/A
+
+2. DISPOSITIVO DI MONITORAGGIO CORRENTE CONTINUA (alternativa al Tipo B)
+   Se usato diff. Tipo A + monitor DC residuo integrato nel wallbox
+
+3. PROTEZIONE SOVRACCARICO
+   Dimensionare per 100% della corrente max del veicolo
+   Non applicare fattore contemporaneità a circuiti EV dedicati
+
+4. CIRCUITO DEDICATO obbligatorio
+   Non condividere il circuito EV con altri carichi
+
+5. SEZIONI MINIME per wallbox domestica
+   Wallbox monofase 7.4kW (32A): 6 mm² Cu / 32A curva C
+   Wallbox trifase 11kW (16A):   4 mm² Cu / 16A curva C trifase
+   Wallbox trifase 22kW (32A):   6 mm² Cu / 32A curva C trifase
+
+6. QUADRO DI DISTRIBUZIONE
+   Verificare che il contatore supporti il carico aggiuntivo EV
+   Tipico: richiedere potenziamento a E-Distribuzione se necessario
+
+CODICI GEWISS per EV:
+  Differenziali Tipo B: serie GW95xxx
+  Wallbox GEWISS: serie EV-A / EV-T (3.7-22kW)
+```
+
+---
+
+### PARTE 18 — CEI 82-25 — IMPIANTI FOTOVOLTAICI
+
+```
+LATO DC (pannelli → inverter):
+  - Cavi: tipo FG21M21 (resistenti UV, temperatura, umidità)
+  - Sezione minima: 4 mm² (stringa singola)
+  - Sezionatore DC: obbligatorio prima dell'inverter
+  - Fusibili stringa: se più di 3 stringhe in parallelo
+  - Tensione max DC: tipico 600V o 1000V (inverter dipendente)
+
+LATO AC (inverter → quadro):
+  - Interruttore automatico lato AC: obbligatorio
+  - Protezione interfaccia: CEI 0-21 (inverter certificato la include)
+  - Contatore di produzione: obbligatorio per GSE
+
+INVERTER:
+  - Certificazione CEI EN 62116 (anti-islanding)
+  - Certificazione CEI 0-21 (connessione rete italiana)
+  - Potenza max senza autorizzazione: 20 kW (connessione BT)
+
+DIMENSIONAMENTO RAPIDO:
+  Producibilità media Italia centro: ~1200-1400 kWh/kWp/anno
+  Superficie stimata per kWp: ~6-8 m²
+
+DIFFERENZIALE LATO AC:
+  Tipo A minimo (per correnti pulsanti inverter)
+  Tipo B se inverter non garantisce corrente DC residua < 6mA
+```
+
+---
+
+### PARTE 19 — CEI 64-8 SEZ. 701 — LOCALI BAGNO/DOCCE (DETTAGLIO)
+
+```
+ZONA 0 (dentro vasca/doccia):
+  - Solo SELV ≤12V CA o ≤30V CC
+  - IP: minimo IPX7
+  - VIETATO: qualsiasi apparecchiatura salvo quelle specifiche zona 0
+
+ZONA 1 (sopra vasca fino a 2.25m h / doccia r=1.2m fino a 2.25m h):
+  - Max 250V (SELV/PELV o separazione elettrica)
+  - IP: minimo IPX5 (IPX4 se non raggiungibile da getti diretti)
+  - Ammesso: scaldabagno elettrico, corpi illuminanti IPX5
+  - VIETATO: prese, interruttori, quadri
+
+ZONA 2 (oltre zona 1 fino a 60cm orizzontale, fino a 2.25m h):
+  - IP: minimo IPX4
+  - Ammesso: prese (min 0.6m dalla vasca), interruttori, luci
+  - Prese con differenziale 30mA dedicato
+
+FUORI ZONE (oltre 60cm dalla vasca, >2.25m altezza):
+  - Normale
+
+EQUIPOTENZIALE SUPPLEMENTARE (OBBLIGATORIA):
+  Connettere al nodo PE locale:
+  - Tubazioni metalliche acqua calda/fredda
+  - Tubazioni riscaldamento
+  - Parti metalliche vasca/doccia
+  Conduttore minimo: 4 mm² Cu (non protetto) / 2.5 mm² (protetto)
+```
+
+---
+
+### PARTE 20 — CEI 64-14 — VERIFICHE PERIODICHE IMPIANTI
+
+```
+PERIODICITÀ verifiche:
+  Residenziale con DiCo:    ogni 5 anni
+  Residenziale senza DiCo:  ogni 2 anni
+  Cantieri:                 ogni 3 mesi
+  Luoghi medici:            ogni anno
+  Ambienti ATEX:            ogni 2 anni
+  Impianti di terra (INAIL): ogni 2 anni (denuncia obbligatoria)
+
+MISURE OBBLIGATORIE:
+1. Continuità PE: < 1Ω
+2. Resistenza isolamento: ≥1 MΩ (500V DC)
+3. Resistenza di terra: RE × Idn ≤ 50V
+4. Verifica differenziali: Idn misurata ≤ Idn nominale
+5. Corrente di cortocircuito: Icc ≥ In interruttore
+```
+
+---
+
+### PARTE 21 — COEFFICIENTI CONTEMPORANEITÀ (CEI 64-8 Art. 311)
+
+```
+RESIDENZIALE:
+  2-4 circuiti:   kc = 0.75
+  5-9 circuiti:   kc = 0.60
+  10-14 circuiti: kc = 0.50
+  15-24 circuiti: kc = 0.45
+  25-40 circuiti: kc = 0.40
+  >40 circuiti:   kc = 0.35
+
+TERZIARIO/UFFICI:
+  2-4 circuiti:   kc = 0.90
+  5-9 circuiti:   kc = 0.80
+  10-14 circuiti: kc = 0.70
+  15-24 circuiti: kc = 0.65
+  >24 circuiti:   kc = 0.60
+
+INDUSTRIALE:
+  Default conservativo: kc = 0.85
+
+CARICHI SPECIALI (kc = 1.00 sempre):
+  - Circuiti EV/wallbox
+  - Motori in verifica Icc
+  - Impianti FV
+
+Calcolo: P_tot = Σ(Pi) × kc
+```
+
+---
+
+*Patch v4 — Dati mancanti + Nuove normative: alluminio, interrati, terra, EV (Sez.722), FV (CEI 82-25), bagni (Sez.701), verifiche periodiche (CEI 64-14), contemporaneità*
