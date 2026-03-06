@@ -1,7 +1,29 @@
 "use strict";
 
+const fs = require("fs");
+const path = require("path");
 const policies = require("./policies");
 const { postcheck } = require("./postcheck");
+
+// Carica ROCCO_KNOWLEDGE.md una sola volta (contesto fisso CEI 64-8 + DM 37/08)
+let _roccoKnowledge = null;
+function getRoccoKnowledge() {
+  if (_roccoKnowledge === null) {
+    try {
+      const raw = fs.readFileSync(path.join(__dirname, "ROCCO_KNOWLEDGE.md"), "utf8");
+      // Estrai solo le PARTI (salta header istruzioni e TODO finale)
+      const start = raw.indexOf("## PARTE 1");
+      const end = raw.indexOf("## PARTE 8");
+      _roccoKnowledge = start !== -1
+        ? raw.slice(start, end !== -1 ? end : undefined).trim()
+        : raw.trim();
+    } catch (e) {
+      _roccoKnowledge = "";
+      console.warn("[ROCCO] ROCCO_KNOWLEDGE.md non trovato:", e.message);
+    }
+  }
+  return _roccoKnowledge;
+}
 
 function plan(input) {
   const message = (input && input.message ? String(input.message) : "").trim();
@@ -153,6 +175,10 @@ function buildSystemPrompt(plan, ragContext) {
 
     "\n\n─── REGOLE DI SICUREZZA E BUONE PRATICHE ───\n" +
     rules.map((r) => "• " + r).join("\n") +
+
+    "\n\n═══ KNOWLEDGE BASE TECNICA (CEI 64-8 / DM 37/08 / CEI-UNEL) ═══\n" +
+    "Usa questi dati per calcoli e verifiche normative. Priorità massima su qualsiasi altra fonte.\n\n" +
+    getRoccoKnowledge() +
 
     (ragContext ? "\n\n─── CONTESTO DALLA KNOWLEDGE BASE IA WIRE PRO ───\n" + ragContext + "\n" : "")
   );
