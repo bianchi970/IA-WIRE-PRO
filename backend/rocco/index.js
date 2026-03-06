@@ -11,11 +11,10 @@ function getRoccoKnowledge() {
   if (_roccoKnowledge === null) {
     try {
       const raw = fs.readFileSync(path.join(__dirname, "ROCCO_KNOWLEDGE.md"), "utf8");
-      // Estrai solo le PARTI (salta header istruzioni e TODO finale)
+      // Estrai dal primo PARTE/AGGIORNAMENTO fino alla fine (include v1+v2+v3)
       const start = raw.indexOf("## PARTE 1");
-      const end = raw.indexOf("## PARTE 8");
       _roccoKnowledge = start !== -1
-        ? raw.slice(start, end !== -1 ? end : undefined).trim()
+        ? raw.slice(start).trim()
         : raw.trim();
     } catch (e) {
       _roccoKnowledge = "";
