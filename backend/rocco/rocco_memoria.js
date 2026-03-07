@@ -3,9 +3,8 @@
  * API di accesso alla memoria permanente di ROCCO.
  * Schema: rocco_progetti, rocco_diagnosi, rocco_knowledge_casi, rocco_calcoli
  */
-const { Pool } = require('pg');
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// Usa il pool condiviso di db.js (con SSL per Render)
+const { pool } = require('../db');
 
 // ----------------------------------------------------------
 // INIZIALIZZAZIONE SCHEMA
