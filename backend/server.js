@@ -30,6 +30,13 @@ const { runCalcEngine,
         seleziona_differenziale, seleziona_curva,
         calcola_terra, verifica_obbligo_progetto,
         calcola_sezione_da_dv } = require("./rocco/calcEngine");
+// ROCCO MEMORIA — Strato 3 memoria permanente PostgreSQL (FASE v7)
+let roccoMemoria = null;
+try {
+  roccoMemoria = require("./rocco/rocco_memoria");
+} catch (e) {
+  console.warn("⚠️ rocco_memoria non disponibile:", e && e.message);
+}
 // ✅ DB pool (protetto: non deve mai far crashare il server)
 let pool = null;
 try {
@@ -1253,6 +1260,24 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       console.warn("⚠️ Knowledge casi non disponibili:", (e && e.message) || e);
     }
 
+    // ===== ROCCO MEMORIA — casi simili + contesto progetto (FASE v7) =====
+    let memoriaText = "";
+    if (roccoMemoria) {
+      try {
+        const casiSimili = await roccoMemoria.cerca_casi_simili(message);
+        const contesMemoria = await roccoMemoria.get_contesto_memoria(req.body.progetto_id || null);
+        if (casiSimili.length > 0) {
+          memoriaText += "\n[CASI SIMILI DALLA MEMORIA ROCCO]\n";
+          casiSimili.forEach(function(c, i) {
+            memoriaText += (i + 1) + ". " + c.problema + " → " + c.soluzione + "\n";
+          });
+        }
+        if (contesMemoria) memoriaText += contesMemoria;
+      } catch (e) {
+        console.warn("⚠️ rocco_memoria non disponibile:", (e && e.message) || e);
+      }
+    }
+
     // ===== KNOWLEDGE BASE LOCALE + ROCCO ENGINE (FASE 7) =====
     let knowledgeText = "";
     let engineText = "";
@@ -1344,7 +1369,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       });
     }
 
-    const contextBlock = buildContextBlock({ dbContextText, docChunksText, knowledgeText: knowledgeText + (knowledgeCasiText ? "\n\n" + knowledgeCasiText : ""), engineText });
+    const contextBlock = buildContextBlock({ dbContextText, docChunksText, knowledgeText: knowledgeText + (knowledgeCasiText ? "\n\n" + knowledgeCasiText : "") + (memoriaText ? "\n\n" + memoriaText : ""), engineText });
     const callParams = { systemPrompt, shortHistory, imageBase64, imagesBase64, message, contextBlock };
 
     let answer = null;
@@ -1869,6 +1894,13 @@ app.listen(PORT, () => {
     _knowledgeCounts.rules + " protection_rules, " +
     _knowledgeCounts.protocols + " safety_protocols"
   );
+
+  // ROCCO MEMORIA — init schema PostgreSQL (FASE v7)
+  if (pool && roccoMemoria) {
+    roccoMemoria.init_schema().catch(function(e) {
+      logger.warn("[ROCCO] init_schema fallito: " + (e && e.message || e));
+    });
+  }
 
   // Auto-ingest doc_chunks se DB disponibile e tabella vuota
   if (pool) {
