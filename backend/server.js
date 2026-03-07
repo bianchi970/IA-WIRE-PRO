@@ -23,6 +23,12 @@ const { normalizeCertainty } = require("./utils/certainty");
 const { extractComponents, formatComponents } = require("./rocco/componentRecognizer");
 const { extractElectricalValues, formatElectricalValues, checkAnomalies } = require("./rocco/numericRecognizer");
 const { runFoundationEngine } = require("./rocco/engine");
+const { runCalcEngine,
+        calcola_ib, calcola_sezione, verifica_coordinamento,
+        calcola_dv, calcola_icc, calcola_pe,
+        seleziona_differenziale, seleziona_curva,
+        calcola_terra, verifica_obbligo_progetto,
+        calcola_sezione_da_dv } = require("./rocco/calcEngine");
 // ✅ DB pool (protetto: non deve mai far crashare il server)
 let pool = null;
 try {
@@ -1064,7 +1070,21 @@ app.post("/api/chat", uploadAny, async (req, res) => {
 
     const ragContext = "";
 
-    let systemPrompt = rocco.buildSystemPrompt(plan, ragContext);
+    // ── CALC ENGINE (FASE 2) — calcoli autonomi pre-LLM ──────────────────
+    let calcContext = "";
+    try {
+      const calcResult = runCalcEngine(message);
+      if (calcResult.hasCalc) {
+        calcContext = calcResult.context;
+        if (process.env.ROCCO_DEBUG === "1") {
+          console.log("[CALC ENGINE]", JSON.stringify(calcResult.params));
+        }
+      }
+    } catch (e) {
+      console.warn("⚠️ Calc Engine non disponibile:", (e && e.message) || e);
+    }
+
+    let systemPrompt = rocco.buildSystemPrompt(plan, ragContext, calcContext);
     if (convSummary) {
       systemPrompt = "CONTESTO CONVERSAZIONE PRECEDENTE:\n" + convSummary + "\n\n" + systemPrompt;
     }
@@ -1320,6 +1340,107 @@ app.get("/api/engine/test", (req, res) => {
     console.error("❌ /api/engine/test error:", err);
     res.status(500).json({ ok: false, error: err && err.message ? err.message : String(err) });
   }
+});
+
+// =========================
+// ROCCO CALC ENGINE — /api/calc
+// Tool di calcolo autonomi (zero AI, zero API)
+// =========================
+
+/**
+ * POST /api/calc
+ * Body: { tool, params }
+ *
+ * tool: ib | sezione | dv | icc | pe | diff | curva | terra | coordinamento | progetto | auto
+ *
+ * Esempi:
+ *   { tool: "ib",       params: { P: 3000, V: 230, cosphi: 0.9 } }
+ *   { tool: "sezione",  params: { Ib: 13.5, metodo: "B1", temp: 30, fasi: 1 } }
+ *   { tool: "dv",       params: { S: 2.5, L: 30, Ib: 13.5, V: 230 } }
+ *   { tool: "pe",       params: { S: 6 } }
+ *   { tool: "diff",     params: { carico: "pompa calore", locale: "garage" } }
+ *   { tool: "auto",     params: { message: "circuito da 3kW, 20 metri, monofase" } }
+ */
+app.post("/api/calc", (req, res) => {
+  try {
+    const { tool, params } = req.body || {};
+    const p = params || {};
+    let result;
+
+    switch (String(tool || "auto").toLowerCase()) {
+      case "ib":
+        result = calcola_ib(p.P || p.P_W, p.V, p.cosphi || p.cosfi, p.eta, p.fasi);
+        break;
+      case "sezione":
+      case "section":
+        result = calcola_sezione(p.Ib, p.metodo, p.temp, p.n_circuiti, p.fasi);
+        break;
+      case "dv":
+      case "caduta":
+        result = calcola_dv(p.S, p.L, p.Ib, p.cosphi || p.cosfi, p.V, p.fasi, p.mat);
+        break;
+      case "icc":
+        result = calcola_icc(p.Sn_kVA || p.Sn, p.Vcc_perc || p.Vcc, p.L, p.S, p.Icc_BUS);
+        break;
+      case "pe":
+        result = calcola_pe(p.S || p.S_fase);
+        break;
+      case "diff":
+      case "differenziale":
+        result = seleziona_differenziale(p.carico, p.locale);
+        break;
+      case "curva":
+        result = seleziona_curva(p.carico);
+        break;
+      case "terra":
+        result = calcola_terra(p.rho, p.tipo, p.L);
+        break;
+      case "coordinamento":
+      case "coord":
+        result = verifica_coordinamento(p.Ib, p.In, p.Iz, p.If);
+        break;
+      case "progetto":
+      case "dm3708":
+        result = verifica_obbligo_progetto(p.potenza_kW, p.superficie_m2, p.tipo);
+        break;
+      case "sezione_dv":
+        result = calcola_sezione_da_dv(p.Ib, p.L, p.dv_max, p.V, p.fasi);
+        break;
+      case "auto":
+      default: {
+        const msg = String(p.message || p.query || "");
+        if (!msg) { res.status(400).json({ ok: false, error: "Parametro message obbligatorio per tool=auto" }); return; }
+        result = runCalcEngine(msg);
+        break;
+      }
+    }
+
+    res.json({ ok: true, tool: tool || "auto", result });
+  } catch (err) {
+    console.error("❌ /api/calc error:", err);
+    res.status(500).json({ ok: false, error: err && err.message ? err.message : String(err) });
+  }
+});
+
+// GET /api/calc/tools — lista tool disponibili
+app.get("/api/calc/tools", (_req, res) => {
+  res.json({
+    ok: true,
+    tools: [
+      { id: "ib",          params: ["P (W)", "V", "cosphi", "eta", "fasi"],          desc: "Corrente di impiego Ib (A)" },
+      { id: "sezione",     params: ["Ib", "metodo (B1/B2/C/E/D)", "temp", "fasi"],   desc: "Sezione minima cavo mm²" },
+      { id: "dv",          params: ["S (mm²)", "L (m)", "Ib", "cosphi", "V", "fasi"],desc: "Caduta di tensione %" },
+      { id: "icc",         params: ["Sn_kVA", "Vcc_perc", "L (m)", "S (mm²)"],       desc: "Corrente di cortocircuito" },
+      { id: "pe",          params: ["S (mm²)"],                                       desc: "Sezione conduttore PE" },
+      { id: "diff",        params: ["carico (testo)", "locale (testo)"],              desc: "Tipo differenziale + Idn" },
+      { id: "curva",       params: ["carico (testo)"],                                desc: "Curva interruttore B/C/D/K/Z" },
+      { id: "terra",       params: ["rho (Ω·m)", "tipo", "L (m)"],                   desc: "Resistenza dispersore RE" },
+      { id: "coordinamento",params: ["Ib", "In", "Iz", "If"],                        desc: "Verifica coordinamento protezioni" },
+      { id: "progetto",    params: ["potenza_kW", "superficie_m2", "tipo"],           desc: "Obbligo progetto DM 37/08" },
+      { id: "sezione_dv",  params: ["Ib", "L (m)", "dv_max (%)", "V", "fasi"],       desc: "Sezione minima da vincolo ΔV%" },
+      { id: "auto",        params: ["message (testo libero)"],                        desc: "Dispatcher automatico da testo" }
+    ]
+  });
 });
 
 // =========================

@@ -4,19 +4,25 @@ const fs = require("fs");
 const path = require("path");
 const policies = require("./policies");
 const { postcheck } = require("./postcheck");
+const { runCalcEngine } = require("./calcEngine");
 
-// Carica ROCCO_KNOWLEDGE.md una sola volta (contesto fisso CEI 64-8 + DM 37/08)
+// Carica ROCCO_KNOWLEDGE.md una sola volta — tutte le parti (v1→v5, parti 1-28)
 let _roccoKnowledge = null;
 function getRoccoKnowledge() {
   if (_roccoKnowledge === null) {
     try {
       const raw = fs.readFileSync(path.join(__dirname, "ROCCO_KNOWLEDGE.md"), "utf8");
-      // Estrai solo le PARTI (salta header istruzioni e TODO finale)
+      // Prendi tutto dal ## PARTE 1 in poi (incluse parti 14-28 delle patch v3-v5)
+      // NON troncare a PARTE 8 — era un bug che escludeva 2/3 della knowledge base
       const start = raw.indexOf("## PARTE 1");
-      const end = raw.indexOf("## PARTE 8");
-      _roccoKnowledge = start !== -1
-        ? raw.slice(start, end !== -1 ? end : undefined).trim()
-        : raw.trim();
+      _roccoKnowledge = start !== -1 ? raw.slice(start).trim() : raw.trim();
+      // Rimuovi solo la sezione TODO (ormai obsoleta dopo le patch)
+      _roccoKnowledge = _roccoKnowledge.replace(
+        /## PARTE 8 — DATI MANCANTI[\s\S]*?(?=---\n\n\*Generato|$)/,
+        ""
+      ).trim();
+      const parti = (_roccoKnowledge.match(/^## (?:PARTE|AGGIORNAMENTO)/mg) || []).length;
+      console.log("[ROCCO] ROCCO_KNOWLEDGE caricata: " + _roccoKnowledge.length + " chars, " + parti + " sezioni");
     } catch (e) {
       _roccoKnowledge = "";
       console.warn("[ROCCO] ROCCO_KNOWLEDGE.md non trovato:", e.message);
@@ -63,7 +69,7 @@ function plan(input) {
   };
 }
 
-function buildSystemPrompt(plan, ragContext) {
+function buildSystemPrompt(plan, ragContext, calcContext) {
   const rules = []
     .concat(policies.HARD_SAFETY_RULES)
     .concat(policies.GOLDEN_RULES);
@@ -176,6 +182,8 @@ function buildSystemPrompt(plan, ragContext) {
     "\n\n─── REGOLE DI SICUREZZA E BUONE PRATICHE ───\n" +
     rules.map((r) => "• " + r).join("\n") +
 
+    (calcContext ? "\n\n" + calcContext : "") +
+
     "\n\n═══ KNOWLEDGE BASE TECNICA (CEI 64-8 / DM 37/08 / CEI-UNEL) ═══\n" +
     "Usa questi dati per calcoli e verifiche normative. Priorità massima su qualsiasi altra fonte.\n\n" +
     getRoccoKnowledge() +
@@ -185,7 +193,8 @@ function buildSystemPrompt(plan, ragContext) {
 }
 
 module.exports = {
-  plan: plan,
+  plan:              plan,
   buildSystemPrompt: buildSystemPrompt,
-  postcheck: postcheck
+  postcheck:         postcheck,
+  runCalcEngine:     runCalcEngine
 };
