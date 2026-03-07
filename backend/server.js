@@ -16,6 +16,7 @@ const multer = require("multer");
 
 const Anthropic = require("@anthropic-ai/sdk");
 const OpenAI = require("openai");
+const { Ollama } = require("ollama");
 const rocco = require("./rocco");
 const { fetchKnowledgeContext, getLoadedKnowledge } = require("./knowledge");
 const { analyzeTechnicalRequest, formatDiagnosticContext, formatOfflineAnswer, TEST_CASE } = require("./engine/diagnosticEngine");
@@ -81,6 +82,11 @@ const STRICT_FORMAT = String(process.env.STRICT_FORMAT || "1").trim() !== "0";
 // Admin token (opzionale — se non configurato l'admin è disabilitato)
 const ADMIN_TOKEN = (process.env.ADMIN_TOKEN || "").trim();
 
+// Ollama (motore LLM gratuito locale — FASE 5)
+const OLLAMA_URL   = (process.env.OLLAMA_URL   || "http://localhost:11434").trim();
+const OLLAMA_MODEL = (process.env.OLLAMA_MODEL || "mistral").trim();
+let ollamaAvailable = false;
+
 // =========================
 // MIDDLEWARE
 // =========================
@@ -123,7 +129,20 @@ function requireAdmin(req, res, next) {
 // CLIENTS
 // =========================
 const anthropic = ANTHROPIC_API_KEY ? new Anthropic({ apiKey: ANTHROPIC_API_KEY }) : null;
-const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
+const openai    = OPENAI_API_KEY    ? new OpenAI({ apiKey: OPENAI_API_KEY })    : null;
+
+// Ollama client — ping asincrono all'avvio per rilevare disponibilità
+const _ollamaClient = new Ollama({ host: OLLAMA_URL });
+(async function pingOllama() {
+  try {
+    await _ollamaClient.list(); // risponde se Ollama è up
+    ollamaAvailable = true;
+    console.log("[OLLAMA] ✅ Disponibile su " + OLLAMA_URL + " — modello: " + OLLAMA_MODEL);
+  } catch (_) {
+    ollamaAvailable = false;
+    console.log("[OLLAMA] ⚪ Non disponibile (" + OLLAMA_URL + ") — userò OpenAI/Anthropic");
+  }
+})();
 
 // =========================
 // UTILS
@@ -135,12 +154,17 @@ const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 function buildProviderQueue(requested) {
   const req = String(requested || "").toLowerCase().trim();
   const available = [];
-  if (openai)    available.push("openai");
-  if (anthropic) available.push("anthropic");
+  // Ollama prima se disponibile (costo zero)
+  if (ollamaAvailable)  available.push("ollama");
+  if (openai)           available.push("openai");
+  if (anthropic)        available.push("anthropic");
   if (!available.length) return [];
+  if (req === "ollama")                        return reorder(available, "ollama");
   if (req === "openai"    || req === "gpt")    return reorder(available, "openai");
   if (req === "anthropic" || req === "claude") return reorder(available, "anthropic");
-  return reorder(available, PREFERRED_PROVIDER);
+  // Default: PREFERRED_PROVIDER. Se non impostato e Ollama è up → Ollama primo
+  const pref = PREFERRED_PROVIDER === "openai" && ollamaAvailable ? "ollama" : PREFERRED_PROVIDER;
+  return reorder(available, pref);
 }
 
 function reorder(arr, first) {
@@ -507,6 +531,85 @@ async function generateContextSummary(convId, provider) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MEMORIA ROCCO — FASE 4b
+// RAG su casi passati + auto-save diagnosi + helpers DB
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** FTS su rocco_knowledge_casi — ritorna contesto formattato (max 3 casi) */
+async function fetchKnowledgeCasi(queryText) {
+  if (!pool) return "";
+  const q = String(queryText || "").trim().slice(0, 200);
+  if (!q) return "";
+  try {
+    const r = await pool.query(
+      `SELECT problema, soluzione, norma_riferimento, dominio,
+              ts_rank(to_tsvector('italian', problema || ' ' || soluzione),
+                      plainto_tsquery('italian', $1)) AS rank
+       FROM rocco_knowledge_casi
+       WHERE to_tsvector('italian', problema || ' ' || soluzione)
+             @@ plainto_tsquery('italian', $1)
+         AND verificato = TRUE
+       ORDER BY rank DESC, n_utilizzi DESC
+       LIMIT 3`,
+      [q]
+    );
+    if (!r.rows || !r.rows.length) return "";
+    const lines = r.rows.map(function (row, i) {
+      return (i + 1) + ") PROBLEMA: " + row.problema + "\n   SOLUZIONE: " + row.soluzione +
+        (row.norma_riferimento ? "\n   NORMA: " + row.norma_riferimento : "");
+    });
+    return "─── CASI SIMILI RISOLTI DA ROCCO ───\n" + lines.join("\n\n") + "\n";
+  } catch (e) {
+    console.warn("⚠️ fetchKnowledgeCasi failed:", (e && e.message) || e);
+    return "";
+  }
+}
+
+/**
+ * Auto-salva diagnosi dopo ogni risposta ROCCO (fire-and-forget).
+ * Se ROCCO ha trovato una diagnosi tecnica, la salva in rocco_diagnosi
+ * e aggiorna/inserisce in rocco_knowledge_casi.
+ */
+async function autoSaveDiagnosi(opts) {
+  if (!pool) return;
+  const { convId, userId, message, answer, domain, certezza, engineDiag } = opts || {};
+  if (!message || !answer) return;
+  // Solo per richieste tecniche con una diagnosi reale
+  if (!(engineDiag && engineDiag.isTechnical)) return;
+
+  try {
+    // 1) Salva in rocco_diagnosi
+    const causa = (engineDiag.conclusione || "").slice(0, 500);
+    const componentiJson = JSON.stringify(
+      (engineDiag.matchedComponents || []).concat(engineDiag.matchedPatterns || [])
+    );
+    await pool.query(
+      `INSERT INTO rocco_diagnosi
+         (user_id, conversation_id, descrizione_problema, componenti_json,
+          causa_trovata, certezza, dominio, risolto)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE)`,
+      [userId || null, convId || null,
+       String(message).slice(0, 1000), componentiJson,
+       causa, certezza || "MEDIA", domain || "elettrico"]
+    );
+
+    // 2) Aggiunge a knowledge_casi se la certezza è ALTA e c'è una causa chiara
+    if (certezza === "ALTA" && causa) {
+      await pool.query(
+        `INSERT INTO rocco_knowledge_casi
+           (problema, soluzione, norma_riferimento, dominio, verificato, n_utilizzi)
+         VALUES ($1, $2, $3, $4, FALSE, 0)
+         ON CONFLICT DO NOTHING`,
+        [String(message).slice(0, 500), causa.slice(0, 500), null, domain || "elettrico"]
+      );
+    }
+  } catch (e) {
+    // Silent — non bloccare mai la risposta per un errore di memoria
+    if (process.env.ROCCO_DEBUG === "1") console.warn("⚠️ autoSaveDiagnosi:", (e && e.message) || e);
+  }
+}
+
 // ============================================================
 // OFFLINE FALLBACK HELPER
 // Rileva errori di rete (DNS, timeout, connection reset)
@@ -606,6 +709,35 @@ async function callAnthropic({ systemPrompt, shortHistory, imageBase64, imagesBa
   return { answer, model: ANTHROPIC_MODEL };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// callOllama — provider locale gratuito (FASE 5)
+// Usa prompt compatto per rispettare context window Mistral (~8K token)
+// ─────────────────────────────────────────────────────────────────────────────
+async function callOllama({ systemPrompt, shortHistory, message, contextBlock }) {
+  if (!ollamaAvailable) throw new Error("Ollama non disponibile");
+
+  // Prompt compatto: tronca la knowledge se troppo grande (Mistral 7B ha 8K token)
+  const MAX_SYSTEM_CHARS = 6000;
+  const sys = systemPrompt.length > MAX_SYSTEM_CHARS
+    ? systemPrompt.slice(0, MAX_SYSTEM_CHARS) + "\n\n[Knowledge troncata per limite modello locale]"
+    : systemPrompt;
+
+  const messages = [{ role: "system", content: sys }];
+  for (const m of shortHistory) messages.push({ role: m.role, content: String(m.content || "") });
+  if (contextBlock) messages.push({ role: "system", content: contextBlock });
+  messages.push({ role: "user", content: message });
+
+  const resp = await _ollamaClient.chat({
+    model:   OLLAMA_MODEL,
+    messages: messages,
+    stream:  false,
+    options: { temperature: 0.1 }
+  });
+
+  const answer = (resp && resp.message && resp.message.content) || "Nessuna risposta.";
+  return { answer, model: "ollama:" + OLLAMA_MODEL };
+}
+
 // =========================
 // ROUTES (API prima)
 // =========================
@@ -623,7 +755,10 @@ app.get("/health", async (req, res) => {
 
   const queue = buildProviderQueue();
   const activeProvider = queue.length ? queue[0] : null;
-  const activeModel = activeProvider === "openai" ? OPENAI_MODEL : activeProvider === "anthropic" ? ANTHROPIC_MODEL : null;
+  const activeModel = activeProvider === "openai"    ? OPENAI_MODEL
+                    : activeProvider === "anthropic"  ? ANTHROPIC_MODEL
+                    : activeProvider === "ollama"      ? ("ollama:" + OLLAMA_MODEL)
+                    : null;
   const aiConnected = queue.length > 0;
 
   // Conta knowledge base
@@ -1110,6 +1245,14 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       console.warn("⚠️ Doc chunks non disponibili:", (e && e.message) || e);
     }
 
+    // RAG su casi risolti da ROCCO (FASE 4b — Memoria)
+    let knowledgeCasiText = "";
+    try {
+      knowledgeCasiText = await fetchKnowledgeCasi(message);
+    } catch (e) {
+      console.warn("⚠️ Knowledge casi non disponibili:", (e && e.message) || e);
+    }
+
     // ===== KNOWLEDGE BASE LOCALE + ROCCO ENGINE (FASE 7) =====
     let knowledgeText = "";
     let engineText = "";
@@ -1201,7 +1344,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       });
     }
 
-    const contextBlock = buildContextBlock({ dbContextText, docChunksText, knowledgeText, engineText });
+    const contextBlock = buildContextBlock({ dbContextText, docChunksText, knowledgeText: knowledgeText + (knowledgeCasiText ? "\n\n" + knowledgeCasiText : ""), engineText });
     const callParams = { systemPrompt, shortHistory, imageBase64, imagesBase64, message, contextBlock };
 
     let answer = null;
@@ -1217,9 +1360,9 @@ app.post("/api/chat", uploadAny, async (req, res) => {
         console.warn("  \u26A1 Fallback \u2192 " + p + " (primario fallito: " + ((lastErr && lastErr.message) || lastErr) + ")");
       }
       try {
-        var result = p === "openai"
-          ? await callOpenAI(callParams)
-          : await callAnthropic(callParams);
+        var result = p === "openai"    ? await callOpenAI(callParams)
+                   : p === "ollama"    ? await callOllama(callParams)
+                   :                    await callAnthropic(callParams);
         answer = result.answer;
         usedProvider = p;
         usedModel = result.model;
@@ -1257,6 +1400,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
     });
     await convTouch(convId);
     generateContextSummary(convId, usedProvider).catch(function () {});
+    autoSaveDiagnosi({ convId, userId: user_id, message, answer, domain: plan.domain, certezza: extractCertainty(answer), engineDiag }).catch(function () {});
 
     return res.json({
       ok: true,
@@ -1441,6 +1585,126 @@ app.get("/api/calc/tools", (_req, res) => {
       { id: "auto",        params: ["message (testo libero)"],                        desc: "Dispatcher automatico da testo" }
     ]
   });
+});
+
+// =========================
+// ROUTES — Memoria ROCCO (FASE 4b)
+// =========================
+
+// POST /api/rocco/progetti — crea nuovo progetto
+app.post("/api/rocco/progetti", async (req, res) => {
+  if (!pool) return res.status(503).json({ ok: false, error: "DB non disponibile" });
+  try {
+    const { user_id, cliente, indirizzo, tipo_locale, potenza_kw, superficie_m2, sistema, tensione, note } = req.body || {};
+    const r = await pool.query(
+      `INSERT INTO rocco_progetti (user_id, cliente, indirizzo, tipo_locale, potenza_kw, superficie_m2, sistema, tensione, note)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [user_id || null, cliente || null, indirizzo || null, tipo_locale || null,
+       potenza_kw || null, superficie_m2 || null, sistema || "TT", tensione || "230V", note || null]
+    );
+    res.json({ ok: true, progetto: r.rows[0] });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// GET /api/rocco/progetti — lista progetti utente
+app.get("/api/rocco/progetti", async (req, res) => {
+  if (!pool) return res.status(503).json({ ok: false, error: "DB non disponibile" });
+  try {
+    const { user_id, limit } = req.query;
+    const lim = Math.min(parseInt(limit || "50"), 200);
+    const r = await pool.query(
+      `SELECT id, cliente, indirizzo, tipo_locale, potenza_kw, superficie_m2, stato, created_at
+       FROM rocco_progetti
+       WHERE ($1::text IS NULL OR user_id = $1)
+       ORDER BY created_at DESC LIMIT $2`,
+      [user_id || null, lim]
+    );
+    res.json({ ok: true, count: r.rows.length, items: r.rows });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// POST /api/rocco/diagnosi — salva diagnosi manualmente
+app.post("/api/rocco/diagnosi", async (req, res) => {
+  if (!pool) return res.status(503).json({ ok: false, error: "DB non disponibile" });
+  try {
+    const { user_id, descrizione_problema, causa_trovata, soluzione_applicata, risolto, certezza, dominio, tempo_minuti } = req.body || {};
+    if (!descrizione_problema) return res.status(400).json({ ok: false, error: "descrizione_problema obbligatoria" });
+    const r = await pool.query(
+      `INSERT INTO rocco_diagnosi
+         (user_id, descrizione_problema, causa_trovata, soluzione_applicata, risolto, certezza, dominio, tempo_minuti)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, created_at`,
+      [user_id || null, descrizione_problema, causa_trovata || null,
+       soluzione_applicata || null, risolto === true, certezza || "MEDIA",
+       dominio || "elettrico", tempo_minuti || null]
+    );
+    // Se risolto con alta certezza → aggiungi a knowledge_casi
+    if (risolto && certezza === "ALTA" && causa_trovata) {
+      await pool.query(
+        `INSERT INTO rocco_knowledge_casi (problema, soluzione, dominio, verificato)
+         VALUES ($1,$2,$3,TRUE) ON CONFLICT DO NOTHING`,
+        [descrizione_problema.slice(0, 500), causa_trovata.slice(0, 500), dominio || "elettrico"]
+      );
+    }
+    res.json({ ok: true, diagnosi: r.rows[0] });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// GET /api/rocco/diagnosi — lista diagnosi utente
+app.get("/api/rocco/diagnosi", async (req, res) => {
+  if (!pool) return res.status(503).json({ ok: false, error: "DB non disponibile" });
+  try {
+    const { user_id, limit, risolto } = req.query;
+    const lim = Math.min(parseInt(limit || "50"), 200);
+    const r = await pool.query(
+      `SELECT id, descrizione_problema, causa_trovata, risolto, certezza, dominio, created_at
+       FROM rocco_diagnosi
+       WHERE ($1::text IS NULL OR user_id = $1)
+         AND ($2::text IS NULL OR risolto = ($2 = 'true'))
+       ORDER BY created_at DESC LIMIT $3`,
+      [user_id || null, risolto !== undefined ? risolto : null, lim]
+    );
+    res.json({ ok: true, count: r.rows.length, items: r.rows });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// PATCH /api/rocco/diagnosi/:id — aggiorna diagnosi (segna come risolta)
+app.patch("/api/rocco/diagnosi/:id", async (req, res) => {
+  if (!pool) return res.status(503).json({ ok: false, error: "DB non disponibile" });
+  try {
+    const { id } = req.params;
+    const { risolto, soluzione_applicata, causa_trovata, tempo_minuti } = req.body || {};
+    await pool.query(
+      `UPDATE rocco_diagnosi
+       SET risolto = COALESCE($2, risolto),
+           soluzione_applicata = COALESCE($3, soluzione_applicata),
+           causa_trovata = COALESCE($4, causa_trovata),
+           tempo_minuti = COALESCE($5, tempo_minuti)
+       WHERE id = $1`,
+      [id, risolto !== undefined ? risolto : null, soluzione_applicata || null,
+       causa_trovata || null, tempo_minuti || null]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// GET /api/admin/ollama/status — stato Ollama (admin)
+app.get("/api/admin/ollama/status", requireAdmin, async (req, res) => {
+  try {
+    const models = await _ollamaClient.list();
+    res.json({ ok: true, available: true, url: OLLAMA_URL, active_model: OLLAMA_MODEL, models: (models.models || []).map(function(m){ return m.name; }) });
+  } catch (e) {
+    res.json({ ok: true, available: false, url: OLLAMA_URL, error: e.message });
+  }
 });
 
 // =========================
