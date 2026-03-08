@@ -13,6 +13,7 @@ const { initMemoriaDB } = require('./memory');
 const { getSystemPromptReasoning } = require('./reasoning');
 const { MATERIE } = require('./materie');
 const { FORMULE, calcolaFormula } = require('./formula_engine');
+const { initDeviceDB, getContestoTecnico, formattaContestoPerPrompt } = require('./device_kb');
 
 async function init() {
   try {
@@ -21,7 +22,13 @@ async function init() {
     console.log(`[ROCCO UNIVERSITY] Materie disponibili: ${Object.keys(MATERIE).length}`);
     console.log(`[ROCCO UNIVERSITY] Formule disponibili: ${Object.keys(FORMULE).length}`);
   } catch (err) {
-    console.error('[ROCCO UNIVERSITY] Errore inizializzazione:', err.message);
+    console.error('[ROCCO UNIVERSITY] Errore inizializzazione memoria:', err.message);
+  }
+  try {
+    await initDeviceDB();
+    console.log('[ROCCO UNIVERSITY] Banca dispositivi inizializzata ✓');
+  } catch (err) {
+    console.error('[ROCCO UNIVERSITY] Errore inizializzazione dispositivi:', err.message);
     // Non bloccare l'avvio del server principale
   }
 }
@@ -33,5 +40,8 @@ module.exports = {
   getSystemPromptReasoning,
   calcolaFormula,
   MATERIE,
-  FORMULE
+  FORMULE,
+  // Device KB
+  getContestoTecnico,
+  formattaContestoPerPrompt
 };

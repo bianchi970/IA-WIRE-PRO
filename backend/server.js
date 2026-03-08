@@ -45,6 +45,15 @@ try {
   console.warn('[ROCCO UNIVERSITY] Non disponibile:', e && e.message);
 }
 
+// ROCCO RUNNER — cervello deduttivo dinamico (wrappa callAnthropic con buildSystemPrompt)
+let runRocco = null;
+try {
+  ({ runRocco } = require('./rocco/rocco_runner'));
+  console.log('[ROCCO RUNNER] Cervello deduttivo caricato ✓');
+} catch (e) {
+  console.warn('[ROCCO RUNNER] Non disponibile:', e && e.message);
+}
+
 // ✅ DB pool (protetto: non deve mai far crashare il server)
 let pool = null;
 try {
@@ -739,6 +748,17 @@ async function callAnthropic({ systemPrompt, shortHistory, imageBase64, imagesBa
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// callRoccoRunner — usa il cervello deduttivo dinamico (ROCCO COMPLETO)
+// Wrappa runRocco() adattando la firma al ciclo provider esistente
+// ─────────────────────────────────────────────────────────────────────────────
+async function callRoccoRunner({ shortHistory, imageBase64, imagesBase64, message }, userId) {
+  if (!runRocco) throw new Error("ROCCO Runner non disponibile");
+  const img    = (Array.isArray(imagesBase64) && imagesBase64.length > 0) ? imagesBase64[0] : imageBase64;
+  const result = await runRocco({ message, history: shortHistory, userId: userId || 'default', imageBase64: img });
+  return { answer: result.risposta, model: result.modello };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // callOllama — provider locale gratuito (FASE 5)
 // Usa prompt compatto per rispettare context window Mistral (~8K token)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1286,6 +1306,17 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       console.warn("⚠️ Knowledge casi non disponibili:", (e && e.message) || e);
     }
 
+    // Device KB — banca dati dispositivi + guasti reali (ROCCO COMPLETO)
+    let deviceKbText = "";
+    try {
+      if (roccoUniversity && roccoUniversity.getContestoTecnico) {
+        const devCtx = await roccoUniversity.getContestoTecnico(message);
+        deviceKbText = roccoUniversity.formattaContestoPerPrompt(devCtx);
+      }
+    } catch (e) {
+      console.warn("⚠️ Device KB non disponibile:", (e && e.message) || e);
+    }
+
     // RAG ROCCO MEMORIA v7 — casi simili dal DB + contesto progetto
     let memoriaContext = "";
     try {
@@ -1396,7 +1427,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       });
     }
 
-    const contextBlock = buildContextBlock({ dbContextText, docChunksText, knowledgeText: knowledgeText + (knowledgeCasiText ? "\n\n" + knowledgeCasiText : "") + (memoriaContext ? "\n\n" + memoriaContext : ""), engineText });
+    const contextBlock = buildContextBlock({ dbContextText, docChunksText, knowledgeText: knowledgeText + (knowledgeCasiText ? "\n\n" + knowledgeCasiText : "") + (memoriaContext ? "\n\n" + memoriaContext : "") + (deviceKbText ? "\n\n" + deviceKbText : ""), engineText });
     const callParams = { systemPrompt, shortHistory, imageBase64, imagesBase64, message, contextBlock };
 
     let answer = null;
@@ -1414,6 +1445,8 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       try {
         var result = p === "openai"    ? await callOpenAI(callParams)
                    : p === "ollama"    ? await callOllama(callParams)
+                   : (p === "anthropic" && runRocco)
+                                       ? await callRoccoRunner(callParams, user_id)
                    :                    await callAnthropic(callParams);
         answer = result.answer;
         usedProvider = p;
