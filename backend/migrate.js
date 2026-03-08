@@ -203,6 +203,14 @@ const COLUMN_MIGRATIONS = [
     )`
   },
   {
+    desc: "rocco_diagnosi: add column data (se mancante)",
+    sql: `ALTER TABLE rocco_diagnosi ADD COLUMN IF NOT EXISTS data TIMESTAMP NOT NULL DEFAULT NOW()`
+  },
+  {
+    desc: "rocco_diagnosi: add column user_id (se mancante)",
+    sql: `ALTER TABLE rocco_diagnosi ADD COLUMN IF NOT EXISTS user_id TEXT`
+  },
+  {
     desc: "rocco_diagnosi: index su user_id e data",
     sql: `CREATE INDEX IF NOT EXISTS idx_rocco_diagnosi_user
           ON rocco_diagnosi(user_id, data DESC)`
@@ -282,6 +290,10 @@ const COLUMN_MIGRATIONS = [
   {
     desc: "rocco_knowledge_casi: aggiungi colonna tipo_locale (v7)",
     sql: `ALTER TABLE rocco_knowledge_casi ADD COLUMN IF NOT EXISTS tipo_locale TEXT`
+  },
+  {
+    desc: "rocco_knowledge_casi: aggiungi colonna n_utilizzi (se mancante)",
+    sql: `ALTER TABLE rocco_knowledge_casi ADD COLUMN IF NOT EXISTS n_utilizzi INTEGER DEFAULT 0`
   },
   {
     desc: "rocco_knowledge_casi: aggiungi colonna n_occorrenze (v7)",
