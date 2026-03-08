@@ -6,8 +6,11 @@
 
 const { Pool } = require('pg');
 
-// Usa la stessa connessione del progetto principale
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// Usa la stessa connessione del progetto principale (SSL richiesto su Render)
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+});
 
 // ─── INIZIALIZZAZIONE TABELLE ───────────────────────────────────────────────
 
