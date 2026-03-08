@@ -30,6 +30,21 @@ const { runCalcEngine,
         seleziona_differenziale, seleziona_curva,
         calcola_terra, verifica_obbligo_progetto,
         calcola_sezione_da_dv } = require("./rocco/calcEngine");
+
+// ROCCO MEMORIA v7 + ROCCO UNIVERSITY
+let roccoMemoria = null;
+try {
+  roccoMemoria = require('./rocco/rocco_memoria');
+} catch (e) {
+  console.warn('[ROCCO MEMORIA] Non disponibile:', e && e.message);
+}
+let roccoUniversity = null;
+try {
+  roccoUniversity = require('./modules/rocco_university');
+} catch (e) {
+  console.warn('[ROCCO UNIVERSITY] Non disponibile:', e && e.message);
+}
+
 // ✅ DB pool (protetto: non deve mai far crashare il server)
 let pool = null;
 try {
@@ -141,6 +156,20 @@ const _ollamaClient = new Ollama({ host: OLLAMA_URL });
   } catch (_) {
     ollamaAvailable = false;
     console.log("[OLLAMA] ⚪ Non disponibile (" + OLLAMA_URL + ") — userò OpenAI/Anthropic");
+  }
+})();
+
+// Init ROCCO MEMORIA schema + UNIVERSITY (non bloccante)
+(async function initRoccoModules() {
+  if (roccoMemoria) {
+    roccoMemoria.init_schema().catch(function(e) {
+      console.warn('[ROCCO MEMORIA] init_schema:', e && e.message);
+    });
+  }
+  if (roccoUniversity) {
+    roccoUniversity.init().catch(function(e) {
+      console.warn('[ROCCO UNIVERSITY] init:', e && e.message);
+    });
   }
 })();
 
@@ -1220,6 +1249,10 @@ app.post("/api/chat", uploadAny, async (req, res) => {
     }
 
     let systemPrompt = rocco.buildSystemPrompt(plan, ragContext, calcContext);
+    // Inietta schema di ragionamento ROCCO UNIVERSITY
+    if (roccoUniversity && roccoUniversity.getSystemPromptReasoning) {
+      systemPrompt += roccoUniversity.getSystemPromptReasoning();
+    }
     if (convSummary) {
       systemPrompt = "CONTESTO CONVERSAZIONE PRECEDENTE:\n" + convSummary + "\n\n" + systemPrompt;
     }
@@ -1251,6 +1284,25 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       knowledgeCasiText = await fetchKnowledgeCasi(message);
     } catch (e) {
       console.warn("⚠️ Knowledge casi non disponibili:", (e && e.message) || e);
+    }
+
+    // RAG ROCCO MEMORIA v7 — casi simili dal DB + contesto progetto
+    let memoriaContext = "";
+    try {
+      if (roccoMemoria) {
+        const casiSimili = await roccoMemoria.cerca_casi_simili(message, 3);
+        const progettoId = body.progetto_id ? parseInt(body.progetto_id, 10) || null : null;
+        const contestoProgetto = await roccoMemoria.get_contesto_memoria(progettoId);
+        if (casiSimili && casiSimili.length > 0) {
+          memoriaContext += "\n[CASI SIMILI DAL DB ROCCO]\n";
+          casiSimili.forEach(function(c, i) {
+            memoriaContext += (i + 1) + ". PROBLEMA: " + c.problema + "\n   CAUSA: " + c.causa + "\n   SOLUZIONE: " + c.soluzione + "\n";
+          });
+        }
+        if (contestoProgetto) memoriaContext += contestoProgetto;
+      }
+    } catch (e) {
+      console.warn("⚠️ ROCCO MEMORIA RAG:", (e && e.message) || e);
     }
 
     // ===== KNOWLEDGE BASE LOCALE + ROCCO ENGINE (FASE 7) =====
@@ -1344,7 +1396,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       });
     }
 
-    const contextBlock = buildContextBlock({ dbContextText, docChunksText, knowledgeText: knowledgeText + (knowledgeCasiText ? "\n\n" + knowledgeCasiText : ""), engineText });
+    const contextBlock = buildContextBlock({ dbContextText, docChunksText, knowledgeText: knowledgeText + (knowledgeCasiText ? "\n\n" + knowledgeCasiText : "") + (memoriaContext ? "\n\n" + memoriaContext : ""), engineText });
     const callParams = { systemPrompt, shortHistory, imageBase64, imagesBase64, message, contextBlock };
 
     let answer = null;
@@ -1809,6 +1861,12 @@ app.post("/api/admin/upload-pdf", requireAdmin, uploadAny, async (req, res) => {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
+
+// ROCCO UNIVERSITY API routes
+if (roccoUniversity && roccoUniversity.router) {
+  app.use('/api/university', roccoUniversity.router);
+  console.log('[ROCCO UNIVERSITY] Routes montate su /api/university');
+}
 
 // =========================
 // STATIC FRONTEND + SPA FALLBACK (alla fine)

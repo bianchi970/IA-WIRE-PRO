@@ -1366,3 +1366,58 @@ SEZIONI COMMERCIALI STANDARD (mm²):
 
 *Patch v5 — "ROCCO all'università": IX ed. CEI 64-8, locali medici, SPD/fulmini,*
 *ATEX, Tipo F, formule avanzate BT, motori IE, codifiche cavi*
+
+---
+
+## AGGIORNAMENTO — ROCCO UNIVERSITY (v1.0) — 2026-03-08
+
+### SCHEMA DI RAGIONAMENTO OBBLIGATORIO
+
+Ogni risposta tecnica di ROCCO segue questo schema logico:
+
+```
+OSSERVAZIONI  →  INTERPRETAZIONE  →  IPOTESI  →  VERIFICHE  →  CONCLUSIONE
+```
+
+### OUTPUT STRUTTURATO
+
+- 🔍 OSSERVAZIONI — cosa è stato misurato/riferito
+- 🧠 IPOTESI — cause probabili ordinate (Alta/Media/Bassa probabilità)
+- 🔧 VERIFICHE CONSIGLIATE — misure e controlli da eseguire
+- ⚠️ RISCHI POTENZIALI — cosa succede se non si interviene
+- 📐 FORMULE USATE — con calcolo numerico esplicito
+- 📊 CONFRONTO NUMERICO — valore misurato vs atteso + scarto %
+
+### DIAGNOSI NUMERICA
+
+```
+MISURA  →  FORMULA  →  VALORE ATTESO  →  CONFRONTO  →  ANOMALIA  →  IPOTESI GUASTO
+```
+
+### MATERIE ROCCO UNIVERSITY
+
+matematica_tecnica | fisica | elettrotecnica | elettronica_base
+macchine_elettriche | impianti_elettrici | automazioni
+misure_elettriche | diagnosi_guasti | normative_sicurezza
+
+### FORMULE INTEGRATE
+
+legge_ohm | potenza_monofase | potenza_trifase | resistenza_serie
+resistenza_parallelo | impedenza_base | caduta_tensione | energia_elettrica
+corrente_corto_circuito
+
+### API UNIVERSITY (/api/university)
+
+- GET  /materie                — lista materie
+- GET  /formule?materia=X     — formule per materia
+- POST /formule/:id/calcola   — calcolo numerico
+- POST /diagnosi              — diagnosi numerica strutturata
+- GET  /esami/:materia        — genera esame
+- GET  /memoria               — memoria didattica
+- GET  /statistiche           — statistiche apprendimento
+
+### REGOLA ESAMI
+
+Lo studio NON viene mai bloccato. Soglia superamento: 60%. Tentativi illimitati.
+
+*Patch University v1 + Memoria v7: modulo didattico + DB memoria casi reali*
