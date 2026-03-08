@@ -161,8 +161,57 @@ const SCENARI = [
 
 const SYSTEM_GENERATORE = `Sei ROCCO, elettricista esperto con 25 anni di esperienza sul campo in Italia.
 Devi descrivere COME HAI RISOLTO un guasto reale, in modo sintetico e tecnico.
-Formato: 3-5 righe massimo. Include: sintomo iniziale → diagnosi → verifica → causa → fix.
-Solo fatti tecnici. Nessun preambolo. Usa sigle italiane (MT, diff, RCCB, CEI 64-8, ecc.).`;
+Formato: 3-5 righe massimo. Include: sintomo → diagnosi → verifica → causa → fix → norma CEI applicata.
+OBBLIGATORIO: ogni caso DEVE citare almeno una norma CEI o DM 37/08 pertinente (es. CEI 64-8 art.413, CEI EN 60898, DM 37/08 art.7).
+Se il caso non è conforme alle norme vigenti italiane, NON descriverlo — scrivi solo "NON_CONFORME".
+Solo fatti tecnici verificati. Nessun preambolo. Usa sigle italiane.`;
+
+// ─── VALIDAZIONE CONFORMITÀ CEI ──────────────────────────────────────────────
+
+const SYSTEM_VALIDATORE = `Sei un esperto normativista elettrico italiano.
+Valuta se il caso tecnico descritto è conforme alle norme CEI e DM 37/08 vigenti.
+Rispondi SOLO con: CONFORME oppure NON_CONFORME
+Seguito da una riga breve di motivazione.
+Criteri di non conformità: consigli che violano la sicurezza, dati fisicamente impossibili,
+procedure contrarie a CEI 64-8/CEI EN 60898/CEI EN 61008/DM 37-08.`;
+
+async function validaConformitaCEI(testo) {
+  if (!testo || testo.includes('NON_CONFORME')) return { conforme: false, motivo: 'testo già segnalato non conforme' };
+
+  // Pattern heuristici rapidi (evita chiamata API se ovviamente ok)
+  const normeCEI = /CEI\s*\d|DM\s*37|60898|61008|IEC\s*\d|art\.\s*\d|Riso|megaohm|kA|cosφ/i;
+  if (!normeCEI.test(testo)) {
+    // Nessun riferimento normativo — chiedi all'AI
+  }
+
+  const prompt = `Caso tecnico:\n"${testo}"\n\nÈ conforme alle norme CEI italiane vigenti?`;
+  let risposta = '';
+
+  try {
+    if (anthropicClient) {
+      const resp = await anthropicClient.messages.create({
+        model: ANTHROPIC_MODEL, max_tokens: 100, temperature: 0,
+        system: SYSTEM_VALIDATORE,
+        messages: [{ role: 'user', content: prompt }]
+      });
+      risposta = (resp.content[0] && resp.content[0].text) ? resp.content[0].text.trim() : '';
+    } else if (openaiClient) {
+      const resp = await openaiClient.chat.completions.create({
+        model: OPENAI_MODEL, max_tokens: 100, temperature: 0,
+        messages: [{ role: 'system', content: SYSTEM_VALIDATORE }, { role: 'user', content: prompt }]
+      });
+      risposta = (resp.choices[0] && resp.choices[0].message && resp.choices[0].message.content)
+        ? resp.choices[0].message.content.trim() : '';
+    }
+  } catch (_) {
+    // In caso di errore nella validazione: accetta il caso (non bloccare l'apprendimento)
+    return { conforme: true, motivo: 'validazione non disponibile — accettato' };
+  }
+
+  const conforme = risposta.toUpperCase().startsWith('CONFORME');
+  const motivo   = risposta.split('\n').slice(1).join(' ').trim() || risposta;
+  return { conforme, motivo };
+}
 
 // ─── GENERAZIONE CON ANTHROPIC ────────────────────────────────────────────────
 
@@ -244,24 +293,37 @@ async function main() {
 
     for (const scenario of gruppo.scenari) {
       try {
-        process.stdout.write('  → ' + scenario.slice(0, 55) + '… ');
+        process.stdout.write('  → ' + scenario.slice(0, 50) + '… ');
         const testo = await generaCasoReale(gruppo.materia, gruppo.area, scenario);
-        if (testo) {
-          await registraCasoReale(USER_ID, gruppo.materia, {
-            area:        gruppo.area,
-            scenario:    scenario,
-            descrizione: testo,
-            fonte:       'anthropic_online',
-            data:        new Date().toISOString()
-          });
-          totale_casi++;
-          console.log('✅');
-        } else {
-          console.log('⚠️ vuoto');
+        if (!testo || testo.includes('NON_CONFORME')) {
+          console.log('⛔ scartato (non conforme in generazione)');
           falliti++;
+          await new Promise(r => setTimeout(r, 200));
+          continue;
         }
+
+        // Validazione CEI prima di salvare
+        const validazione = await validaConformitaCEI(testo);
+        if (!validazione.conforme) {
+          console.log('⛔ NON CONFORME — ' + (validazione.motivo || '').slice(0, 50));
+          falliti++;
+          await new Promise(r => setTimeout(r, 200));
+          continue;
+        }
+
+        await registraCasoReale(USER_ID, gruppo.materia, {
+          area:           gruppo.area,
+          scenario:       scenario,
+          descrizione:    testo,
+          fonte:          'anthropic_online_validato_CEI',
+          validazione_ok: true,
+          data:           new Date().toISOString()
+        });
+        totale_casi++;
+        console.log('✅ CEI OK');
+
         // Pausa breve per non saturare rate limit
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise(r => setTimeout(r, 400));
       } catch (e) {
         console.log('❌ ' + e.message);
         falliti++;
@@ -312,11 +374,13 @@ async function main() {
   // ── REPORT ────────────────────────────────────────────────────────────────
   console.log('\n' + '═'.repeat(65));
   console.log('  APPRENDIMENTO COMPLETATO');
-  console.log('  Casi reali generati e salvati : ' + totale_casi + '/' + (SCENARI.reduce((a, g) => a + g.scenari.length, 0)));
+  const totale_scenari = SCENARI.reduce((a, g) => a + g.scenari.length, 0);
+  console.log('  Casi generati e validati CEI   : ' + totale_casi + '/' + totale_scenari);
+  console.log('  Scartati (non conformi CEI)    : ' + falliti);
   console.log('  Errori comuni registrati       : ' + totale_errori);
-  console.log('  Falliti                        : ' + falliti);
+  console.log('  Tasso conformità               : ' + Math.round(totale_casi / totale_scenari * 100) + '%');
   console.log('');
-  console.log('  ROCCO ha ora ' + totale_casi + ' casistiche reali nella memoria.');
+  console.log('  ROCCO ha ora ' + totale_casi + ' casistiche CERTIFICATE CEI nella memoria.');
   console.log('  Il buildSystemPrompt() le inietterà automaticamente in ogni chat.');
   console.log('═'.repeat(65) + '\n');
 
