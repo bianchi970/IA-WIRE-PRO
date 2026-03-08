@@ -1768,6 +1768,14 @@ app.get("/admin", (req, res) => {
   res.sendFile(path.join(FRONTEND_DIR, "admin.html"));
 });
 
+// GET /university — ROCCO UNIVERSITY (pagina studio formule + esami)
+app.get("/university", (req, res) => {
+  res.sendFile(path.join(FRONTEND_DIR, "university.html"));
+});
+app.get("/university.html", (req, res) => {
+  res.sendFile(path.join(FRONTEND_DIR, "university.html"));
+});
+
 // GET /api/admin/stats — statistiche sistema (protetto)
 app.get("/api/admin/stats", requireAdmin, async (req, res) => {
   if (!pool) return res.json({ ok: false, error: "DB non disponibile" });

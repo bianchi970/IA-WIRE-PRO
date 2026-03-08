@@ -212,6 +212,84 @@ const COLUMN_MIGRATIONS = [
     sql: `CREATE INDEX IF NOT EXISTS idx_rocco_kc_fts
           ON rocco_knowledge_casi
           USING GIN(to_tsvector('italian', problema || ' ' || soluzione))`
+  },
+
+  // ─────────────────────────────────────────────────────────────
+  // ROCCO UNIVERSITY v1 — Memoria didattica + Esami + Calcoli
+  // ─────────────────────────────────────────────────────────────
+  {
+    desc: "rocco_memoria: crea tabella memoria didattica university",
+    sql: `CREATE TABLE IF NOT EXISTS rocco_memoria (
+      id            SERIAL PRIMARY KEY,
+      user_id       TEXT NOT NULL DEFAULT 'default',
+      materia       TEXT NOT NULL,
+      tipo          TEXT NOT NULL,
+      contenuto     JSONB NOT NULL,
+      livello_studio INTEGER DEFAULT 0,
+      created_at    TIMESTAMP DEFAULT NOW(),
+      updated_at    TIMESTAMP DEFAULT NOW()
+    )`
+  },
+  {
+    desc: "rocco_esercizi: crea tabella esercizi svolti",
+    sql: `CREATE TABLE IF NOT EXISTS rocco_esercizi (
+      id            SERIAL PRIMARY KEY,
+      user_id       TEXT NOT NULL DEFAULT 'default',
+      materia       TEXT NOT NULL,
+      problema      TEXT NOT NULL,
+      dati          JSONB,
+      formula_id    TEXT,
+      soluzione     TEXT,
+      spiegazione   TEXT,
+      risposta_data TEXT,
+      corretto      BOOLEAN,
+      created_at    TIMESTAMP DEFAULT NOW()
+    )`
+  },
+  {
+    desc: "rocco_esami: crea tabella esami e certificazioni",
+    sql: `CREATE TABLE IF NOT EXISTS rocco_esami (
+      id            SERIAL PRIMARY KEY,
+      user_id       TEXT NOT NULL DEFAULT 'default',
+      materia       TEXT NOT NULL,
+      punteggio     INTEGER,
+      max_punteggio INTEGER,
+      superato      BOOLEAN DEFAULT FALSE,
+      domande       JSONB,
+      risposte      JSONB,
+      data_esame    TIMESTAMP DEFAULT NOW()
+    )`
+  },
+  {
+    desc: "rocco_calcoli: crea tabella storico calcoli",
+    sql: `CREATE TABLE IF NOT EXISTS rocco_calcoli (
+      id              SERIAL PRIMARY KEY,
+      progetto_id     INTEGER,
+      tipo_calcolo    VARCHAR(50),
+      parametri_input JSONB,
+      risultato       JSONB,
+      created_at      TIMESTAMP DEFAULT NOW()
+    )`
+  },
+  {
+    desc: "rocco_knowledge_casi: aggiungi colonna causa (v7)",
+    sql: `ALTER TABLE rocco_knowledge_casi ADD COLUMN IF NOT EXISTS causa TEXT`
+  },
+  {
+    desc: "rocco_knowledge_casi: aggiungi colonna norma_riferimento (v7)",
+    sql: `ALTER TABLE rocco_knowledge_casi ADD COLUMN IF NOT EXISTS norma_riferimento TEXT`
+  },
+  {
+    desc: "rocco_knowledge_casi: aggiungi colonna tipo_locale (v7)",
+    sql: `ALTER TABLE rocco_knowledge_casi ADD COLUMN IF NOT EXISTS tipo_locale TEXT`
+  },
+  {
+    desc: "rocco_knowledge_casi: aggiungi colonna n_occorrenze (v7)",
+    sql: `ALTER TABLE rocco_knowledge_casi ADD COLUMN IF NOT EXISTS n_occorrenze INTEGER DEFAULT 1`
+  },
+  {
+    desc: "rocco_memoria: index su user_id + materia",
+    sql: `CREATE INDEX IF NOT EXISTS idx_memoria_user ON rocco_memoria(user_id, materia)`
   }
 ];
 

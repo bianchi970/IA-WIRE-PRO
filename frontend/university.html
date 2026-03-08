@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ROCCO UNIVERSITY — IA Wire Pro</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #071326; color: #d7e2f0; min-height: 100vh; }
+
+  /* TOPBAR */
+  .topbar {
+    background: #0b1c33;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    padding: 12px 20px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .topbar h1 { font-size: 1.1rem; color: #FFD700; font-weight: 700; }
+  .topbar .sub { font-size: 0.8rem; color: #90a4bf; margin-left: auto; }
+  .topbar a { color: #00D9FF; text-decoration: none; font-size: 0.82rem; }
+  .topbar a:hover { text-decoration: underline; }
+
+  /* TABS */
+  .tabs {
+    display: flex; gap: 0;
+    background: #0b1c33;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    padding: 0 20px;
+    overflow-x: auto;
+  }
+  .tab-btn {
+    padding: 12px 20px;
+    border: none; background: none;
+    color: #90a4bf; font-size: 0.85rem; font-weight: 600;
+    cursor: pointer; white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .tab-btn:hover { color: #d7e2f0; }
+  .tab-btn.active { color: #FFD700; border-bottom-color: #FFD700; }
+
+  /* CONTAINER */
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+
+  /* PANELS */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* CARDS */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .card {
+    background: #0b1c33;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; padding: 20px;
+    cursor: pointer; transition: border-color 0.15s, transform 0.1s;
+    position: relative;
+  }
+  .card:hover { border-color: #FFD700; transform: translateY(-2px); }
+  .card.selected { border-color: #FFD700; background: #0e2040; }
+  .card-title { font-size: 1rem; font-weight: 700; color: #FFD700; margin-bottom: 6px; }
+  .card-desc { font-size: 0.8rem; color: #90a4bf; line-height: 1.5; }
+  .card-badge {
+    position: absolute; top: 12px; right: 12px;
+    background: rgba(255,215,0,0.15); color: #FFD700;
+    font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 20px;
+  }
+  .card-progress {
+    margin-top: 12px; height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px;
+  }
+  .card-progress-fill { height: 4px; background: #FFD700; border-radius: 2px; transition: width 0.4s; }
+
+  /* FORMULA GRID */
+  .formula-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+  .formula-card {
+    background: #0b1c33; border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; padding: 18px;
+  }
+  .formula-name { font-size: 0.95rem; font-weight: 700; color: #00D9FF; margin-bottom: 4px; }
+  .formula-str {
+    font-family: monospace; font-size: 0.9rem; color: #FFD700;
+    background: rgba(255,215,0,0.08); padding: 6px 10px;
+    border-radius: 6px; margin: 8px 0;
+  }
+  .formula-desc { font-size: 0.78rem; color: #90a4bf; margin-bottom: 10px; }
+  .formula-esempio { font-size: 0.78rem; color: #7aff9a; font-style: italic; }
+
+  /* CALC FORM */
+  .calc-box {
+    background: #0e2040; border: 1px solid rgba(0,217,255,0.2);
+    border-radius: 10px; padding: 14px; margin-top: 12px;
+  }
+  .calc-box h4 { font-size: 0.82rem; color: #00D9FF; margin-bottom: 10px; }
+  .calc-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 8px; }
+  .calc-field { display: flex; flex-direction: column; gap: 4px; }
+  .calc-field label { font-size: 0.72rem; color: #90a4bf; }
+  .calc-field input, .calc-field select {
+    background: #071326; border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px; color: #d7e2f0; padding: 6px 10px;
+    font-size: 0.82rem; width: 100px; outline: none;
+  }
+  .calc-field input:focus { border-color: #00D9FF; }
+  .calc-result {
+    background: rgba(0,217,255,0.08); border: 1px solid rgba(0,217,255,0.2);
+    border-radius: 8px; padding: 10px 14px; margin-top: 8px;
+    font-family: monospace; font-size: 0.88rem; color: #7aff9a;
+  }
+
+  /* DIAGNOSI */
+  .diagnosi-form {
+    background: #0b1c33; border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; padding: 20px; margin-bottom: 20px;
+  }
+  .form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 160px; }
+  .form-group label { font-size: 0.8rem; color: #90a4bf; font-weight: 600; }
+  .form-group input, .form-group select {
+    background: #071326; border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px; color: #d7e2f0; padding: 9px 12px;
+    font-size: 0.85rem; outline: none;
+  }
+  .form-group input:focus, .form-group select:focus { border-color: #FFD700; }
+
+  /* RISULTATO DIAGNOSI */
+  .diagnosi-result {
+    background: #0b1c33; border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; padding: 20px; display: none;
+  }
+  .diagnosi-result.ok-state { border-color: #7aff9a; }
+  .diagnosi-result.warn-state { border-color: #FFD700; }
+  .diagnosi-result.err-state { border-color: #e05252; }
+  .stato-badge {
+    display: inline-block; padding: 4px 14px; border-radius: 20px;
+    font-size: 0.8rem; font-weight: 700; margin-bottom: 12px;
+  }
+  .stato-ok { background: rgba(122,255,154,0.15); color: #7aff9a; }
+  .stato-basso { background: rgba(255,215,0,0.15); color: #FFD700; }
+  .stato-alto { background: rgba(224,82,82,0.15); color: #e05252; }
+  .diagnosi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px; }
+  .diagnosi-item h4 { font-size: 0.78rem; color: #90a4bf; margin-bottom: 6px; }
+  .diagnosi-item p { font-size: 0.88rem; color: #d7e2f0; }
+  .ipotesi-list { list-style: none; }
+  .ipotesi-list li {
+    padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+    font-size: 0.82rem; color: #d7e2f0;
+  }
+  .ipotesi-list li::before { content: "→ "; color: #FFD700; }
+
+  /* ESAME */
+  .esame-section { display: none; }
+  .esame-section.visible { display: block; }
+  .domanda-card {
+    background: #0b1c33; border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; padding: 18px; margin-bottom: 14px;
+  }
+  .domanda-num { font-size: 0.75rem; color: #90a4bf; margin-bottom: 6px; }
+  .domanda-testo { font-size: 0.9rem; color: #d7e2f0; font-weight: 600; margin-bottom: 12px; line-height: 1.5; }
+  .risposta-input {
+    background: #071326; border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px; color: #d7e2f0; padding: 9px 12px;
+    font-size: 0.85rem; width: 200px; outline: none;
+  }
+  .risposta-input:focus { border-color: #FFD700; }
+  .feedback-ok { color: #7aff9a; font-size: 0.82rem; margin-top: 8px; }
+  .feedback-err { color: #e05252; font-size: 0.82rem; margin-top: 8px; }
+
+  /* PUNTEGGIO */
+  .punteggio-box {
+    background: #0e2040; border: 1px solid #FFD700;
+    border-radius: 12px; padding: 24px; text-align: center; margin-top: 20px;
+  }
+  .punteggio-val { font-size: 3rem; font-weight: 900; color: #FFD700; }
+  .punteggio-label { font-size: 0.85rem; color: #90a4bf; margin-top: 6px; }
+  .punteggio-superato { font-size: 1.1rem; font-weight: 700; margin-top: 12px; }
+
+  /* BUTTONS */
+  .btn {
+    padding: 9px 20px; border-radius: 8px; border: none;
+    cursor: pointer; font-size: 0.85rem; font-weight: 700;
+    transition: opacity 0.15s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-gold { background: #FFD700; color: #071326; }
+  .btn-cyan { background: #00D9FF; color: #071326; }
+  .btn-outline { background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #d7e2f0; }
+  .btn-sm { padding: 5px 12px; font-size: 0.78rem; }
+
+  /* SECTION TITLE */
+  .section-title { font-size: 1rem; font-weight: 700; color: #d7e2f0; margin-bottom: 16px; }
+  .section-desc { font-size: 0.82rem; color: #90a4bf; margin-bottom: 20px; line-height: 1.6; }
+
+  /* INFO ROW */
+  .info-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+  .info-chip {
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px; padding: 4px 12px; font-size: 0.75rem; color: #90a4bf;
+  }
+
+  /* LOADING */
+  .loading { text-align: center; color: #90a4bf; padding: 40px; }
+  .spinner {
+    display: inline-block; width: 22px; height: 22px;
+    border: 2px solid rgba(255,215,0,0.2);
+    border-top-color: #FFD700; border-radius: 50%;
+    animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ALERT */
+  .alert { padding: 12px 16px; border-radius: 8px; font-size: 0.84rem; margin-bottom: 14px; }
+  .alert-info { background: rgba(0,217,255,0.1); border: 1px solid rgba(0,217,255,0.3); color: #00D9FF; }
+  .alert-success { background: rgba(122,255,154,0.1); border: 1px solid rgba(122,255,154,0.3); color: #7aff9a; }
+  .alert-warn { background: rgba(255,215,0,0.1); border: 1px solid rgba(255,215,0,0.3); color: #FFD700; }
+
+  /* MATERIA FILTER */
+  .filter-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .filter-chip {
+    padding: 5px 14px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.15);
+    background: transparent; color: #90a4bf; font-size: 0.78rem; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .filter-chip:hover, .filter-chip.active { background: rgba(255,215,0,0.15); color: #FFD700; border-color: #FFD700; }
+
+  @media (max-width: 600px) {
+    .diagnosi-grid { grid-template-columns: 1fr; }
+    .formula-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span style="font-size:1.4rem">🎓</span>
+  <h1>ROCCO UNIVERSITY</h1>
+  <span class="sub">Sistema di apprendimento tecnico | IA Wire Pro</span>
+  <a href="/">← Chat principale</a>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="showTab('materie')">📚 Materie</button>
+  <button class="tab-btn" onclick="showTab('formule')">📐 Formule &amp; Calcoli</button>
+  <button class="tab-btn" onclick="showTab('diagnosi')">🔍 Diagnosi Numerica</button>
+  <button class="tab-btn" onclick="showTab('esame')">📝 Esame</button>
+  <button class="tab-btn" onclick="showTab('memoria')">🧠 Memoria ROCCO</button>
+</div>
+
+<!-- ═══════════════════════════════ MATERIE ═══════════════════════════════ -->
+<div id="tab-materie" class="panel active">
+  <div class="container">
+    <p class="section-title">Materie di Studio</p>
+    <p class="section-desc">
+      ROCCO conosce 10 materie tecniche. Seleziona una materia per vedere le formule
+      e fare un esame di certificazione. Lo studio non viene mai bloccato.
+    </p>
+    <div id="materie-cards" class="cards">
+      <div class="loading"><span class="spinner"></span> Caricamento materie...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ FORMULE ═══════════════════════════════ -->
+<div id="tab-formule" class="panel">
+  <div class="container">
+    <p class="section-title">Formule &amp; Calcolo Numerico</p>
+    <p class="section-desc">
+      Seleziona una materia per filtrare le formule. Ogni formula supporta il calcolo
+      numerico diretto: inserisci i valori noti e ROCCO calcola il valore mancante.
+    </p>
+    <div class="filter-row" id="filtri-formule">
+      <button class="filter-chip active" onclick="filtraFormule(null, this)">Tutte</button>
+    </div>
+    <div id="formula-grid" class="formula-grid">
+      <div class="loading"><span class="spinner"></span> Caricamento formule...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ DIAGNOSI ═══════════════════════════════ -->
+<div id="tab-diagnosi" class="panel">
+  <div class="container">
+    <p class="section-title">Diagnosi Numerica</p>
+    <p class="section-desc">
+      Inserisci il valore misurato e quello atteso. ROCCO confronta i dati,
+      calcola lo scarto percentuale e formula le ipotesi di guasto più probabili.
+    </p>
+
+    <div class="diagnosi-form">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Grandezza misurata</label>
+          <select id="d-misura">
+            <option value="tensione">Tensione (V)</option>
+            <option value="corrente">Corrente (A)</option>
+            <option value="resistenza">Resistenza (Ω)</option>
+            <option value="resistenza_isolamento">Resistenza isolamento (MΩ)</option>
+            <option value="temperatura">Temperatura (°C)</option>
+            <option value="velocita_motore">Velocità motore (rpm)</option>
+            <option value="corrente_dispersione">Corrente dispersione (mA)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Valore misurato</label>
+          <input type="number" id="d-misurato" placeholder="es. 195" step="any" />
+        </div>
+        <div class="form-group">
+          <label>Valore atteso</label>
+          <input type="number" id="d-atteso" placeholder="es. 230" step="any" />
+        </div>
+        <div class="form-group">
+          <label>Tolleranza (%)</label>
+          <input type="number" id="d-tolleranza" value="10" min="1" max="50" />
+        </div>
+      </div>
+      <button class="btn btn-gold" onclick="eseguiDiagnosi()">🔍 Esegui Diagnosi</button>
+    </div>
+
+    <div class="diagnosi-result" id="diagnosi-result">
+      <div id="d-stato-badge" class="stato-badge"></div>
+      <div id="d-valutazione" style="font-size:0.92rem; color:#d7e2f0; margin-bottom:14px;"></div>
+      <div class="diagnosi-grid">
+        <div class="diagnosi-item">
+          <h4>📊 Dati misurazione</h4>
+          <p id="d-dati"></p>
+        </div>
+        <div class="diagnosi-item">
+          <h4>📈 Scarto</h4>
+          <p id="d-scarto" style="font-size:1.6rem; font-weight:900; color:#FFD700;"></p>
+        </div>
+        <div class="diagnosi-item" id="d-ipotesi-box" style="display:none;">
+          <h4>🧠 Ipotesi di guasto</h4>
+          <ul class="ipotesi-list" id="d-ipotesi"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ ESAME ═══════════════════════════════ -->
+<div id="tab-esame" class="panel">
+  <div class="container">
+    <p class="section-title">Esame di Certificazione</p>
+    <div class="alert alert-info">
+      🎓 Lo studio NON viene mai bloccato. L'esame certifica le competenze acquisite.
+      Soglia superamento: <strong>60%</strong>. Tentativi illimitati.
+    </div>
+
+    <div id="esame-setup">
+      <div class="form-row" style="max-width:500px;">
+        <div class="form-group">
+          <label>Materia</label>
+          <select id="esame-materia"></select>
+        </div>
+        <div class="form-group" style="flex:0; min-width:120px;">
+          <label>N° domande</label>
+          <input type="number" id="esame-n" value="5" min="1" max="10" />
+        </div>
+      </div>
+      <button class="btn btn-gold" onclick="iniziaEsame()">🎓 Inizia Esame</button>
+    </div>
+
+    <div class="esame-section" id="esame-in-corso">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+        <span id="esame-materia-label" style="font-weight:700; color:#FFD700;"></span>
+        <span id="esame-progresso" style="font-size:0.8rem; color:#90a4bf;"></span>
+      </div>
+      <div id="esame-domande"></div>
+      <button class="btn btn-gold" onclick="consegnaEsame()" id="btn-consegna" style="margin-top:10px;">
+        ✅ Consegna Esame
+      </button>
+    </div>
+
+    <div class="esame-section" id="esame-risultato">
+      <div class="punteggio-box">
+        <div class="punteggio-val" id="punteggio-display"></div>
+        <div class="punteggio-label">Risposte corrette</div>
+        <div class="punteggio-superato" id="punteggio-esito"></div>
+      </div>
+      <div id="esame-feedback" style="margin-top:20px;"></div>
+      <button class="btn btn-outline" onclick="resetEsame()" style="margin-top:16px;">🔄 Rifai Esame</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ MEMORIA ═══════════════════════════════ -->
+<div id="tab-memoria" class="panel">
+  <div class="container">
+    <p class="section-title">Memoria di ROCCO</p>
+    <p class="section-desc">
+      ROCCO ricorda le formule studiate, gli errori commessi e le competenze certificate.
+      Questa memoria viene usata per arricchire il contesto delle risposte in chat.
+    </p>
+    <div id="memoria-content">
+      <div class="loading"><span class="spinner"></span> Caricamento memoria...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  var API = '/api/university';
+  var _materie = [];
+  var _formule = [];
+  var _esameCorrente = null;
+  var _risposteEsame = {};
+
+  // ── TAB SWITCHING ─────────────────────────────────────────────
+  window.showTab = function(name) {
+    var panels = document.querySelectorAll('.panel');
+    var btns = document.querySelectorAll('.tab-btn');
+    for (var i = 0; i < panels.length; i++) panels[i].classList.remove('active');
+    for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
+    var p = document.getElementById('tab-' + name);
+    var btn = btns[['materie','formule','diagnosi','esame','memoria'].indexOf(name)];
+    if (p) p.classList.add('active');
+    if (btn) btn.classList.add('active');
+
+    if (name === 'formule' && _formule.length === 0) loadFormule();
+    if (name === 'memoria') loadMemoria();
+  };
+
+  // ── MATERIE ───────────────────────────────────────────────────
+  function loadMaterie() {
+    fetch(API + '/materie')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        _materie = data;
+        renderMaterie(data);
+        populateEsameSelect(data);
+      })
+      .catch(function(e) {
+        document.getElementById('materie-cards').innerHTML =
+          '<div class="alert alert-warn">⚠️ Impossibile caricare le materie: ' + e.message + '</div>';
+      });
+  }
+
+  function renderMaterie(materie) {
+    var html = '';
+    materie.forEach(function(m) {
+      var progresso = m.livello_studio || 0;
+      var badge = m.prerequisiti && m.prerequisiti.length > 0
+        ? m.prerequisiti.length + ' prerequisiti' : 'Base';
+      html += '<div class="card" onclick="apriMateria(\'' + m.id + '\')" title="Clicca per vedere le formule">' +
+        '<div class="card-badge">' + badge + '</div>' +
+        '<div class="card-title">' + m.nome + '</div>' +
+        '<div class="card-desc">' + m.descrizione + '</div>' +
+        '<div style="margin-top:10px; font-size:0.72rem; color:#90a4bf;">' +
+          (m.argomenti || []).slice(0, 3).join(' · ') +
+        '</div>' +
+        '<div class="card-progress"><div class="card-progress-fill" style="width:' + progresso + '%"></div></div>' +
+        '</div>';
+    });
+    document.getElementById('materie-cards').innerHTML = html;
+  }
+
+  window.apriMateria = function(id) {
+    showTab('formule');
+    setTimeout(function() { filtraFormule(id, null); }, 100);
+  };
+
+  function populateEsameSelect(materie) {
+    var sel = document.getElementById('esame-materia');
+    sel.innerHTML = '';
+    materie.forEach(function(m) {
+      var opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.nome;
+      sel.appendChild(opt);
+    });
+  }
+
+  // ── FORMULE ───────────────────────────────────────────────────
+  function loadFormule(materiaFilter) {
+    var url = API + '/formule' + (materiaFilter ? '?materia=' + materiaFilter : '');
+    fetch(url)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        _formule = data;
+        renderFormule(data);
+        if (_materie.length > 0) buildFiltriFormule();
+      })
+      .catch(function(e) {
+        document.getElementById('formula-grid').innerHTML =
+          '<div class="alert alert-warn">⚠️ ' + e.message + '</div>';
+      });
+  }
+
+  window.filtraFormule = function(materiaId, btn) {
+    // Aggiorna chip attivo
+    var chips = document.querySelectorAll('#filtri-formule .filter-chip');
+    for (var i = 0; i < chips.length; i++) chips[i].classList.remove('active');
+    if (btn) btn.classList.add('active');
+
+    if (materiaId) {
+      loadFormule(materiaId);
+    } else {
+      loadFormule(null);
+    }
+  };
+
+  function buildFiltriFormule() {
+    var html = '<button class="filter-chip active" onclick="filtraFormule(null, this)">Tutte</button>';
+    _materie.forEach(function(m) {
+      html += '<button class="filter-chip" onclick="filtraFormule(\'' + m.id + '\', this)">' + m.nome + '</button>';
+    });
+    document.getElementById('filtri-formule').innerHTML = html;
+  }
+
+  function renderFormule(formule) {
+    if (!formule || formule.length === 0) {
+      document.getElementById('formula-grid').innerHTML = '<p style="color:#90a4bf;">Nessuna formula per questa materia.</p>';
+      return;
+    }
+    var html = '';
+    formule.forEach(function(f) {
+      html += '<div class="formula-card">' +
+        '<div class="formula-name">' + f.nome + '</div>' +
+        '<div class="formula-str">' + f.formula + '</div>' +
+        '<div class="formula-desc">' + f.significato + '</div>' +
+        '<div class="formula-esempio">Esempio: ' + f.esempio + '</div>' +
+        buildCalcBox(f) +
+        '</div>';
+    });
+    document.getElementById('formula-grid').innerHTML = html;
+  }
+
+  function buildCalcBox(f) {
+    if (!f.variabili) return '';
+    var vars = Object.keys(f.variabili);
+    if (vars.length === 0) return '';
+
+    var inputsHtml = '';
+
+    // Campi input generati dalle variabili della formula
+    if (f.id === 'caduta_tensione') {
+      inputsHtml = '<div class="calc-row">' +
+        '<div class="calc-field"><label>L (m)</label><input type="number" id="cv-L-' + f.id + '" placeholder="50" style="width:80px;"></div>' +
+        '<div class="calc-field"><label>I (A)</label><input type="number" id="cv-I-' + f.id + '" placeholder="20" style="width:80px;"></div>' +
+        '<div class="calc-field"><label>S (mm²)</label><input type="number" id="cv-S-' + f.id + '" placeholder="4" style="width:80px;"></div>' +
+        '<div class="calc-field"><label>Materiale</label><select id="cv-mat-' + f.id + '" style="width:70px;"><option value="Cu">Cu</option><option value="Al">Al</option></select></div>' +
+        '<div class="calc-field"><label>Sistema</label><select id="cv-sys-' + f.id + '" style="width:90px;"><option value="monofase">Mono</option><option value="trifase">Trifase</option></select></div>' +
+        '</div>';
+    } else if (f.id === 'resistenza_serie' || f.id === 'resistenza_parallelo') {
+      inputsHtml = '<div class="calc-row">' +
+        '<div class="calc-field"><label>R1 (Ω)</label><input type="number" id="rp-R1-' + f.id + '" placeholder="10" style="width:75px;"></div>' +
+        '<div class="calc-field"><label>R2 (Ω)</label><input type="number" id="rp-R2-' + f.id + '" placeholder="20" style="width:75px;"></div>' +
+        '<div class="calc-field"><label>R3 (Ω)</label><input type="number" id="rp-R3-' + f.id + '" placeholder="" style="width:75px;"></div>' +
+        '</div>';
+    } else {
+      var campos = [];
+      vars.slice(0, 3).forEach(function(v) {
+        var vdata = f.variabili[v];
+        campos.push('<div class="calc-field"><label>' + v + ' (' + (vdata.unita || '') + ')</label>' +
+          '<input type="number" id="cf-' + f.id + '-' + v + '" placeholder="" step="any"></div>');
+      });
+      inputsHtml = '<div class="calc-row">' + campos.join('') + '</div>';
+    }
+
+    return '<div class="calc-box">' +
+      '<h4>🔢 Calcola</h4>' +
+      inputsHtml +
+      '<button class="btn btn-cyan btn-sm" onclick="eseguiCalcolo(\'' + f.id + '\', this)">= Calcola</button>' +
+      '<div id="cr-' + f.id + '" class="calc-result" style="display:none;"></div>' +
+      '</div>';
+  }
+
+  window.eseguiCalcolo = function(formulaId, btn) {
+    var dati = {};
+
+    if (formulaId === 'caduta_tensione') {
+      dati.L = parseFloat(document.getElementById('cv-L-' + formulaId).value) || null;
+      dati.I = parseFloat(document.getElementById('cv-I-' + formulaId).value) || null;
+      dati.S = parseFloat(document.getElementById('cv-S-' + formulaId).value) || null;
+      dati.materiale = document.getElementById('cv-mat-' + formulaId).value;
+      dati.sistema = document.getElementById('cv-sys-' + formulaId).value;
+    } else if (formulaId === 'resistenza_serie' || formulaId === 'resistenza_parallelo') {
+      var resistenze = [];
+      ['R1','R2','R3'].forEach(function(k) {
+        var v = parseFloat(document.getElementById('rp-' + k + '-' + formulaId).value);
+        if (!isNaN(v) && v > 0) resistenze.push(v);
+      });
+      dati.resistenze = resistenze;
+    } else {
+      // Raccogli tutti gli input cf-<id>-<var>
+      document.querySelectorAll('[id^="cf-' + formulaId + '-"]').forEach(function(inp) {
+        var varName = inp.id.replace('cf-' + formulaId + '-', '');
+        var val = parseFloat(inp.value);
+        if (!isNaN(val)) dati[varName] = val;
+      });
+    }
+
+    var resultEl = document.getElementById('cr-' + formulaId);
+    resultEl.style.display = 'block';
+    resultEl.textContent = '...';
+
+    fetch(API + '/formule/' + formulaId + '/calcola', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dati)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.errore) {
+        resultEl.style.color = '#e05252';
+        resultEl.textContent = '❌ ' + data.errore;
+      } else {
+        resultEl.style.color = '#7aff9a';
+        var out = data.output;
+        var lines = Object.keys(out).map(function(k) {
+          return k + ' = ' + (typeof out[k] === 'number' ? Math.round(out[k]*1000)/1000 : out[k]);
+        });
+        resultEl.textContent = '✅ ' + lines.join('  |  ');
+      }
+    })
+    .catch(function(e) {
+      resultEl.style.color = '#e05252';
+      resultEl.textContent = '❌ ' + e.message;
+    });
+  };
+
+  // ── DIAGNOSI NUMERICA ────────────────────────────────────────
+  window.eseguiDiagnosi = function() {
+    var misura = document.getElementById('d-misura').value;
+    var misurato = parseFloat(document.getElementById('d-misurato').value);
+    var atteso = parseFloat(document.getElementById('d-atteso').value);
+    var tolleranza = parseFloat(document.getElementById('d-tolleranza').value) || 10;
+
+    if (isNaN(misurato) || isNaN(atteso)) {
+      alert('Inserisci valore misurato e valore atteso');
+      return;
+    }
+
+    fetch(API + '/diagnosi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        misura: misura,
+        valore_misurato: misurato,
+        valore_atteso: atteso,
+        tolleranza_percent: tolleranza
+      })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      renderDiagnosi(d);
+    })
+    .catch(function(e) {
+      alert('Errore: ' + e.message);
+    });
+  };
+
+  function renderDiagnosi(d) {
+    var box = document.getElementById('diagnosi-result');
+    box.style.display = 'block';
+    box.className = 'diagnosi-result ' +
+      (d.stato === 'OK' ? 'ok-state' : d.stato === 'BASSO' ? 'warn-state' : 'err-state');
+
+    var badge = document.getElementById('d-stato-badge');
+    badge.textContent = d.stato === 'OK' ? '✅ NELLA NORMA' : (d.stato === 'BASSO' ? '⚠️ VALORE BASSO' : '🔴 VALORE ALTO');
+    badge.className = 'stato-badge ' + (d.stato === 'OK' ? 'stato-ok' : d.stato === 'BASSO' ? 'stato-basso' : 'stato-alto');
+
+    document.getElementById('d-valutazione').textContent = d.valutazione;
+    document.getElementById('d-dati').innerHTML =
+      'Misurato: <strong>' + d.valore_misurato + '</strong><br>' +
+      'Atteso: <strong>' + d.valore_atteso + '</strong><br>' +
+      'Tolleranza: ±' + d.tolleranza_percent + '%';
+    document.getElementById('d-scarto').textContent = d.scarto_percent + '%';
+
+    var ipotesiBox = document.getElementById('d-ipotesi-box');
+    if (d.ipotesi_guasto && d.ipotesi_guasto.length > 0) {
+      ipotesiBox.style.display = 'block';
+      document.getElementById('d-ipotesi').innerHTML =
+        d.ipotesi_guasto.map(function(ip) { return '<li>' + ip + '</li>'; }).join('');
+    } else {
+      ipotesiBox.style.display = 'none';
+    }
+
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // ── ESAME ─────────────────────────────────────────────────────
+  window.iniziaEsame = function() {
+    var materia = document.getElementById('esame-materia').value;
+    var n = parseInt(document.getElementById('esame-n').value) || 5;
+    _risposteEsame = {};
+
+    fetch(API + '/esami/' + materia + '?n=' + n)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.errore) { alert(data.errore); return; }
+        _esameCorrente = data;
+        renderEsame(data);
+      })
+      .catch(function(e) { alert('Errore: ' + e.message); });
+  };
+
+  function renderEsame(esame) {
+    document.getElementById('esame-setup').style.display = 'none';
+    var inCorso = document.getElementById('esame-in-corso');
+    inCorso.classList.add('visible');
+    document.getElementById('esame-risultato').classList.remove('visible');
+
+    var mat = _materie.find(function(m) { return m.id === esame.materia; });
+    document.getElementById('esame-materia-label').textContent =
+      '🎓 ' + (mat ? mat.nome : esame.materia);
+    document.getElementById('esame-progresso').textContent =
+      esame.n_domande + ' domande — superamento: ' + esame.regole.soglia_superamento_percent + '%';
+
+    var html = '';
+    esame.domande.forEach(function(d, i) {
+      html += '<div class="domanda-card" id="dom-' + i + '">' +
+        '<div class="domanda-num">Domanda ' + (i+1) + ' di ' + esame.n_domande + '</div>' +
+        '<div class="domanda-testo">' + d.domanda + '</div>' +
+        '<div>' +
+        '<input class="risposta-input" type="number" step="any" id="risp-' + i + '"' +
+          ' placeholder="Inserisci risposta numerica"' +
+          ' onchange="salvaRisposta(' + i + ', this.value)">' +
+        '</div>' +
+        '<div id="fb-' + i + '"></div>' +
+        '</div>';
+    });
+    document.getElementById('esame-domande').innerHTML = html;
+  }
+
+  window.salvaRisposta = function(idx, val) {
+    _risposteEsame[idx] = parseFloat(val);
+  };
+
+  window.consegnaEsame = function() {
+    if (!_esameCorrente) return;
+    var domande = _esameCorrente.domande;
+    var soluzioni = _esameCorrente._soluzioni || [];
+    var corretti = 0;
+    var feedback = '';
+
+    domande.forEach(function(d, i) {
+      var risp = _risposteEsame[i];
+      var sol = soluzioni[i];
+      if (!sol) return;
+
+      var fbEl = document.getElementById('fb-' + i);
+      if (risp === undefined || isNaN(risp)) {
+        if (fbEl) fbEl.innerHTML = '<div class="feedback-err">⚠️ Risposta non fornita</div>';
+        return;
+      }
+
+      if (sol.risposta_attesa !== undefined) {
+        var scarto = Math.abs(risp - sol.risposta_attesa) / sol.risposta_attesa * 100;
+        var ok = scarto <= (sol.tolleranza || 5);
+        if (ok) corretti++;
+        if (fbEl) {
+          fbEl.innerHTML = ok
+            ? '<div class="feedback-ok">✅ Corretto! (scarto ' + scarto.toFixed(1) + '%)</div>'
+            : '<div class="feedback-err">❌ Risposta attesa: ' + sol.risposta_attesa +
+              '<br><small style="opacity:0.8">' + (sol.soluzione || '') + '</small></div>';
+        }
+      }
+    });
+
+    var max = domande.filter(function(d) {
+      return _esameCorrente._soluzioni &&
+        _esameCorrente._soluzioni.find(function(s) { return s.id === d.id && s.risposta_attesa !== undefined; });
+    }).length || domande.length;
+
+    var perc = max > 0 ? Math.round(corretti / max * 100) : 0;
+    var superato = perc >= 60;
+
+    document.getElementById('esame-in-corso').classList.remove('visible');
+    var risEl = document.getElementById('esame-risultato');
+    risEl.classList.add('visible');
+
+    document.getElementById('punteggio-display').textContent = corretti + '/' + max;
+    document.getElementById('punteggio-esito').innerHTML = superato
+      ? '<span style="color:#7aff9a;">🏆 ESAME SUPERATO (' + perc + '%)</span>'
+      : '<span style="color:#e05252;">❌ Esame non superato (' + perc + '%) — Riprova!</span>';
+
+    // Invia al server
+    fetch(API + '/esami/' + _esameCorrente.materia + '/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ punteggio: corretti, max_punteggio: max })
+    }).catch(function() {});
+  };
+
+  window.resetEsame = function() {
+    _esameCorrente = null;
+    _risposteEsame = {};
+    document.getElementById('esame-setup').style.display = 'block';
+    document.getElementById('esame-in-corso').classList.remove('visible');
+    document.getElementById('esame-risultato').classList.remove('visible');
+  };
+
+  // ── MEMORIA ───────────────────────────────────────────────────
+  function loadMemoria() {
+    var el = document.getElementById('memoria-content');
+    el.innerHTML = '<div class="loading"><span class="spinner"></span> Caricamento...</div>';
+
+    Promise.all([
+      fetch(API + '/memoria').then(function(r) { return r.json(); }).catch(function() { return null; }),
+      fetch(API + '/statistiche').then(function(r) { return r.json(); }).catch(function() { return null; })
+    ]).then(function(results) {
+      var memoria = results[0];
+      var stats = results[1];
+      renderMemoria(memoria, stats);
+    });
+  }
+
+  function renderMemoria(memoria, stats) {
+    var html = '';
+
+    if (!memoria) {
+      html = '<div class="alert alert-warn">⚠️ Memoria non disponibile (DB non connesso)</div>';
+      document.getElementById('memoria-content').innerHTML = html;
+      return;
+    }
+
+    // Competenze
+    if (memoria.competenze_certificate && memoria.competenze_certificate.length > 0) {
+      html += '<div class="alert alert-success">🏆 Competenze certificate: ' +
+        memoria.competenze_certificate.join(', ') + '</div>';
+    }
+
+    // Materie studiate
+    var materie = Object.keys(memoria.materie_studiate || {});
+    if (materie.length > 0) {
+      html += '<div class="section-title" style="margin-bottom:12px;">📚 Materie studiate</div>';
+      html += '<div class="info-row">';
+      materie.forEach(function(m) {
+        html += '<span class="info-chip">' + m + '</span>';
+      });
+      html += '</div>';
+    }
+
+    // Esami
+    if (stats && stats.storico_esami && stats.storico_esami.length > 0) {
+      html += '<div class="section-title" style="margin-top:24px; margin-bottom:12px;">🎓 Storico Esami</div>';
+      html += '<div class="cards">';
+      stats.storico_esami.slice(0, 6).forEach(function(e) {
+        var perc = Math.round(e.punteggio / e.max_punteggio * 100);
+        html += '<div class="card" style="cursor:default;">' +
+          '<div class="card-title" style="color:' + (e.superato ? '#7aff9a' : '#e05252') + ';">' +
+          (e.superato ? '🏆' : '❌') + ' ' + e.materia + '</div>' +
+          '<div class="card-desc">' + perc + '% — ' + e.punteggio + '/' + e.max_punteggio + '</div>' +
+          '<div style="font-size:0.72rem; color:#90a4bf; margin-top:6px;">' +
+          new Date(e.data_esame).toLocaleDateString('it-IT') + '</div>' +
+          '</div>';
+      });
+      html += '</div>';
+    }
+
+    // Errori frequenti
+    if (stats && stats.errori_frequenti && stats.errori_frequenti.length > 0) {
+      html += '<div class="section-title" style="margin-top:24px; margin-bottom:12px;">⚠️ Errori frequenti</div>';
+      stats.errori_frequenti.forEach(function(e) {
+        html += '<div class="domanda-card" style="cursor:default;">' +
+          '<div class="domanda-num">Materia: ' + e.materia + ' — ripetuto ' + e.contatore + 'x</div>' +
+          '<div class="domanda-testo">' + (e.errore || '') + '</div>' +
+          '</div>';
+      });
+    }
+
+    if (!html) {
+      html = '<div class="alert alert-info">ℹ️ Nessun dato di studio ancora registrato. ' +
+        'Inizia a fare calcoli ed esami per costruire la memoria di ROCCO!</div>';
+    }
+
+    document.getElementById('memoria-content').innerHTML = html;
+  }
+
+  // ── INIT ─────────────────────────────────────────────────────
+  loadMaterie();
+
+})();
+</script>
+</body>
+</html>
