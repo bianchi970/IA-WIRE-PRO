@@ -54,6 +54,17 @@ try {
   console.warn('[ROCCO RUNNER] Non disponibile:', e && e.message);
 }
 
+// ROCCO VISION — pipeline analisi foto quadri elettrici (FASE 6)
+let analyzePanel = null;
+let buildVisionContract = null;
+try {
+  analyzePanel       = require('./vision/analyzePanel').analyzePanel;
+  buildVisionContract = require('./vision/visionFusion').buildVisionContract;
+  console.log('[ROCCO VISION] Pipeline caricata ✓');
+} catch (e) {
+  console.warn('[ROCCO VISION] Non disponibile:', e && e.message);
+}
+
 // ✅ DB pool (protetto: non deve mai far crashare il server)
 let pool = null;
 try {
@@ -674,10 +685,49 @@ function isNetworkError(err) {
  * Ordine: encyclopedia DB → doc chunks → knowledge locale → engine diagnostico.
  * Ogni sezione è separata da doppio newline. Sezioni vuote sono omesse.
  */
-function buildContextBlock({ dbContextText, docChunksText, knowledgeText, engineText }) {
-  return [dbContextText, docChunksText, knowledgeText, engineText]
+function buildContextBlock({ dbContextText, docChunksText, knowledgeText, engineText, visionText }) {
+  return [visionText, dbContextText, docChunksText, knowledgeText, engineText]
     .filter(Boolean)
     .join("\n\n");
+}
+
+/**
+ * callOcr — OCR leggero su buffer immagine tramite provider LLM configurato.
+ * Usato internamente da analyzePanel (FASE 6).
+ * Ritorna il testo estratto o stringa vuota.
+ */
+async function callOcr(imageBuffer, prompt) {
+  if (!Buffer.isBuffer(imageBuffer) || !imageBuffer.length) return "";
+  const b64 = imageBuffer.toString("base64");
+  // OpenAI vision (priorità — più veloce e meno costoso con gpt-4o-mini)
+  if (openai) {
+    try {
+      const r = await openai.chat.completions.create({
+        model: OPENAI_MODEL,
+        max_tokens: 300,
+        messages: [{ role: "user", content: [
+          { type: "text", text: prompt },
+          { type: "image_url", image_url: { url: "data:image/jpeg;base64," + b64, detail: "high" } }
+        ]}]
+      });
+      return (r.choices[0] && r.choices[0].message && r.choices[0].message.content) || "";
+    } catch (e) { /* fallthrough */ }
+  }
+  // Anthropic vision (fallback)
+  if (anthropic) {
+    try {
+      const r = await anthropic.messages.create({
+        model: ANTHROPIC_MODEL,
+        max_tokens: 300,
+        messages: [{ role: "user", content: [
+          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64 } },
+          { type: "text", text: prompt }
+        ]}]
+      });
+      return (r.content[0] && r.content[0].text) || "";
+    } catch (e) { /* fallthrough */ }
+  }
+  return "";
 }
 
 async function callOpenAI({ systemPrompt, shortHistory, imageBase64, imagesBase64, message, contextBlock }) {
@@ -1189,6 +1239,33 @@ app.post("/api/chat", uploadAny, async (req, res) => {
 
     if (!message && imagesBase64.length > 0) message = "Analizza questa foto dell'impianto/quadro. Identifica tutti i componenti visibili, leggi le tarature e segnala qualsiasi anomalia o guasto visibile.";
 
+    // ── FASE 6 — ROCCO Vision Pipeline ──────────────────────────────────────
+    let visionText = "";
+    if (analyzePanel && buildVisionContract && (imageFiles.length > 0 || imageBase64)) {
+      try {
+        let imgBuf = null;
+        if (imageFiles.length > 0 && imageFiles[0].buffer) {
+          imgBuf = imageFiles[0].buffer;
+        } else if (imageBase64) {
+          const imgNorm = normalizeBase64Image(imageBase64);
+          if (imgNorm) imgBuf = Buffer.from(imgNorm.b64, "base64");
+        }
+        if (imgBuf) {
+          const visionResult = await analyzePanel(imgBuf, "img_" + Date.now(), {
+            callOcr: callOcr,
+            userText: message
+          });
+          visionText = buildVisionContract(visionResult.components);
+          if (process.env.ROCCO_DEBUG === "1") {
+            console.log("[VISION] components:", visionResult.components.length,
+              "| warnings:", visionResult.warnings.join(" | "));
+          }
+        }
+      } catch (e) {
+        console.warn("⚠️ ROCCO Vision Pipeline:", (e && e.message) || e);
+      }
+    }
+
     if (!message && !imageBase64) {
       return res.status(400).json({
         error: "Manca 'message' o immagine.",
@@ -1427,7 +1504,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       });
     }
 
-    const contextBlock = buildContextBlock({ dbContextText, docChunksText, knowledgeText: knowledgeText + (knowledgeCasiText ? "\n\n" + knowledgeCasiText : "") + (memoriaContext ? "\n\n" + memoriaContext : "") + (deviceKbText ? "\n\n" + deviceKbText : ""), engineText });
+    const contextBlock = buildContextBlock({ dbContextText, docChunksText, knowledgeText: knowledgeText + (knowledgeCasiText ? "\n\n" + knowledgeCasiText : "") + (memoriaContext ? "\n\n" + memoriaContext : "") + (deviceKbText ? "\n\n" + deviceKbText : ""), engineText, visionText });
     const callParams = { systemPrompt, shortHistory, imageBase64, imagesBase64, message, contextBlock };
 
     let answer = null;
@@ -1495,7 +1572,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
       answer,
       conversation_id: convId,
       signature: "ROCCO-CHAT-V2",
-      rag: { usedDbContext: Boolean(dbContextText), usedDocChunks: Boolean(docChunksText), usedKnowledge: Boolean(knowledgeText), contextBlockLen: contextBlock.length },
+      rag: { usedDbContext: Boolean(dbContextText), usedDocChunks: Boolean(docChunksText), usedKnowledge: Boolean(knowledgeText), visionAnalysis: Boolean(visionText), contextBlockLen: contextBlock.length },
       engine: engineDiag ? {
         active: true,
         isTechnical: engineDiag.isTechnical,
