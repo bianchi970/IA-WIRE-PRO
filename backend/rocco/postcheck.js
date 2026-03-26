@@ -10,14 +10,20 @@ function normalizeNewlines(text) {
     .trim();
 }
 
-// Cerca la sezione — riconosce varianti con/senza asterischi, grassetto markdown, spaziatura variabile
+// Cerca la sezione — riconosce varianti con/senza asterischi, grassetto markdown, spaziatura variabile, emoji prefisso
 function hasSection(text, section) {
   const escaped = section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(
-    "(?:^|\\n)\\s*(?:\\d+[\\)\\.\\s]\\s*)?\\*{0,2}" + escaped + "\\*{0,2}\\s*:",
+    "(?:^|\\n)\\s*[^\\w\\n]*(?:\\d+[\\)\\.\\s]\\s*)?\\*{0,2}" + escaped + "\\*{0,2}\\s*:",
     "i"
   );
   return pattern.test(text);
+}
+
+// Rileva se la risposta è di tipo calcolo (ha formule/calcoli espliciti)
+function isCalcResponse(text) {
+  return /📐|FORMULE?\s+USAT[EI]|CALCOLO\s*:|ΔV|ΔU|resistivit|ρ\s*=|mm²/i.test(text) &&
+         /sezione|cavo|corrente|potenza|calco/i.test(text.toLowerCase());
 }
 
 function ensureSection(text, section) {
@@ -121,10 +127,12 @@ function postcheck(answerText) {
   // 1) Pulisce heading markdown
   output = cleanSectionHeadings(output);
 
-  // 2) Garantisce tutte le sezioni obbligatorie
-  TECH_REPORT_SECTIONS.forEach((section) => {
-    output = ensureSection(output, section);
-  });
+  // 2) Garantisce tutte le sezioni obbligatorie (skip per risposte di calcolo — già complete)
+  if (!isCalcResponse(output)) {
+    TECH_REPORT_SECTIONS.forEach((section) => {
+      output = ensureSection(output, section);
+    });
+  }
 
   // 3) Garantisce almeno un badge confidenza in IPOTESI
   output = ensureConfidence(output);
