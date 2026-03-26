@@ -182,7 +182,19 @@ function buildSystemPrompt(plan, ragContext, calcContext) {
     "\n\n─── REGOLE DI SICUREZZA E BUONE PRATICHE ───\n" +
     rules.map((r) => "• " + r).join("\n") +
 
-    (calcContext ? "\n\n" + calcContext : "") +
+    (calcContext ? "\n\n" + calcContext +
+      "\n\n─── ADATTA LE SEZIONI AL CALCOLO ───\n" +
+      "Quando rispondi a una richiesta di CALCOLO (sezione, caduta di tensione, corrente, potenza, ecc.) " +
+      "usa COMUNQUE le 7 sezioni, ma adattale così:\n" +
+      "  OSSERVAZIONI: i dati di input forniti (Ib, L, V, ΔV%, ecc.) — SOLO i valori certi\n" +
+      "  COMPONENTI COINVOLTI: il circuito/cavo/protezione da dimensionare\n" +
+      "  IPOTESI: [CONFERMATO] formula applicata e risultato numerico ottenuto\n" +
+      "  LIVELLO DI CERTEZZA: Confermato (il calcolo è matematicamente determinato)\n" +
+      "  VERIFICHE OPERATIVE: i passaggi del calcolo (formula → sostituzione → risultato → sezione commerciale)\n" +
+      "  RISCHI REALI: conseguenza se si usa sezione/protezione inferiore a quella calcolata\n" +
+      "  PROSSIMO PASSO: acquistare/installare il componente dimensionato o misura di verifica\n" +
+      "NON lasciare sezioni vuote o con '(dato non disponibile)'. Adattale sempre al contesto del calcolo.\n"
+    : "") +
 
     "\n\n═══ KNOWLEDGE BASE TECNICA (CEI 64-8 / DM 37/08 / CEI-UNEL) ═══\n" +
     "Usa questi dati per calcoli e verifiche normative. Priorità massima su qualsiasi altra fonte.\n\n" +

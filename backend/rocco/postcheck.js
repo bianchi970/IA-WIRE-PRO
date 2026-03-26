@@ -56,15 +56,27 @@ function normalizeCertaintySection(text) {
   return replaced;
 }
 
+// Normalizza badge non canonici verso i 3 valori ufficiali
+function normalizeBadges(text) {
+  return text
+    .replace(/\[ALTA\]/gi,          "[CONFERMATO]")
+    .replace(/\[ALTA PROBABILITA['\u2019]?\]/gi, "[CONFERMATO]")
+    .replace(/\[MEDIA\]/gi,         "[PROBABILE]")
+    .replace(/\[BASSA\]/gi,         "[DA_VERIFICARE]")
+    .replace(/\[POSSIBILE\]/gi,     "[DA_VERIFICARE]")
+    .replace(/\[NON VERIFICATO\]/gi,"[DA_VERIFICARE]");
+}
+
 // Garantisce almeno un badge di confidenza in IPOTESI
 function ensureConfidence(text) {
   const found = CONFIDENCE_LEVELS.some((lvl) =>
     new RegExp("\\[" + lvl + "\\]", "i").test(text)
   );
   if (found) return text;
+  // fallback: sezione IPOTESI può essere numerata "N) IPOTESI:"
   return text.replace(
-    /^(IPOTESI\s*:)/m,
-    "IPOTESI:\n- [DA_VERIFICARE] Nessuna ipotesi formulabile con i dati attuali."
+    /(?:^|\n)([ \t]*(?:\d+[)\.\s]\s*)?IPOTESI\s*:)/m,
+    function(m, prefix) { return "\n" + prefix + "\n- [DA_VERIFICARE] Nessuna ipotesi formulabile con i dati attuali."; }
   ) || text;
 }
 
@@ -102,6 +114,9 @@ function warnEmptySections(text) {
 
 function postcheck(answerText) {
   let output = normalizeNewlines(answerText);
+
+  // 0) Normalizza badge non canonici ([ALTA] → [CONFERMATO], ecc.)
+  output = normalizeBadges(output);
 
   // 1) Pulisce heading markdown
   output = cleanSectionHeadings(output);
