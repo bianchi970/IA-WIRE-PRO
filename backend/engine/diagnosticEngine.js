@@ -56,6 +56,51 @@ var MEASUREMENT_WORDS  = ["misura", "multimetro", "pinza", "megohmetro", "tester
 var MATCH_THRESHOLD = 3;
 
 // ============================================================
+// Rilevazione anomalia tensione BT (riferimento nominale 230V)
+// ============================================================
+var NOMINAL_VOLTAGE = 230;       // V — rete BT monofase Italia
+var VOLTAGE_TOLERANCE = 0.10;    // ±10% CEI EN 50160
+var VOLTAGE_MIN = NOMINAL_VOLTAGE * (1 - VOLTAGE_TOLERANCE); // 207V
+var VOLTAGE_MAX = NOMINAL_VOLTAGE * (1 + VOLTAGE_TOLERANCE); // 253V
+
+/**
+ * Analizza i valori di tensione estratti dal testo e determina se c'è
+ * una deviazione dal nominale 230V.
+ * @param {Array} extractedValues - output di extractNumericValues()
+ * @returns {Object|null} { measured, nominal, deviation, direction, anomaly, context }
+ */
+function detectVoltageAnomaly(extractedValues) {
+  // Cerca valori di tensione nel range BT monofase plausibile (100-300V)
+  var voltages = extractedValues.filter(function (v) {
+    return v.type === "tensione" && v.value >= 100 && v.value <= 300;
+  });
+  if (voltages.length === 0) return null;
+
+  // Prendi la tensione più anomala rispetto al nominale
+  var worst = null;
+  var worstDev = 0;
+  voltages.forEach(function (v) {
+    var dev = Math.abs(v.value - NOMINAL_VOLTAGE);
+    if (dev > worstDev) { worstDev = dev; worst = v; }
+  });
+  if (!worst) return null;
+
+  var measured = worst.value;
+  var deviation = ((measured - NOMINAL_VOLTAGE) / NOMINAL_VOLTAGE * 100).toFixed(1);
+  var direction = measured > NOMINAL_VOLTAGE ? "sopra" : measured < NOMINAL_VOLTAGE ? "sotto" : "nominale";
+  var anomaly = measured < VOLTAGE_MIN || measured > VOLTAGE_MAX;
+
+  return {
+    measured: measured,
+    nominal: NOMINAL_VOLTAGE,
+    deviation: deviation,
+    direction: direction,
+    anomaly: anomaly,
+    context: "BT monofase " + NOMINAL_VOLTAGE + "V"
+  };
+}
+
+// ============================================================
 // Estrazione numerica — misure da testo di cantiere
 // Cattura valori tecnici scritti in modo approssimativo
 // Es: "230v", "16A", "1.5kW", "1mohm", "50hz", "80gradi"
@@ -801,6 +846,8 @@ function parseLivello(logicEntry) {
 function buildIpotesiFromPattern(pattern) {
   var causes  = Array.isArray(pattern.likely_causes) ? pattern.likely_causes : [pattern.symptom];
   var logics  = Array.isArray(pattern.confidence_logic) ? pattern.confidence_logic : [];
+  var pid     = pattern.id || "";
+  var sym     = pattern.symptom || "";
 
   return causes.map(function (causa, idx) {
     var livello = "probabile"; // default: senza misure non si conferma nulla
@@ -810,8 +857,198 @@ function buildIpotesiFromPattern(pattern) {
       // Quindi lo usiamo solo se è "non_verificabile" (indica un limite reale).
       if (parsed === "non_verificabile") livello = "non_verificabile";
     }
-    return { causa: String(causa), livello: livello };
+    return { causa: String(causa), livello: livello, patternId: pid, symptom: sym, deductionScore: 0 };
   });
+}
+
+// ============================================================
+// ROCCO NUCLEO DEDUTTIVO — FASE 1
+// Regole fisico-tecniche statiche applicate dopo il pattern matching.
+// Azioni: boost | penalize | missing | raise_priority
+// ============================================================
+var PHYSICAL_CONSTRAINTS = [
+  // PHYS-01: isolamento basso + contesto RCD → boost dispersione
+  {
+    id: "PHYS-01",
+    condition: function (s) {
+      return s.mentionsRCD && s.extractedValues.some(function (v) {
+        return v.type === "isolamento" && v.value < 1;
+      });
+    },
+    action: "boost",
+    targetPatternSymptom: /dispersione|isolamento|differenziale.*scatta/i,
+    scoreDelta: 20,
+    reason: "Isolamento <1MΩ con RCD coinvolto — dispersione rafforzata"
+  },
+  // PHYS-02: tensione nominale → penalize (non exclude) anomalia rete
+  {
+    id: "PHYS-02",
+    condition: function (s) {
+      return s.extractedValues.some(function (v) {
+        return v.type === "tensione" && v.value >= 207 && v.value <= 253;
+      }) && (!s.voltageAnomaly || !s.voltageAnomaly.anomaly);
+    },
+    action: "penalize",
+    targetPatternId: "FP-31",
+    scoreDelta: -15,
+    reason: "Tensione misurata in range nominale 207-253V — anomalia rete meno probabile"
+  },
+  // PHYS-03: temperatura alta → boost surriscaldamento
+  {
+    id: "PHYS-03",
+    condition: function (s) {
+      return s.extractedValues.some(function (v) {
+        return v.type === "temperatura" && v.value > 80;
+      });
+    },
+    action: "boost",
+    targetPatternSymptom: /surriscald|termico|caldo/i,
+    scoreDelta: 18,
+    reason: "Temperatura >80°C rilevata — surriscaldamento rafforzato"
+  },
+  // PHYS-04: anomalia tensione confermata → boost FP-31
+  {
+    id: "PHYS-04",
+    condition: function (s) {
+      return s.voltageAnomaly && s.voltageAnomaly.anomaly === true;
+    },
+    action: "boost",
+    targetPatternId: "FP-31",
+    scoreDelta: 18,
+    reason: "Tensione fuori range CEI EN 50160 — anomalia rete rafforzata"
+  },
+  // PHYS-05: RCD citato ma nessuna misura isolamento → missing
+  {
+    id: "PHYS-05",
+    condition: function (s) {
+      return s.mentionsRCD && !s.extractedValues.some(function (v) {
+        return v.type === "isolamento";
+      });
+    },
+    action: "missing",
+    dato: "misura isolamento",
+    check: "Misurare isolamento con megohmetro 500V DC tra ogni conduttore attivo e PE (valore atteso >1MΩ).",
+    priority: 10,
+    reason: "RCD coinvolto ma nessuna misura di isolamento fornita"
+  },
+  // PHYS-06: tensione citata ma nessun valore misurato → missing
+  {
+    id: "PHYS-06",
+    condition: function (s) {
+      return s.mentionsVoltage && !s.extractedValues.some(function (v) {
+        return v.type === "tensione";
+      });
+    },
+    action: "missing",
+    dato: "valore tensione misurato",
+    check: "Misurare tensione L-N e L-PE con multimetro VAC ai morsetti del componente sotto carico.",
+    priority: 8,
+    reason: "Tensione menzionata ma nessun valore numerico fornito"
+  },
+  // PHYS-07: motore citato ma nessuna misura corrente → missing
+  {
+    id: "PHYS-07",
+    condition: function (s) {
+      return s.matchedKeywords.some(function (k) {
+        return normalize(k).indexOf("motore") >= 0 || normalize(k).indexOf("motori") >= 0;
+      }) && !s.extractedValues.some(function (v) {
+        return v.type === "corrente" || v.type === "corrente_ma";
+      });
+    },
+    action: "missing",
+    dato: "corrente assorbita motore",
+    check: "Misurare corrente assorbita con pinza amperometrica su ogni fase durante il funzionamento.",
+    priority: 7,
+    reason: "Motore coinvolto ma nessuna misura di corrente fornita"
+  },
+  // PHYS-08: condizione pericolosa → raise_priority su ipotesi safety (solo patternId stabile)
+  {
+    id: "PHYS-08",
+    condition: function (s) { return s.isDangerous === true; },
+    action: "raise_priority",
+    targetPatternSymptom: /brucia|fuma|scintille|incendio|folgorazione|scossa/i,
+    scoreDelta: 25,
+    reason: "Condizione pericolosa rilevata — priorità sicurezza"
+  }
+];
+
+/**
+ * ROCCO Nucleo Deduttivo — deduceFromSignals()
+ * Applica PHYSICAL_CONSTRAINTS alle ipotesi già costruite dal pattern matching.
+ * NON modifica livello direttamente. Usa deductionScore per ranking.
+ * @param {Object} signals - dati già estratti da analyzeTechnicalRequest
+ * @param {Array} ipotesi - array da buildIpotesiFromPattern con patternId, symptom, deductionScore
+ * @returns {Object} { rankedHypotheses, missingData, bestNextCheck, exclusions, boosted }
+ */
+function deduceFromSignals(signals, ipotesi) {
+  var boosted = [];
+  var penalized = [];
+  var missingData = [];
+  var raised = [];
+
+  for (var r = 0; r < PHYSICAL_CONSTRAINTS.length; r++) {
+    var rule = PHYSICAL_CONSTRAINTS[r];
+    if (!rule.condition(signals)) continue;
+
+    if (rule.action === "boost" || rule.action === "penalize" || rule.action === "raise_priority") {
+      for (var i = 0; i < ipotesi.length; i++) {
+        var ip = ipotesi[i];
+        var hit = false;
+        // Match per patternId esatto (prioritario)
+        if (rule.targetPatternId && ip.patternId === rule.targetPatternId) {
+          hit = true;
+        }
+        // Match per regex su symptom del pattern originale (fallback)
+        if (!hit && rule.targetPatternSymptom && rule.targetPatternSymptom.test(ip.symptom)) {
+          hit = true;
+        }
+        if (hit) {
+          ip.deductionScore += rule.scoreDelta;
+          var entry = { patternId: ip.patternId, rule: rule.id, reason: rule.reason };
+          if (rule.action === "boost") boosted.push(entry);
+          if (rule.action === "penalize") penalized.push(entry);
+          if (rule.action === "raise_priority") raised.push(entry);
+        }
+      }
+    }
+
+    if (rule.action === "missing") {
+      // Conta quante ipotesi "probabile" potrebbero essere risolte da questo dato
+      var impactCount = 0;
+      for (var j = 0; j < ipotesi.length; j++) {
+        if (ipotesi[j].livello === "probabile") impactCount++;
+      }
+      missingData.push({
+        dato: rule.dato,
+        check: rule.check,
+        priority: rule.priority,
+        impactCount: impactCount,
+        rule: rule.id,
+        reason: rule.reason
+      });
+    }
+  }
+
+  // Ordina ipotesi: raise_priority in testa (deductionScore alto), poi per deductionScore, poi score originale implicito
+  ipotesi.sort(function (a, b) {
+    return b.deductionScore - a.deductionScore;
+  });
+
+  // Ordina missingData per priority × impactCount (il più utile prima)
+  missingData.sort(function (a, b) {
+    return (b.priority * b.impactCount) - (a.priority * a.impactCount);
+  });
+
+  // bestNextCheck: il check del missing con impatto maggiore, oppure null
+  var bestNextCheck = missingData.length > 0 ? missingData[0].check : null;
+
+  return {
+    rankedHypotheses: ipotesi,
+    missingData: missingData,
+    bestNextCheck: bestNextCheck,
+    exclusions: penalized,
+    boosted: boosted
+  };
 }
 
 // ============================================================
@@ -873,6 +1110,16 @@ function analyzeTechnicalRequest(input, knowledge) {
   //  qui estendiamo i token query con tag sintetici per far scattare quei boost)
   if (hasIsolationFault) tokens.push("dispersione", "isolamento", "guasto");
   if (hasAbnormalTemp)   tokens.push("surriscaldamento", "termico", "caldo");
+
+  // --- Anomalia tensione BT rispetto a nominale 230V ---
+  var voltageAnomaly = detectVoltageAnomaly(extractedValues);
+  if (voltageAnomaly && voltageAnomaly.anomaly) {
+    if (voltageAnomaly.direction === "sopra") {
+      tokens.push("sovratensione", "rete", "apparecchi", "danneggiat");
+    } else if (voltageAnomaly.direction === "sotto") {
+      tokens.push("sottotensione", "rete", "apparecchi");
+    }
+  }
 
   // --- A) Pattern matching completo sui JSON ---
   var patterns = (knowledge && Array.isArray(knowledge.failurePatterns)) ? knowledge.failurePatterns : [];
@@ -953,6 +1200,34 @@ function analyzeTechnicalRequest(input, knowledge) {
     console.log("ROCCO: JSON pattern matched ->", p.id, "(score=" + x.score + ")");
     osservazioni.push("Pattern identificato: " + p.symptom);
     buildIpotesiFromPattern(p).forEach(function (ip) { ipotesi.push(ip); });
+  });
+
+  // --- NUCLEO DEDUTTIVO ROCCO ---
+  var deductionSignals = {
+    extractedValues: extractedValues,
+    voltageAnomaly: voltageAnomaly,
+    mentionsRCD: mentionsRCD,
+    mentionsVoltage: mentionsVoltage,
+    isDangerous: isDangerous,
+    matchedKeywords: matchedKeywords
+  };
+  var deduction = deduceFromSignals(deductionSignals, ipotesi);
+  ipotesi = deduction.rankedHypotheses;
+  // Verifica successiva più utile in testa
+  if (deduction.bestNextCheck) {
+    verifiche.unshift("PROSSIMA VERIFICA UTILE: " + deduction.bestNextCheck);
+  }
+  // Dati mancanti nelle osservazioni
+  deduction.missingData.forEach(function (m) {
+    osservazioni.push("DATO MANCANTE: " + m.dato + " — " + m.reason);
+  });
+  // Esclusioni (penalizzazioni) nelle osservazioni
+  deduction.exclusions.forEach(function (e) {
+    osservazioni.push("PENALIZZATO: " + e.reason);
+  });
+  // Rafforzamenti nelle osservazioni
+  deduction.boosted.forEach(function (b) {
+    osservazioni.push("RAFFORZATO: " + b.reason);
   });
 
   // Field checks dai componenti riconosciuti (prime 2 per componente, max 2 componenti)
