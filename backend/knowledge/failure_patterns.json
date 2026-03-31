@@ -880,6 +880,306 @@
         "Misurare la resistenza con il circuito di misura dello strumento ancora connesso — lettura errata per corrente circolante"
       ],
       "example_case": "Impianto riscaldamento industriale: regolatore mostra OPEN su sonda ingresso caldaia. Resistenza PT100 misurata ai morsetti: OL. Cavo integro (0.3Ω). Sensore PT100 con elemento resistivo interrotto. Sostituzione sonda PT100 Ø6mm, 2 fili: lettura corretta ripristinata."
+    },
+    {
+      "id": "FP-31",
+      "symptom": "Sovratensione o sottotensione di rete: apparecchi si spengono, si danneggiano o si riavviano",
+      "likely_causes": [
+        "Neutro interrotto a monte (nel contatore o nella dorsale): le fasi si spostano e una utenza riceve fino a 400V monofase",
+        "Rete instabile con frequenti micro-interruzioni: zona rurale o cantiere con generatore mal regolato",
+        "Carico pesante su rete debole: avvio motore o saldatrice provoca calo >10% sulla linea condivisa",
+        "Trasformatore MT/BT con rapporto di trasformazione sregolato o TAP errato"
+      ],
+      "confidence_logic": [
+        "CONFERMATO neutro interrotto: se la tensione L-N supera 253V o scende sotto 195V e la tensione L-L resta 400V",
+        "PROBABILE rete debole: se la tensione cala >10% durante l'avvio di carichi pesanti",
+        "DA_VERIFICARE: se gli apparecchi si danneggiano senza correlazione con eventi di rete visibili"
+      ],
+      "checks": [
+        "1) Misurare tensione L-N e L-L al quadro principale con multimetro: L-N deve essere 230V ±10% (207-253V)",
+        "2) Registrare la tensione per 24h con datalogger o analizzatore di rete per catturare i picchi",
+        "3) Verificare il serraggio del morsetto del neutro al contatore e al quadro generale",
+        "4) Misurare la tensione durante l'avvio di carichi pesanti: il calo non deve superare il 5% in condizioni normali",
+        "5) Verificare lo stato dell'SPD (scaricatore): se ha assorbito sovratensioni ripetute può essere degradato",
+        "6) Contattare il distributore se la tensione è fuori norma CEI EN 50160 (230V ±10%) per più di 5 minuti"
+      ],
+      "common_mistakes": [
+        "Non misurare la tensione L-L insieme alla L-N (serve per distinguere neutro interrotto da rete bassa)",
+        "Sostituire gli apparecchi danneggiati senza trovare la causa della sovratensione",
+        "Non installare un SPD dopo un evento di sovratensione documentato",
+        "Confondere sottotensione da rete debole con guasto interno all'impianto"
+      ],
+      "example_case": "Condominio: 3 appartamenti con TV, router e caldaia bruciati nella stessa notte. Tensione L-N misurata al quadro condominiale: 285V (fase R), 175V (fase S), 400V L-L regolare. Causa: morsetto del neutro nel centralino contatori allentato — il neutro si è interrotto sotto carico sbilanciato. Riserraggio morsetto + SPD tipo 2 installati su ogni appartamento."
+    },
+    {
+      "id": "FP-32",
+      "symptom": "Terra assente o degradata: tensione sulla carcassa metallica, formicolio al tatto, RCD non interviene",
+      "likely_causes": [
+        "Conduttore PE interrotto o mai collegato: l'apparecchio non ha riferimento a terra",
+        "Dispersore di terra degradato (corrosione, terreno secco): resistenza di terra troppo alta (>200Ω)",
+        "Morsetto PE allentato nel quadro o nella scatola di derivazione",
+        "Impianto vecchio senza conduttore di terra (sistema TT senza PE nei cavi)"
+      ],
+      "confidence_logic": [
+        "CONFERMATO PE interrotto: se la resistenza PE misurata tra la presa e il quadro è >1Ω o OL",
+        "CONFERMATO dispersore degradato: se la resistenza di terra misurata con strumento dedicato è >200Ω",
+        "PROBABILE terra assente: se si avverte formicolio toccando la carcassa e il differenziale non scatta"
+      ],
+      "checks": [
+        "1) Misurare tensione tra carcassa metallica dell'apparecchio e un riferimento di terra noto: deve essere <50V AC",
+        "2) Misurare continuità del PE dalla presa al quadro generale: deve essere <1Ω",
+        "3) Misurare resistenza di terra con strumento dedicato (metodo volt-amperometrico): deve essere <200Ω per sistema TT con RCD 30mA",
+        "4) Verificare il collegamento del PE sulla barra di terra del quadro: serraggio, ossidazione, sezione adeguata",
+        "5) Verificare che il differenziale scatti premendo il tasto TEST",
+        "6) Se impianto vecchio senza PE: verificare la classe di isolamento degli apparecchi (classe II non richiede terra)"
+      ],
+      "common_mistakes": [
+        "Collegare il PE al neutro (ponte N-PE) invece che al dispersore — pericolosissimo in caso di inversione",
+        "Fidarsi della presenza del filo giallo-verde senza misurare la continuità fino al dispersore",
+        "Non verificare la resistenza di terra dopo lavori di scavo o in periodi di siccità prolungata",
+        "Ignorare il formicolio 'leggero' come problema irrilevante"
+      ],
+      "example_case": "Ufficio: dipendente avverte formicolio toccando il case metallico del PC e il radiatore contemporaneamente. Differenziale non scatta. Misura: 48V AC tra case PC e radiatore. Continuità PE dalla presa al quadro: OL — filo PE interrotto nella scatola di derivazione dietro la parete. Ricollegamento PE: tensione su carcassa scesa a 0V."
+    },
+    {
+      "id": "FP-33",
+      "symptom": "Lampada LED sfarfalla, non si accende, si accende debolmente o muore prematuramente",
+      "likely_causes": [
+        "Driver LED interno difettoso o sottodimensionato: condensatore elettrolitico degradato dal calore",
+        "Dimmer non compatibile con LED: il dimmer trailing-edge o TRIAC non gestisce il carico minimo del LED",
+        "Tensione residua sul circuito (deviatore/relè con spia luminosa): il LED si accende debolmente anche da spento",
+        "Neutro interrotto o condiviso tra più circuiti: tensione instabile al LED"
+      ],
+      "confidence_logic": [
+        "CONFERMATO dimmer incompatibile: se sostituendo il dimmer con un interruttore semplice lo sfarfallio scompare",
+        "CONFERMATO tensione residua: se con interruttore aperto si misura >30V AC ai morsetti della lampada",
+        "PROBABILE driver guasto: se la lampada è nuova ma sfarfalla su un circuito dove altre lampade funzionano"
+      ],
+      "checks": [
+        "1) Sostituire la lampada LED con un'altra nota funzionante: se il problema persiste è sul circuito",
+        "2) Misurare tensione ai morsetti con interruttore APERTO: deve essere <5V (>30V = tensione residua)",
+        "3) Verificare il tipo di dimmer: i LED richiedono dimmer specifici trailing-edge o universali con carico minimo compatibile",
+        "4) Misurare tensione ai morsetti con interruttore CHIUSO sotto carico: deve essere 230V ±10% stabile",
+        "5) Verificare che il neutro sia diretto e non condiviso con altri circuiti tramite deviatori",
+        "6) Se lampada con spia nell'interruttore: aggiungere condensatore di bypass (47nF 400V) o sostituire interruttore senza spia"
+      ],
+      "common_mistakes": [
+        "Sostituire ripetutamente lampade LED senza verificare il circuito a monte",
+        "Installare dimmer TRIAC economici su lampade LED non dimmerabili",
+        "Ignorare la tensione residua causata da interruttori con spia luminosa",
+        "Non verificare la compatibilità dimmer-LED sulla lista del produttore"
+      ],
+      "example_case": "Appartamento: 6 faretti LED GU10 in soggiorno sfarfallano con dimmer. Dimmer installato: TRIAC leading-edge 60-600W. Carico LED totale: 30W (sotto il minimo del dimmer di 60W). Sostituzione con dimmer trailing-edge 5-150W: sfarfallio scomparso. Costo: 25€ di dimmer invece di 6 faretti."
+    },
+    {
+      "id": "FP-34",
+      "symptom": "Presa o interruttore caldo al tatto, annerito, odore di bruciato o scintille visibili",
+      "likely_causes": [
+        "Morsetto interno allentato: resistenza di contatto elevata, calore I²R, possibile arco elettrico",
+        "Presa sovraccaricata: adattatori multipli con carico totale superiore a 10A o 16A nominali",
+        "Contatti interni della presa usurati o ossidati: la spina non fa più contatto pieno",
+        "Sezione del cavo insufficiente per il carico collegato"
+      ],
+      "confidence_logic": [
+        "CONFERMATO morsetto allentato: se riserrando i morsetti interni il surriscaldamento si riduce",
+        "CONFERMATO sovraccarico: se la corrente misurata con pinza supera il valore nominale della presa (10A o 16A)",
+        "PROBABILE contatti usurati: se la spina si inserisce con gioco eccessivo nella presa"
+      ],
+      "checks": [
+        "1) TOGLIERE TENSIONE prima di qualsiasi intervento — rischio arco elettrico",
+        "2) Rimuovere la placca e ispezionare: morsetti anneriti, fili bruciati, plastica fusa",
+        "3) Misurare serraggio morsetti: il filo non deve uscire tirando delicatamente",
+        "4) Misurare la corrente assorbita dal carico con pinza amperometrica: confrontare con In della presa",
+        "5) Verificare la sezione del cavo: presa 10A → min 1.5mm², presa 16A → min 2.5mm²",
+        "6) Sostituire la presa se i contatti interni sono anneriti, fusi o deformati — non riparare"
+      ],
+      "common_mistakes": [
+        "Continuare a usare la presa 'perché funziona ancora' dopo aver notato l'annerimento",
+        "Sostituire solo la placca estetica senza verificare i morsetti interni",
+        "Usare adattatori multipli su prese da 10A per collegare carichi pesanti (stufette, ferri da stiro)",
+        "Non verificare anche le altre prese sullo stesso circuito"
+      ],
+      "example_case": "Camera da letto: presa bipasso 10A annerita, odore di bruciato. Carico: stufetta elettrica 2000W (8.7A) + caricatore telefono. Ispezione: morsetto fase con filo appena inserito, non serrato. Arco elettrico visibile sul morsetto. Presa sostituita con Schuko 16A, cavo verificato 2.5mm²: problema risolto."
+    },
+    {
+      "id": "FP-35",
+      "symptom": "Cavo surriscaldato, guaina morbida al tatto o odore di bruciato dalla canalina/quadro",
+      "likely_causes": [
+        "Sovraccarico prolungato: corrente superiore alla portata del cavo (Iz) per ore",
+        "Cavo sottodimensionato per il carico: sezione scelta senza calcolo o modificata dopo l'installazione",
+        "Cavi troppo raggruppati nella canalina: fattore di riduzione K non applicato, portata effettiva ridotta",
+        "Morsetto allentato a monte o a valle: il calore si propaga lungo il conduttore"
+      ],
+      "confidence_logic": [
+        "CONFERMATO sovraccarico: se la corrente misurata con pinza supera la portata Iz del cavo (tabella CEI-UNEL 35024/1)",
+        "CONFERMATO morsetto allentato: se il calore è concentrato in un punto specifico del percorso",
+        "PROBABILE sottodimensionamento: se la sezione del cavo è inferiore a quella richiesta dal calcolo Ib/Iz"
+      ],
+      "checks": [
+        "1) TOGLIERE TENSIONE IMMEDIATAMENTE se la guaina è morbida o c'è odore di bruciato — rischio incendio",
+        "2) Misurare la corrente assorbita con pinza amperometrica e confrontare con la portata Iz del cavo",
+        "3) Verificare la sezione del cavo con calibro: confrontare con tabella CEI-UNEL per il tipo di posa",
+        "4) Contare il numero di cavi nella canalina: applicare il fattore di riduzione K (CEI 64-8 tabella 52-E1)",
+        "5) Verificare tutti i morsetti sul percorso del cavo surriscaldato",
+        "6) Misurare la temperatura con termometro IR: cavo >70°C per PVC indica sovraccarico critico"
+      ],
+      "common_mistakes": [
+        "Aumentare il calibro del magnetotermico invece di aumentare la sezione del cavo",
+        "Non considerare il fattore di raggruppamento nella canalina",
+        "Lasciare il circuito sotto tensione 'perché regge' dopo aver notato il surriscaldamento",
+        "Non verificare l'intero percorso del cavo — il punto più caldo potrebbe non essere quello visibile"
+      ],
+      "example_case": "Negozio: odore di bruciato dalla canalina sopra il controsoffitto. Cavo 3×1.5mm² alimenta 4 vetrine con faretti alogeni: corrente misurata 14A (portata cavo 1.5mm² in tubo: 13.5A). Guaina PVC morbida al tatto per 2 metri nella canalina più affollata (8 cavi, K=0.52). Portata effettiva ridotta a 7A. Sostituzione con cavo 3×2.5mm² + redistribuzione su 2 circuiti: temperatura normalizzata."
+    },
+    {
+      "id": "FP-36",
+      "symptom": "UPS in allarme batteria, non regge il carico o si spegne durante il blackout",
+      "likely_causes": [
+        "Batterie esauste: dopo 3-5 anni le batterie al piombo-acido perdono capacità e non reggono il carico",
+        "Sovraccarico: il carico collegato supera la potenza nominale del UPS (VA o W)",
+        "Batterie mai testate: il UPS ha sempre funzionato su rete e le batterie non sono mai state sollecitate",
+        "Ventola interna bloccata o temperatura ambiente troppo alta: le batterie degradano rapidamente sopra 25°C"
+      ],
+      "confidence_logic": [
+        "CONFERMATO batterie esauste: se l'autonomia misurata è <30% di quella nominale con carico reale",
+        "CONFERMATO sovraccarico: se il carico misurato supera la potenza nominale del UPS",
+        "PROBABILE batterie degradate: se il UPS ha >3 anni e non è mai stato sottoposto a test di autonomia"
+      ],
+      "checks": [
+        "1) Leggere il display/LED del UPS: identificare il tipo di allarme (batteria, sovraccarico, temperatura)",
+        "2) Misurare la tensione delle batterie con UPS in bypass: 12V per cella (24V per 2 celle, 48V per 4 celle)",
+        "3) Misurare il carico collegato (W o VA): confrontare con la potenza nominale del UPS (non superare 80%)",
+        "4) Eseguire un test di autonomia: scollegare la rete e misurare quanto regge il UPS (confrontare con il nominale)",
+        "5) Verificare la temperatura ambiente: le batterie al piombo perdono 50% di vita per ogni 10°C sopra 25°C",
+        "6) Verificare la ventola interna: deve girare liberamente, pulire da polvere"
+      ],
+      "common_mistakes": [
+        "Sostituire il UPS intero quando bastava cambiare le batterie",
+        "Non testare mai l'autonomia fino al giorno del blackout reale",
+        "Collegare carichi superiori alla potenza nominale del UPS tramite ciabatte",
+        "Installare il UPS in locale caldo (sopra server, vicino a termosifoni)"
+      ],
+      "example_case": "Server room: UPS 3kVA si spegne dopo 2 minuti di blackout (autonomia nominale: 15 min). Batterie: 4 anni, mai sostituite. Tensione batterie misurata: 22.8V (nominale 24V) — tensione OK a vuoto ma crolla a 18V sotto carico. Sostituzione batterie: autonomia ripristinata a 13 minuti."
+    },
+    {
+      "id": "FP-37",
+      "symptom": "Carichi squilibrati su trifase: neutro caldo, tensioni asimmetriche tra le fasi",
+      "likely_causes": [
+        "Distribuzione non bilanciata dei carichi monofase sulle tre fasi: una fase molto caricata, le altre scariche",
+        "Conduttore di neutro sottodimensionato: con armoniche di ordine 3 (LED, PC) la corrente di neutro può superare quella di fase",
+        "Morsetto del neutro allentato nel quadro: resistenza di contatto elevata, surriscaldamento",
+        "Carico trifase con una fase guasta che funziona su due fasi sole"
+      ],
+      "confidence_logic": [
+        "CONFERMATO squilibrio: se la corrente sulle tre fasi differisce di più del 20% e il neutro supera il 50% della fase più caricata",
+        "CONFERMATO neutro sottodimensionato: se la corrente di neutro misurata supera la portata del cavo di neutro",
+        "PROBABILE morsetto neutro: se il neutro è caldo in un punto specifico"
+      ],
+      "checks": [
+        "1) Misurare corrente su ogni fase e sul neutro con pinza amperometrica al quadro generale",
+        "2) Calcolare lo squilibrio: (Imax - Imin) / Imedia × 100% — deve essere <30%",
+        "3) Misurare tensione L-N su ogni fase: L1-N, L2-N, L3-N — devono essere tutte 230V ±10%",
+        "4) Verificare il serraggio del morsetto di neutro al quadro e al contatore",
+        "5) Misurare la temperatura del cavo di neutro con termometro IR: non deve superare quella delle fasi",
+        "6) Se presente carico non lineare (LED, PC, inverter): misurare THD corrente di neutro — può richiedere sezione neutro doppia"
+      ],
+      "common_mistakes": [
+        "Dimensionare il neutro uguale alla fase senza considerare le armoniche (con LED e PC il neutro può portare più corrente)",
+        "Non misurare mai la corrente di neutro perché 'dovrebbe essere zero su trifase bilanciato'",
+        "Bilanciare i carichi solo sulla base della potenza nominale senza misurare la corrente reale",
+        "Ignorare il surriscaldamento del neutro come problema secondario"
+      ],
+      "example_case": "Ufficio open space: interruttore generale scatta saltuariamente senza sovraccarico apparente. Correnti misurate: L1=42A, L2=18A, L3=15A, N=38A. Neutro da 16mm² (portata 68A) OK ma morsetto al quadro caldo (78°C). Causa: morsetto allentato + squilibrio fasi. Ridistribuzione carichi + riserraggio: L1=28A, L2=26A, L3=21A, N=12A."
+    },
+    {
+      "id": "FP-38",
+      "symptom": "Bus domotico KNX o DALI non comunica: dispositivi offline, attuatori non rispondono ai comandi",
+      "likely_causes": [
+        "Alimentatore bus KNX guasto o sovraccaricato: tensione bus scesa sotto 21V (minimo operativo)",
+        "Cortocircuito sul bus: un dispositivo difettoso o un errore di cablaggio abbassa la tensione dell'intero bus",
+        "Indirizzo fisico duplicato o non programmato: due dispositivi rispondono allo stesso indirizzo",
+        "Cavo bus interrotto o con resistenza di terminazione mancante (DALI) o topologia errata (KNX)"
+      ],
+      "confidence_logic": [
+        "CONFERMATO alimentatore: se la tensione bus misurata è <21V DC (KNX) o <11.5V (DALI)",
+        "CONFERMATO cortocircuito: se scollegando i dispositivi uno alla volta la tensione risale",
+        "PROBABILE indirizzo duplicato: se il dispositivo risponde in modo intermittente o due dispositivi reagiscono insieme"
+      ],
+      "checks": [
+        "1) Misurare tensione bus ai morsetti dell'alimentatore: KNX deve essere 29V ±1V, DALI 16V tipico",
+        "2) Misurare tensione bus ai dispositivi più lontani: non deve scendere sotto 21V (KNX) o 11.5V (DALI)",
+        "3) Scollegare i dispositivi uno alla volta e misurare la tensione bus dopo ogni disconnessione",
+        "4) Verificare la topologia: KNX ammette linea, stella, albero — MAI anello. DALI ammette anello",
+        "5) Verificare gli indirizzi con software ETS (KNX) o commissioning tool (DALI): cercare duplicati",
+        "6) Misurare continuità del cavo bus tra i due punti più lontani: deve essere <1Ω per tratta"
+      ],
+      "common_mistakes": [
+        "Riprogrammare i dispositivi senza prima verificare l'alimentazione e il cablaggio",
+        "Creare un anello sul bus KNX (vietato dalla specifica — causa riflessi e collisioni)",
+        "Non usare cavo certificato KNX (YCYM 2×2×0.8) e usare cavo telefonico generico",
+        "Dimenticare la resistenza di terminazione su bus DALI su tratte lunghe"
+      ],
+      "example_case": "Villa domotica KNX: dopo un temporale 8 attuatori su 14 non rispondono. Tensione bus all'alimentatore: 29V OK. Tensione al dispositivo più lontano: 17V — troppo bassa. Disconnessione sequenziale: scollegando l'attuatore tapparelle bagno piano 1 la tensione risale a 28V ovunque. Attuatore con ingresso bus in cortocircuito (danno da sovratensione). Sostituzione attuatore + SPD sul bus: sistema ripristinato."
+    },
+    {
+      "id": "FP-39",
+      "symptom": "Citofono o videocitofono non funziona: nessun audio, video assente, pulsantiera morta",
+      "likely_causes": [
+        "Alimentatore/trasformatore citofono guasto o assente: nessuna tensione sul bus o sui fili",
+        "Cavo interrotto o con resistenza elevata: tipico in impianti vecchi con cavo sottile e giunte ossidate",
+        "Cornetta/monitor interno guasto o scollegato: nessuna risposta alla chiamata",
+        "Pulsantiera esterna con contatto ossidato o guasto: il pulsante non chiude il circuito"
+      ],
+      "confidence_logic": [
+        "CONFERMATO alimentatore guasto: se la tensione misurata ai morsetti dell'alimentatore è assente o fuori range",
+        "CONFERMATO cavo interrotto: se la continuità tra pulsantiera e alimentatore è assente su uno o più fili",
+        "PROBABILE pulsantiera: se premendo il pulsante non si sente il click del relè nell'alimentatore"
+      ],
+      "checks": [
+        "1) Misurare tensione ai morsetti dell'alimentatore/trasformatore: tipico 12V AC o 18V DC per sistemi 2 fili",
+        "2) Misurare tensione alla pulsantiera esterna: deve essere presente la tensione di bus",
+        "3) Verificare continuità di tutti i fili tra pulsantiera e quadro citofoni (attenzione: impianti vecchi hanno fino a 8 fili)",
+        "4) Cortocircuitare brevemente i morsetti del pulsante: se il citofono suona, il pulsante è guasto",
+        "5) Verificare che il monitor/cornetta sia acceso e collegato: provare con un altro monitor noto funzionante",
+        "6) Per videocitofoni IP: verificare alimentazione PoE e connessione di rete (ping)"
+      ],
+      "common_mistakes": [
+        "Sostituire la pulsantiera esterna senza verificare prima l'alimentazione",
+        "Non verificare le giunte nei passaggi di piano — sono il punto debole degli impianti vecchi",
+        "Confondere un problema di cavo con un problema di apparecchio (il cavo è quasi sempre la causa in impianti >20 anni)",
+        "Non misurare la tensione sotto carico (a riposo sembra OK, sotto carico crolla)"
+      ],
+      "example_case": "Condominio anni '80: citofono appartamento 3° piano non suona, gli altri funzionano. Tensione al quadro citofoni: 14V AC OK. Tensione alla cornetta 3° piano: 6V AC (troppo bassa). Continuità fili: OK ma resistenza filo 1 = 18Ω (atteso <2Ω). Causa: giunta ossidata nella scatola di derivazione al 2° piano. Rifacimento giunta con morsetto a mantello: tensione risalita a 13V, citofono funzionante."
+    },
+    {
+      "id": "FP-40",
+      "symptom": "Arco elettrico, scintille o ronzio anomalo (buzzing) all'interno del quadro elettrico",
+      "likely_causes": [
+        "Morsetto allentato con arco elettrico intermittente: il contatto parziale genera arco sotto carico",
+        "Contattore con contatti di potenza usurati: i contatti non chiudono più a pieno, arco ad ogni manovra",
+        "Barra di rame con giunzione ossidata o bullone allentato: resistenza di contatto, calore e arco",
+        "Interruttore con meccanismo di sgancio degradato: non chiude completamente, arco interno"
+      ],
+      "confidence_logic": [
+        "CONFERMATO arco su morsetto: se il morsetto è visibilmente annerito e il ronzio scompare dopo riserraggio",
+        "CONFERMATO contattore usurato: se i contatti mostrano crateri, bruciature o materiale fuso",
+        "PROBABILE interruttore degradato: se il ronzio proviene dall'interno di un dispositivo specifico sotto carico"
+      ],
+      "checks": [
+        "1) TOGLIERE TENSIONE IMMEDIATAMENTE — arco elettrico = rischio incendio e folgorazione",
+        "2) Ispezionare visivamente tutti i morsetti: cercare annerimento, tracce di fusione, depositi carboniosi",
+        "3) Riserrare tutti i morsetti con cacciavite dinamometrico ai valori specificati dal costruttore",
+        "4) Ispezionare i contatti dei contattori: se presentano crateri >1mm o materiale fuso, sostituire",
+        "5) Verificare le giunzioni delle barre di rame: bulloni serrati, superficie di contatto pulita e ingrassata",
+        "6) Misurare con termocamera IR tutti i collegamenti PRIMA di togliere tensione (documenta i punti caldi)"
+      ],
+      "common_mistakes": [
+        "Continuare a far funzionare il quadro con ronzio 'perché funziona' — l'arco può innescare un incendio",
+        "Riserrare i morsetti sotto tensione (rischio folgorazione e arco)",
+        "Non documentare i punti caldi con termografia prima di intervenire — utile per la manutenzione programmata",
+        "Sostituire solo il morsetto bruciato senza verificare tutti gli altri nello stesso quadro"
+      ],
+      "example_case": "Quadro industriale 400A: operatore segnala ronzio e odore di bruciato intermittente. Termografia sotto carico: morsetto sbarra L2 a 127°C (gli altri a 45°C). Quadro disalimentato: bullone sbarra L2 svitabile a mano, superficie di contatto con ossido nero. Pulizia con panno abrasivo, grasso di contatto, serraggio a 25Nm: temperatura scesa a 42°C. Programmata termografia semestrale."
     }
   ]
 }

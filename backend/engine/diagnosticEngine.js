@@ -38,7 +38,15 @@ var TECH_KEYWORDS = [
   "caldaia", "termostato", "circolatore", "pompa", "pressostato",
   // domotica e FV
   "shelly", "zigbee", "domotica", "fotovoltaico", "pannello", "inverter",
-  "wallbox", "ricarica", "auto elettrica"
+  "wallbox", "ricarica", "auto elettrica",
+  // civile (FP-31..FP-40)
+  "led", "lampada", "lampadina", "faretto", "dimmer", "sfarfalla",
+  "presa", "schuko", "interruttore",
+  "ups", "batteria", "blackout",
+  "citofono", "videocitofono", "campanello", "pulsantiera",
+  "knx", "dali", "bus",
+  "arco", "formicolio", "scossa",
+  "sottotensione", "sovratensione", "surriscaldato"
 ];
 
 var DANGER_KEYWORDS = [
@@ -560,7 +568,88 @@ var SYNONYM_MAP = {
   "termistore":      "sensore temperatura",
   "sonda":           "sensore temperatura",
   "off-range":       "sensore temperatura",
-  "open sensor":     "sensore temperatura"
+  "open sensor":     "sensore temperatura",
+  // FP-31: sovratensione/sottotensione rete (lessico BT realistico)
+  "sovratensione":   "sovratensione",
+  "sottotensione":   "sottotensione",
+  "sbalzo tensione": "sovratensione",
+  "picco tensione":  "sovratensione",
+  "neutro interrotto": "neutro interrotto",
+  "corrente alta":   "sovratensione",
+  "corrente bassa":  "sottotensione",
+  "rete instabile":  "sovratensione",
+  "danneggiato":     "danneggiat",
+  "danneggiati":     "danneggiat",
+  // FP-32: terra assente/degradata
+  "formicolio":      "terra degradata",
+  "scossa":          "terra degradata",
+  "scosse":          "terra degradata",
+  "dispersore":      "terra degradata",
+  "picchetto":       "terra degradata",
+  "resistenza terra":"terra degradata",
+  "carcassa":        "terra degradata",
+  "terra assente":   "terra degradata",
+  // FP-33: LED sfarfalla
+  "led":             "lampada led",
+  "sfarfalla":       "sfarfallio",
+  "sfarfallio":      "sfarfallio",
+  "flickering":      "sfarfallio",
+  "lampada":         "lampada led",
+  "lampadina":       "lampada led",
+  "faretto":         "lampada led",
+  "faretti":         "lampada led",
+  "gu10":            "lampada led",
+  "driver led":      "lampada led",
+  "reattore":        "lampada led",
+  // FP-34: presa/interruttore caldo
+  "presa":           "presa",
+  "prese":           "presa",
+  "schuko":          "presa",
+  "bipasso":         "presa",
+  "annerito":        "annerito",
+  "annerita":        "annerito",
+  "brucia":          "bruciato",
+  // FP-35: cavo surriscaldato
+  "surriscaldato":   "surriscaldamento",
+  "surriscalda":     "surriscaldamento",
+  "surriscaldamento":"surriscaldamento",
+  "guaina":          "cavo surriscaldato",
+  "guaina morbida":  "cavo surriscaldato",
+  "canalina":        "cavo surriscaldato",
+  // FP-36: UPS
+  "ups":             "ups",
+  "gruppo continuita":"ups",
+  "batteria":        "ups batteria",
+  "batterie":        "ups batteria",
+  "blackout":        "ups",
+  "autonomia":       "ups batteria",
+  // FP-37: squilibrio trifase
+  "squilibrio":      "squilibrio fasi",
+  "squilibrato":     "squilibrio fasi",
+  "sbilanciato":     "squilibrio fasi",
+  "neutro caldo":    "squilibrio fasi",
+  "armoniche":       "squilibrio fasi",
+  // FP-38: bus KNX/DALI
+  "knx":             "bus domotico",
+  "dali":            "bus domotico",
+  "bus":             "bus domotico",
+  "ets":             "bus domotico",
+  "attuatore knx":   "bus domotico",
+  "offline":         "bus domotico",
+  // FP-39: citofono/videocitofono
+  "citofono":        "citofono",
+  "citofoni":        "citofono",
+  "videocitofono":   "citofono",
+  "pulsantiera":     "citofono",
+  "cornetta":        "citofono",
+  "campanello":      "citofono",
+  // FP-40: arco elettrico nel quadro
+  "arco":            "arco elettrico",
+  "arco elettrico":  "arco elettrico",
+  "scintille":       "arco elettrico",
+  "buzzing":         "arco elettrico",
+  "sfrigolio":       "arco elettrico",
+  "scoppiettio":     "arco elettrico"
 };
 
 function applysynonyms(word) {
@@ -735,7 +824,79 @@ var PAIR_BOOSTS = [
   ["sensore",       "errore"],
   ["temperatura",   "blocco"],
   ["ntc",           "guasto"],
-  ["sonda",         "open"]
+  ["sonda",         "open"],
+  // FP-31: sovratensione/sottotensione BT
+  ["sovratensione",  "rete"],
+  ["sottotensione",  "rete"],
+  ["sovratensione",  "apparecchi"],
+  ["sovratensione",  "spengono"],
+  ["sovratensione",  "danneggiat"],
+  ["sovratensione",  "tensione"],
+  ["sottotensione",  "apparecchi"],
+  ["sottotensione",  "tensione"],
+  ["sottotensione",  "corrente"],
+  ["neutro",         "interrotto"],
+  ["apparecchi",     "danneggiat"],
+  // FP-32: terra assente/degradata
+  ["terra",          "assente"],
+  ["terra",          "degradata"],
+  ["formicolio",     "carcassa"],
+  ["dispersore",     "resistenza"],
+  ["scossa",         "toccando"],
+  ["terra",          "formicolio"],
+  // FP-33: LED sfarfalla
+  ["led",            "sfarfalla"],
+  ["lampada",        "sfarfalla"],
+  ["led",            "dimmer"],
+  ["faretto",        "sfarfalla"],
+  ["lampada",        "spenta"],
+  ["led",            "debolmente"],
+  // FP-34: presa/interruttore caldo
+  ["presa",          "calda"],
+  ["presa",          "annerit"],
+  ["interruttore",   "caldo"],
+  ["presa",          "scintille"],
+  ["presa",          "bruciato"],
+  ["interruttore",   "annerit"],
+  // FP-35: cavo surriscaldato
+  ["cavo",           "surriscaldat"],
+  ["cavo",           "bruciato"],
+  ["guaina",         "morbida"],
+  ["canalina",       "odore"],
+  ["cavo",           "caldo"],
+  // FP-36: UPS
+  ["ups",            "batteria"],
+  ["ups",            "allarme"],
+  ["ups",            "spegne"],
+  ["ups",            "blackout"],
+  ["batteria",       "autonomia"],
+  // FP-37: squilibrio trifase
+  ["neutro",         "caldo"],
+  ["carichi",        "squilibrat"],
+  ["fasi",           "sbilanciat"],
+  ["trifase",        "asimmetric"],
+  ["neutro",         "corrente"],
+  // FP-38: bus KNX/DALI
+  ["knx",            "comunica"],
+  ["dali",           "comunica"],
+  ["bus",            "offline"],
+  ["knx",            "alimentatore"],
+  ["dali",           "indirizzo"],
+  ["attuatore",      "risponde"],
+  // FP-39: citofono
+  ["citofono",       "funziona"],
+  ["citofono",       "suona"],
+  ["videocitofono",  "video"],
+  ["pulsantiera",    "morta"],
+  ["cornetta",       "muta"],
+  ["campanello",     "suona"],
+  // FP-40: arco elettrico quadro
+  ["quadro",         "scintille"],
+  ["quadro",         "arco"],
+  ["quadro",         "ronzio"],
+  ["morsetto",       "arco"],
+  ["quadro",         "buzzing"],
+  ["contattore",     "scintille"]
 ];
 
 // Matching avanzato: stem+sinonimi + prefix matching bidirezionale
@@ -857,7 +1018,7 @@ function buildIpotesiFromPattern(pattern) {
       // Quindi lo usiamo solo se è "non_verificabile" (indica un limite reale).
       if (parsed === "non_verificabile") livello = "non_verificabile";
     }
-    return { causa: String(causa), livello: livello, patternId: pid, symptom: sym, deductionScore: 0 };
+    return { causa: String(causa), livello: livello, patternId: pid, symptom: sym, deductionScore: 0, boostedByRuleIds: [], supportingMeasurements: [], contradictingMeasurements: [], source: "pattern_match" };
   });
 }
 
@@ -972,20 +1133,435 @@ var PHYSICAL_CONSTRAINTS = [
   }
 ];
 
+// ============================================================
+// ROCCO NUCLEO DEDUTTIVO — FASE 2a
+// Regole di conferma/esclusione basate su misure reali.
+// confirm: solo se boost FASE 1 + misura concordano (2 segnali indipendenti)
+// exclude: solo su contraddizione forte con soglia conservativa
+// ============================================================
+var CONFIRMATION_RULES = [
+  // CONF-01: isolamento basso + già boostato da PHYS-01 → confirm solo FP-26 (isolamento)
+  {
+    id: "CONF-01",
+    measurement: function (ev) {
+      return ev.some(function (v) { return v.type === "isolamento" && v.value < 1; });
+    },
+    requiresBoostedBy: "PHYS-01",
+    action: "confirm",
+    targetPatternId: "FP-26",
+    reason: "Isolamento <1MΩ misurato + RCD coinvolto — dispersione confermata",
+    measurementLabel: "isolamento <1MΩ"
+  },
+  // CONF-02: isolamento molto alto → exclude solo FP-26 (soglia conservativa 10x)
+  {
+    id: "CONF-02",
+    measurement: function (ev) {
+      return ev.some(function (v) { return v.type === "isolamento" && v.value > 10; });
+    },
+    requiresBoostedBy: null,
+    action: "exclude",
+    targetPatternId: "FP-26",
+    reason: "Isolamento >10MΩ misurato — dispersione esclusa",
+    measurementLabel: "isolamento >10MΩ"
+  },
+  // CONF-03: temperatura alta + già boostato da PHYS-03 → confirm surriscaldamento
+  {
+    id: "CONF-03",
+    measurement: function (ev) {
+      return ev.some(function (v) { return v.type === "temperatura" && v.value > 80; });
+    },
+    requiresBoostedBy: "PHYS-03",
+    action: "confirm",
+    targetPatternSymptom: /surriscald|termico|caldo/i,
+    reason: "Temperatura >80°C misurata + contesto termico — surriscaldamento confermato",
+    measurementLabel: "temperatura >80°C"
+  }
+];
+
+// ============================================================
+// FASE 3a — Ipotesi concorrenti flat (tutte le famiglie insieme)
+// ============================================================
+var CAUSE_HYPOTHESES = [
+  // --- famiglia: dispersione ---
+  {
+    id: "H-DISP-01", family: "dispersione",
+    causa: "Guasto isolamento su carico specifico (resistenza, motore, elettrodomestico)",
+    baseScore: 3,
+    pro: [
+      { test: function (f) { return f.isoLow; },          weight: 8, label: "isolamento basso misurato" },
+      { test: function (f) { return f.rcdTrips; },         weight: 4, label: "RCD scatta" },
+      { test: function (f) { return f.applianceMentioned; }, weight: 3, label: "apparecchio specifico citato" },
+      { test: function (f) { return f.underLoad; },        weight: 3, label: "scatta sotto carico" }
+    ],
+    contra: [
+      { test: function (f) { return f.tripsNoLoad; },     weight: 6, label: "scatta anche a vuoto → non è un carico" },
+      { test: function (f) { return f.isoHigh; },          weight: 8, label: "isolamento >10MΩ → no dispersione" }
+    ],
+    bestCheck: "Scollegare i carichi uno alla volta e rilanciare il differenziale dopo ogni distacco",
+    missingEvidence: "Quale carico collegato provoca lo scatto"
+  },
+  {
+    id: "H-DISP-02", family: "dispersione",
+    causa: "Cavo danneggiato o isolamento degradato sulla linea",
+    baseScore: 3,
+    pro: [
+      { test: function (f) { return f.isoLow; },      weight: 8, label: "isolamento basso misurato" },
+      { test: function (f) { return f.rcdTrips; },     weight: 4, label: "RCD scatta" },
+      { test: function (f) { return f.tripsNoLoad; },  weight: 5, label: "scatta a vuoto → probabile linea" },
+      { test: function (f) { return f.oldInstall; },   weight: 2, label: "impianto vecchio" }
+    ],
+    contra: [
+      { test: function (f) { return f.newInstall; },  weight: 3, label: "impianto nuovo/recente" },
+      { test: function (f) { return f.isoHigh; },      weight: 8, label: "isolamento >10MΩ → no dispersione" }
+    ],
+    bestCheck: "Misura isolamento circuito per circuito con tutti i carichi scollegati",
+    missingEvidence: "Isolamento per singolo circuito a vuoto"
+  },
+  {
+    id: "H-DISP-03", family: "dispersione",
+    causa: "Umidità o infiltrazione in punto di giunzione",
+    baseScore: 1,
+    pro: [
+      { test: function (f) { return f.isoLow; },     weight: 6, label: "isolamento basso misurato" },
+      { test: function (f) { return f.rcdTrips; },    weight: 3, label: "RCD scatta" },
+      { test: function (f) { return f.moisture; },     weight: 3, label: "contesto umido dichiarato" },
+      { test: function (f) { return f.outdoor; },      weight: 2, label: "installazione esterna" }
+    ],
+    contra: [
+      { test: function (f) { return f.dry; },         weight: 4, label: "ambiente secco" },
+      { test: function (f) { return f.isoHigh; },      weight: 8, label: "isolamento >10MΩ → no dispersione" }
+    ],
+    bestCheck: "Ispezione visiva cassette e morsettiere — cercare ossidazione o condensa",
+    missingEvidence: "Condizioni ambientali e stato visivo giunzioni"
+  },
+  // --- famiglia: surriscaldamento ---
+  {
+    id: "H-SURR-01", family: "surriscaldamento",
+    causa: "Connessione lenta o morsetto non serrato — resistenza di contatto elevata",
+    baseScore: 3,
+    pro: [
+      { test: function (f) { return f.tempHigh; },      weight: 8, label: "temperatura >80°C misurata" },
+      { test: function (f) { return f.burnSigns; },     weight: 5, label: "segni bruciatura/fumo" },
+      { test: function (f) { return f.terminalRef; },    weight: 3, label: "morsetto/connessione citata" },
+      { test: function (f) { return f.darkened; },       weight: 3, label: "annerimento/deformazione visibile" }
+    ],
+    contra: [
+      { test: function (f) { return f.newInstall; },   weight: 3, label: "impianto nuovo/rifatto" }
+    ],
+    bestCheck: "Ispezione termica con termometro IR sui morsetti sotto carico",
+    missingEvidence: "Punto esatto del surriscaldamento"
+  },
+  {
+    id: "H-SURR-02", family: "surriscaldamento",
+    causa: "Sovraccarico — corrente superiore alla portata del cavo o della protezione",
+    baseScore: 3,
+    pro: [
+      { test: function (f) { return f.tempHigh; },      weight: 6, label: "temperatura >80°C misurata" },
+      { test: function (f) { return f.burnSigns; },     weight: 4, label: "segni bruciatura/fumo" },
+      { test: function (f) { return f.highCurrent; },   weight: 7, label: "corrente alta misurata" },
+      { test: function (f) { return f.heavyLoad; },     weight: 3, label: "carico pesante dichiarato" }
+    ],
+    contra: [
+      { test: function (f) { return f.lightLoad; },    weight: 4, label: "carico leggero" }
+    ],
+    bestCheck: "Misura corrente con pinza amperometrica e confronto con In della protezione",
+    missingEvidence: "Corrente effettiva e taglia protezione"
+  },
+  {
+    id: "H-SURR-03", family: "surriscaldamento",
+    causa: "Sezione cavo insufficiente per la tratta",
+    baseScore: 1,
+    pro: [
+      { test: function (f) { return f.tempHigh; },    weight: 5, label: "temperatura >80°C misurata" },
+      { test: function (f) { return f.longRun; },      weight: 3, label: "tratta lunga dichiarata" },
+      { test: function (f) { return f.highCurrent; },  weight: 4, label: "corrente alta misurata" }
+    ],
+    contra: [],
+    bestCheck: "Verifica sezione cavo vs tabella CEI-UNEL per lunghezza e corrente",
+    missingEvidence: "Sezione cavo, lunghezza tratta, corrente di impiego"
+  },
+  // --- famiglia: anomalia_rete ---
+  {
+    id: "H-RETE-01", family: "anomalia_rete",
+    causa: "Neutro interrotto o allentato — squilibrio tensioni",
+    baseScore: 3,
+    pro: [
+      { test: function (f) { return f.voltAnomaly; },   weight: 8, label: "tensione anomala misurata" },
+      { test: function (f) { return f.voltHigh; },      weight: 5, label: "sovratensione" },
+      { test: function (f) { return f.neutralRef; },    weight: 3, label: "neutro citato" },
+      { test: function (f) { return f.flickering; },    weight: 3, label: "sfarfallio/sbalzi" }
+    ],
+    contra: [
+      { test: function (f) { return f.voltStable; },   weight: 6, label: "tensione stabile misurata" }
+    ],
+    bestCheck: "Misura tensione F-N e F-F al quadro — se F-N varia e F-F stabile → neutro",
+    missingEvidence: "Tensione fase-neutro e fase-fase contemporanee"
+  },
+  {
+    id: "H-RETE-02", family: "anomalia_rete",
+    causa: "Contatto ossidato o allentato su arrivo/partenza quadro",
+    baseScore: 2,
+    pro: [
+      { test: function (f) { return f.voltAnomaly; },   weight: 6, label: "tensione anomala misurata" },
+      { test: function (f) { return f.flickering; },    weight: 3, label: "sfarfallio/sbalzi" },
+      { test: function (f) { return f.oldInstall; },    weight: 2, label: "impianto vecchio" },
+      { test: function (f) { return f.terminalRef; },   weight: 2, label: "morsetto citato" }
+    ],
+    contra: [
+      { test: function (f) { return f.newInstall; },   weight: 3, label: "impianto nuovo" },
+      { test: function (f) { return f.voltStable; },    weight: 5, label: "tensione stabile misurata" }
+    ],
+    bestCheck: "Ispezione e ristretto morsetti arrivo contatore e interruttore generale",
+    missingEvidence: "Stato morsetti arrivo e generale"
+  },
+  {
+    id: "H-RETE-03", family: "anomalia_rete",
+    causa: "Problema rete distribuzione o fornitore",
+    baseScore: 1,
+    pro: [
+      { test: function (f) { return f.voltAnomaly; },  weight: 5, label: "tensione anomala misurata" },
+      { test: function (f) { return f.zoneWide; },      weight: 5, label: "problema esteso a zona/palazzo" }
+    ],
+    contra: [
+      { test: function (f) { return f.onlyMe; },       weight: 5, label: "solo casa mia → non è il fornitore" },
+      { test: function (f) { return f.voltStable; },    weight: 5, label: "tensione stabile misurata" }
+    ],
+    bestCheck: "Misura tensione al contatore — se anomala a monte del generale → distributore",
+    missingEvidence: "Tensione a monte del generale e conferma da vicini"
+  }
+];
+
+// ============================================================
+// FASE 3a — deriveHypothesesFromDamage()
+// 3 livelli: damageFact / physicalEffect / candidateCauses
+// Motore elastico: ipotesi vive aggiornabili, esclusione per contraddizione forte
+// ============================================================
+function deriveHypothesesFromDamage(signals, lower) {
+  var ev = signals.extractedValues;
+
+  // ── Raccolta fatti strutturati ──
+  var facts = {
+    isoLow:      signals.hasIsolationFault,
+    isoHigh:     ev.some(function (v) { return v.type === "isolamento" && v.value > 10; }),
+    tempHigh:    signals.hasAbnormalTemp,
+    voltAnomaly: !!(signals.voltageAnomaly && signals.voltageAnomaly.anomaly),
+    voltHigh:    !!(signals.voltageAnomaly && signals.voltageAnomaly.direction === "sopra"),
+    voltStable:  ev.some(function (v) { return v.type === "tensione" && !v.warning; }),
+    highCurrent: ev.some(function (v) { return v.type === "corrente" && v.value > 16; }),
+    rcdTrips:      signals.mentionsRCD && /scatta|salta|interviene|sgancia/i.test(lower),
+    mcbTrips:      /magnetoterm|mcb/i.test(lower) && /scatta|salta|interviene/i.test(lower),
+    burnSigns:     /bruciat|fuma|odore|sciolto/i.test(lower),
+    darkened:      /annerit|scurit|nero|deformat/i.test(lower),
+    tripsNoLoad:   /a vuoto|senza carico|tutto staccato|niente collegato/i.test(lower),
+    underLoad:     /sotto carico|quando accendo|quando uso|con carico/i.test(lower),
+    applianceMentioned: /lavatrice|forno|scaldabagno|asciugatrice|lavastoviglie|condizionatore|boiler|caricabatter/i.test(lower),
+    oldInstall:    /vecchio|datato|anni|deteriorat|usurato/i.test(lower),
+    newInstall:    /nuovo|recente|appena|rifatto/i.test(lower),
+    moisture:      /umid|acqua|piove|cantina|allagat|condensa|infiltra/i.test(lower),
+    outdoor:       /esterno|giardino|terrazzo|balcone/i.test(lower),
+    dry:           /secco|asciutto/i.test(lower),
+    terminalRef:   /morsett|allentat|serrat/i.test(lower),
+    heavyLoad:     /carico|potenza|kw|watt|troppi|contemporane/i.test(lower),
+    lightLoad:     /poco carico|carico leggero|quasi niente/i.test(lower),
+    longRun:       /lungo|distanza|prolunga|lontano/i.test(lower),
+    neutralRef:    /neutro|sbilanciat/i.test(lower),
+    zoneWide:      /palazzo|vicini|zona|quartiere|condomini/i.test(lower),
+    onlyMe:        /solo io|solo a me|solo casa mia/i.test(lower),
+    flickering:    /sbalzi|flicker|intermittent|sfarfall/i.test(lower)
+  };
+
+  // ── LIVELLO 1: damageFact — evento/danno osservato principale ──
+  var damageFact = null;
+  if (facts.rcdTrips)        damageFact = "scatto differenziale";
+  else if (facts.mcbTrips)   damageFact = "scatto magnetotermico";
+  else if (facts.burnSigns)  damageFact = "bruciatura/fumo visibile";
+  else if (facts.darkened)   damageFact = "annerimento/deformazione";
+  else if (facts.flickering) damageFact = "sfarfallio/sbalzi tensione";
+  // Se nessun evento osservabile ma c'è una misura forte → la misura è il fatto
+  if (!damageFact && facts.isoLow)      damageFact = "isolamento basso misurato";
+  if (!damageFact && facts.tempHigh)    damageFact = "temperatura >80°C misurata";
+  if (!damageFact && facts.voltAnomaly) damageFact = "tensione anomala misurata";
+  if (!damageFact) return null;
+
+  // Stato strutturato
+  var state = {
+    damageFact: damageFact,
+    activationConditions: facts.underLoad ? "sotto carico" : facts.tripsNoLoad ? "a vuoto" : null,
+    scope: facts.applianceMentioned ? "carico specifico" : facts.zoneWide ? "zona estesa" : null,
+    repeatability: null,
+    measurements: [],
+    facts: [],
+    missingEvidence: []
+  };
+  ev.forEach(function (v) { state.measurements.push(v.value + v.unit + " (" + v.type + ")"); });
+  var factKeys = Object.keys(facts);
+  for (var fk = 0; fk < factKeys.length; fk++) {
+    if (facts[factKeys[fk]]) state.facts.push(factKeys[fk]);
+  }
+
+  // ── LIVELLO 2: physicalEffect — effetto fisico probabile (orientativo, non rigido) ──
+  var physicalEffect = null;
+  var hasMeasure = facts.isoLow || facts.tempHigh || facts.voltAnomaly || facts.highCurrent || facts.isoHigh;
+  if (facts.isoLow || facts.rcdTrips)                          physicalEffect = "dispersione";
+  else if (facts.tempHigh || facts.burnSigns || facts.darkened) physicalEffect = "surriscaldamento";
+  else if (facts.voltAnomaly || facts.flickering)               physicalEffect = "anomalia_rete";
+  else if (facts.mcbTrips || facts.highCurrent)                 physicalEffect = "sovracorrente";
+
+  // ── LIVELLO 3: ipotesi concorrenti elastiche — TUTTE partono vive ──
+  var alive = [];
+  for (var i = 0; i < CAUSE_HYPOTHESES.length; i++) {
+    var h = CAUSE_HYPOTHESES[i];
+    var slot = {
+      id: h.id, family: h.family, causa: h.causa,
+      baseScore: h.baseScore, score: h.baseScore,
+      supports: [], contradictions: [],
+      excluded: false, excludeReason: null,
+      bestCheck: h.bestCheck, missingEvidence: h.missingEvidence,
+      // Bonus orientativo: ipotesi della stessa famiglia dell'effetto fisico +1
+      familyMatch: physicalEffect && h.family === physicalEffect
+    };
+    if (slot.familyMatch) slot.score += 1;
+
+    for (var p = 0; p < h.pro.length; p++) {
+      if (h.pro[p].test(facts)) {
+        slot.score += h.pro[p].weight;
+        slot.supports.push(h.pro[p].label);
+      }
+    }
+    for (var c = 0; c < h.contra.length; c++) {
+      if (h.contra[c].test(facts)) {
+        slot.score -= h.contra[c].weight;
+        slot.contradictions.push(h.contra[c].label);
+      }
+    }
+
+    // Cap: solo keyword deboli e nessuna misura → max 4
+    if (slot.supports.length > 0 && slot.score > 4 && !hasMeasure) {
+      slot.score = 4;
+    }
+    // Esclusa: contraddizione forte (score crollato sotto 0)
+    if (slot.contradictions.length > 0 && slot.score < 0) {
+      slot.excluded = true;
+      slot.excludeReason = slot.contradictions.join("; ");
+    }
+    alive.push(slot);
+  }
+
+  // Ordina: escluse in fondo, poi per score decrescente
+  alive.sort(function (a, b) {
+    if (a.excluded !== b.excluded) return a.excluded ? 1 : -1;
+    return b.score - a.score;
+  });
+
+  // Separa vive (score >= 3) da escluse
+  var live = [];
+  var contradicted = [];
+  for (var j = 0; j < alive.length; j++) {
+    if (alive[j].excluded) {
+      contradicted.push({ id: alive[j].id, causa: alive[j].causa, family: alive[j].family, reason: alive[j].excludeReason });
+    } else if (alive[j].score >= 3) {
+      live.push(alive[j]);
+    }
+  }
+  if (live.length === 0) return null;
+
+  // ── DECISIONE ──
+  var top1 = live[0];
+  var top2 = live.length > 1 ? live[1] : null;
+  var gap = top1.score - (top2 ? top2.score : 0);
+  var hasSufficientFacts = state.facts.length >= 2;
+  var conclusive = top1.score >= 7 && gap >= 3 && hasSufficientFacts && top1.contradictions.length === 0;
+
+  // ── VERIFICA DISCRIMINANTE ──
+  var bestDisc = null;
+  var discFullySeparating = false;
+  if (!conclusive && top2) {
+    // La verifica che separa meglio è quella di top2 SE diversa da top1
+    // perché il suo esito conferma/esclude top2 e riordina tutto
+    if (top1.bestCheck !== top2.bestCheck) {
+      bestDisc = top2.bestCheck;
+      discFullySeparating = true;
+    } else {
+      bestDisc = top1.bestCheck;
+      discFullySeparating = false;
+    }
+  } else if (!conclusive && !top2) {
+    bestDisc = top1.bestCheck;
+    discFullySeparating = false;
+  }
+
+  // ── Converti in formato standard (max 3) ──
+  var candidates = live.slice(0, 3).map(function (s) {
+    return {
+      causa: s.causa,
+      livello: "probabile",
+      patternId: "AUT-" + s.family.toUpperCase().replace(/_/g, ""),
+      symptom: s.family.replace(/_/g, " "),
+      deductionScore: s.score,
+      boostedByRuleIds: [],
+      supportingMeasurements: [],
+      contradictingMeasurements: [],
+      excluded: false,
+      family: s.family,
+      supports: s.supports,
+      contradictions: s.contradictions,
+      bestCheck: s.bestCheck,
+      missingEvidence: s.missingEvidence,
+      source: "autonomous_reasoning",
+      reasoningTrace: {
+        id: s.id, family: s.family, baseScore: s.baseScore, finalScore: s.score,
+        familyMatch: s.familyMatch,
+        supports: s.supports, contradictions: s.contradictions,
+        liveCount: live.length, excludedCount: contradicted.length,
+        damageFact: damageFact, physicalEffect: physicalEffect
+      },
+      verificationNeeded: s.bestCheck,
+      learnable: false
+    };
+  });
+
+  var missing = [];
+  candidates.forEach(function (cn) {
+    if (cn.missingEvidence && missing.indexOf(cn.missingEvidence) < 0) missing.push(cn.missingEvidence);
+  });
+  if (!state.activationConditions) missing.unshift("Condizioni di attivazione: sotto carico o a vuoto?");
+  if (!state.scope) missing.push("Ambito: quale circuito o carico?");
+
+  return {
+    damageFact: damageFact,
+    physicalEffect: physicalEffect,
+    state: state,
+    conclusive: conclusive,
+    inferredPhenomenon: conclusive ? top1.family.replace(/_/g, " ") : null,
+    winningCause: conclusive ? top1.causa : null,
+    candidateCauses: candidates,
+    contradicted: contradicted,
+    bestDiscriminatingCheck: bestDisc,
+    discFullySeparating: discFullySeparating,
+    missingEvidence: missing,
+    liveCount: live.length,
+    excludedCount: contradicted.length
+  };
+}
+
 /**
  * ROCCO Nucleo Deduttivo — deduceFromSignals()
- * Applica PHYSICAL_CONSTRAINTS alle ipotesi già costruite dal pattern matching.
- * NON modifica livello direttamente. Usa deductionScore per ranking.
+ * FASE 1: applica PHYSICAL_CONSTRAINTS (boost, penalize, missing, raise_priority)
+ * FASE 2a: applica CONFIRMATION_RULES (confirm, exclude) su misure reali
+ * Regola logica: confirm forte blocca downgrade successivi; exclude rimuove; boost non tocca ipotesi escluse.
  * @param {Object} signals - dati già estratti da analyzeTechnicalRequest
- * @param {Array} ipotesi - array da buildIpotesiFromPattern con patternId, symptom, deductionScore
- * @returns {Object} { rankedHypotheses, missingData, bestNextCheck, exclusions, boosted }
+ * @param {Array} ipotesi - array da buildIpotesiFromPattern
+ * @returns {Object}
  */
 function deduceFromSignals(signals, ipotesi) {
   var boosted = [];
   var penalized = [];
   var missingData = [];
   var raised = [];
+  var confirmedPhenomena = [];
+  var excluded = [];
 
+  // --- FASE 1: PHYSICAL_CONSTRAINTS ---
   for (var r = 0; r < PHYSICAL_CONSTRAINTS.length; r++) {
     var rule = PHYSICAL_CONSTRAINTS[r];
     if (!rule.condition(signals)) continue;
@@ -994,26 +1570,25 @@ function deduceFromSignals(signals, ipotesi) {
       for (var i = 0; i < ipotesi.length; i++) {
         var ip = ipotesi[i];
         var hit = false;
-        // Match per patternId esatto (prioritario)
         if (rule.targetPatternId && ip.patternId === rule.targetPatternId) {
           hit = true;
         }
-        // Match per regex su symptom del pattern originale (fallback)
         if (!hit && rule.targetPatternSymptom && rule.targetPatternSymptom.test(ip.symptom)) {
           hit = true;
         }
         if (hit) {
           ip.deductionScore += rule.scoreDelta;
-          var entry = { patternId: ip.patternId, rule: rule.id, reason: rule.reason };
-          if (rule.action === "boost") boosted.push(entry);
-          if (rule.action === "penalize") penalized.push(entry);
-          if (rule.action === "raise_priority") raised.push(entry);
+          if (rule.action === "boost") {
+            ip.boostedByRuleIds.push(rule.id);
+            boosted.push({ patternId: ip.patternId, rule: rule.id, reason: rule.reason });
+          }
+          if (rule.action === "penalize") penalized.push({ patternId: ip.patternId, rule: rule.id, reason: rule.reason });
+          if (rule.action === "raise_priority") raised.push({ patternId: ip.patternId, rule: rule.id, reason: rule.reason });
         }
       }
     }
 
     if (rule.action === "missing") {
-      // Conta quante ipotesi "probabile" potrebbero essere risolte da questo dato
       var impactCount = 0;
       for (var j = 0; j < ipotesi.length; j++) {
         if (ipotesi[j].livello === "probabile") impactCount++;
@@ -1029,17 +1604,71 @@ function deduceFromSignals(signals, ipotesi) {
     }
   }
 
-  // Ordina ipotesi: raise_priority in testa (deductionScore alto), poi per deductionScore, poi score originale implicito
+  // --- FASE 2a: CONFIRMATION_RULES ---
+  // Prima tutti i confirm, poi tutti gli exclude.
+  // confirm forte blocca downgrade successivi.
+  var confirmedSet = {};  // patternId:causa → true (per bloccare exclude su ipotesi confermate)
+
+  // Passaggio 1: confirm — conferma il FENOMENO (pattern), NON le singole cause
+  var confirmedPhenomenaIds = {};  // patternId → true (per bloccare exclude)
+  for (var c = 0; c < CONFIRMATION_RULES.length; c++) {
+    var cr = CONFIRMATION_RULES[c];
+    if (cr.action !== "confirm") continue;
+    if (!cr.measurement(signals.extractedValues)) continue;
+
+    // Cerca almeno una ipotesi che matcha E ha il boost richiesto
+    var phenomenonPatternId = null;
+    for (var ci = 0; ci < ipotesi.length; ci++) {
+      var cip = ipotesi[ci];
+      var cHit = false;
+      if (cr.targetPatternId && cip.patternId === cr.targetPatternId) cHit = true;
+      if (!cHit && cr.targetPatternSymptom && cr.targetPatternSymptom.test(cip.symptom)) cHit = true;
+      if (!cHit) continue;
+      if (cr.requiresBoostedBy && cip.boostedByRuleIds.indexOf(cr.requiresBoostedBy) < 0) continue;
+      phenomenonPatternId = cip.patternId;
+      break;
+    }
+    if (phenomenonPatternId && !confirmedPhenomenaIds[phenomenonPatternId]) {
+      confirmedPhenomenaIds[phenomenonPatternId] = true;
+      confirmedPhenomena.push({ patternId: phenomenonPatternId, rule: cr.id, reason: cr.reason, measurement: cr.measurementLabel });
+    }
+  }
+
+  // Passaggio 2: exclude (non tocca ipotesi il cui fenomeno è confermato)
+  var toRemove = [];
+  for (var e = 0; e < CONFIRMATION_RULES.length; e++) {
+    var er = CONFIRMATION_RULES[e];
+    if (er.action !== "exclude") continue;
+    if (!er.measurement(signals.extractedValues)) continue;
+
+    for (var ei = ipotesi.length - 1; ei >= 0; ei--) {
+      var eip = ipotesi[ei];
+      if (confirmedPhenomenaIds[eip.patternId]) continue;  // fenomeno confermato → non escludere
+      // Match per patternId esatto o regex su symptom
+      var eHit = false;
+      if (er.targetPatternId && eip.patternId === er.targetPatternId) eHit = true;
+      if (!eHit && er.targetPatternSymptom && er.targetPatternSymptom.test(eip.symptom)) eHit = true;
+      if (!eHit) continue;
+
+      eip.contradictingMeasurements.push(er.measurementLabel);
+      excluded.push({ patternId: eip.patternId, rule: er.id, reason: er.reason, measurement: er.measurementLabel, causa: eip.causa });
+      toRemove.push(ei);
+    }
+  }
+  // Rimuovi ipotesi escluse (indici decrescenti per non spostare)
+  for (var ri = 0; ri < toRemove.length; ri++) {
+    ipotesi.splice(toRemove[ri], 1);
+  }
+
+  // --- Ordinamento finale per deductionScore ---
   ipotesi.sort(function (a, b) {
     return b.deductionScore - a.deductionScore;
   });
 
-  // Ordina missingData per priority × impactCount (il più utile prima)
   missingData.sort(function (a, b) {
     return (b.priority * b.impactCount) - (a.priority * a.impactCount);
   });
 
-  // bestNextCheck: il check del missing con impatto maggiore, oppure null
   var bestNextCheck = missingData.length > 0 ? missingData[0].check : null;
 
   return {
@@ -1047,7 +1676,9 @@ function deduceFromSignals(signals, ipotesi) {
     missingData: missingData,
     bestNextCheck: bestNextCheck,
     exclusions: penalized,
-    boosted: boosted
+    boosted: boosted,
+    confirmedPhenomena: confirmedPhenomena,
+    excluded: excluded
   };
 }
 
@@ -1184,6 +1815,19 @@ function analyzeTechnicalRequest(input, knowledge) {
       rischi.unshift("⚠️ ANOMALIA RILEVATA: " + v.warning);
     }
   });
+  // Anomalia tensione BT rispetto a nominale 230V
+  if (voltageAnomaly && voltageAnomaly.anomaly) {
+    osservazioni.push(
+      "Tensione misurata " + voltageAnomaly.measured + "V — " +
+      voltageAnomaly.direction + " nominale " + voltageAnomaly.nominal + "V " +
+      "(deviazione " + voltageAnomaly.deviation + "%, limite ±10% CEI EN 50160)."
+    );
+    rischi.unshift(
+      "⚠️ TENSIONE FUORI RANGE: " + voltageAnomaly.measured + "V " +
+      voltageAnomaly.direction + " nominale " + voltageAnomaly.nominal + "V — " +
+      "verificare neutro, contatore e rete di distribuzione."
+    );
+  }
 
   // Componenti riconosciuti dalla knowledge base — con livello di certezza basato sul score
   matchedComponents.forEach(function (x) {
@@ -1194,7 +1838,46 @@ function analyzeTechnicalRequest(input, knowledge) {
     );
   });
 
-  // Pattern osservazioni + ipotesi
+  // --- FASE 3a: RAGIONAMENTO AUTONOMO ---
+  var damageSignals = {
+    extractedValues: extractedValues,
+    hasIsolationFault: hasIsolationFault,
+    hasAbnormalTemp: hasAbnormalTemp,
+    voltageAnomaly: voltageAnomaly,
+    mentionsRCD: mentionsRCD
+  };
+  var autonomous = deriveHypothesesFromDamage(damageSignals, lower);
+  if (autonomous) {
+    // Livello 1: danno osservato
+    osservazioni.push("DANNO OSSERVATO: " + autonomous.damageFact);
+    // Livello 2: effetto fisico (orientativo)
+    if (autonomous.physicalEffect) {
+      osservazioni.push("EFFETTO FISICO PROBABILE: " + autonomous.physicalEffect);
+    }
+    // Livello 3: ipotesi concorrenti
+    osservazioni.push("IPOTESI ATTIVE: " + autonomous.liveCount + " vive, " + autonomous.excludedCount + " escluse");
+    autonomous.contradicted.forEach(function (ct) {
+      osservazioni.push("ESCLUSA: " + ct.causa + " — " + ct.reason);
+    });
+    if (autonomous.conclusive) {
+      osservazioni.push("CAUSA PLAUSIBILE: " + autonomous.winningCause + " → " + autonomous.inferredPhenomenon);
+    } else {
+      osservazioni.push("DATI INSUFFICIENTI: ipotesi concorrenti ancora aperte");
+      if (autonomous.bestDiscriminatingCheck) {
+        verifiche.unshift("VERIFICA DISCRIMINANTE" +
+          (autonomous.discFullySeparating ? "" : " (parziale)") +
+          ": " + autonomous.bestDiscriminatingCheck);
+      }
+    }
+    autonomous.missingEvidence.forEach(function (m) {
+      osservazioni.push("EVIDENZA MANCANTE: " + m);
+    });
+    autonomous.candidateCauses.forEach(function (ac) {
+      ipotesi.push(ac);
+    });
+  }
+
+  // Pattern osservazioni + ipotesi (gira sempre — fallback e integrazione)
   scoredPatterns.forEach(function (x) {
     var p = x.pattern;
     console.log("ROCCO: JSON pattern matched ->", p.id, "(score=" + x.score + ")");
@@ -1228,6 +1911,13 @@ function analyzeTechnicalRequest(input, knowledge) {
   // Rafforzamenti nelle osservazioni
   deduction.boosted.forEach(function (b) {
     osservazioni.push("RAFFORZATO: " + b.reason);
+  });
+  // FASE 2a: fenomeni confermati e esclusioni da misure reali
+  deduction.confirmedPhenomena.forEach(function (c) {
+    osservazioni.push("FENOMENO CONFERMATO: " + c.reason);
+  });
+  deduction.excluded.forEach(function (e) {
+    osservazioni.push("ESCLUSO: " + e.reason);
   });
 
   // Field checks dai componenti riconosciuti (prime 2 per componente, max 2 componenti)
