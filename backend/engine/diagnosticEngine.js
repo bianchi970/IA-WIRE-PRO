@@ -1230,39 +1230,6 @@ function pushDiagnosticCheck(checks, id, reason, priority, basedOnFacts) {
   });
 }
 
-function getMeasuredValuesFromFacts(facts) {
-  return facts.filter(function (fact) {
-    return fact.source === "numeric_parser" &&
-      fact.relatedTo &&
-      typeof fact.relatedTo === "object" &&
-      Object.prototype.hasOwnProperty.call(fact.relatedTo, "raw");
-  }).map(function (fact) {
-    var meta = fact.relatedTo || {};
-    var item = {
-      type: fact.type,
-      value: fact.value,
-      unit: fact.unit,
-      raw: meta.raw || null
-    };
-    if (meta.warning) item.warning = meta.warning;
-    return item;
-  });
-}
-
-function getVoltageSignalFromFacts(facts) {
-  var fact = getFirstFact(facts, "voltage_anomaly") || getFirstFact(facts, "voltage_reference");
-  if (!fact) return null;
-
-  return {
-    measured: fact.value,
-    nominal: NOMINAL_VOLTAGE,
-    deviation: fact.relatedTo && fact.relatedTo.deviation,
-    direction: fact.relatedTo && fact.relatedTo.direction,
-    anomaly: fact.type === "voltage_anomaly",
-    context: "BT monofase " + NOMINAL_VOLTAGE + "V"
-  };
-}
-
 function createEmptyNormalizedInput(rawInput) {
   return {
     rawText: String((rawInput && rawInput.message) || "").trim(),
@@ -3450,6 +3417,165 @@ function buildDecisionPolicy(caseState, safetyDecision, hypotheses, diagnosticCh
   return policy;
 }
 
+function sortHypothesesByDeduction(hypotheses) {
+  return (Array.isArray(hypotheses) ? hypotheses : []).slice(0).sort(function (a, b) {
+    var left = Number(a && a.deductionScore || 0);
+    var right = Number(b && b.deductionScore || 0);
+
+    if (right !== left) return right - left;
+    return String((a && a.causa) || "").localeCompare(String((b && b.causa) || ""));
+  });
+}
+
+function dedupeFinalHypotheses(hypotheses, dominantFamily) {
+  var ordered = sortHypothesesByDeduction(hypotheses);
+  var seenIds = {};
+  var seenCauses = {};
+  var leader = ordered[0] || null;
+
+  return ordered.filter(function (hypothesis) {
+    var hypothesisId = normalizeLearningTargetKey(hypothesis && hypothesis.id);
+    var causeKey = normalizeLearningTargetKey(hypothesis && hypothesis.causa);
+    var sameFamilyAsLeader = leader && hypothesis && leader.family && hypothesis.family === leader.family;
+    var clearlyWeaker = leader && hypothesis ? (Number(leader.deductionScore || 0) - Number(hypothesis.deductionScore || 0)) >= 4 : false;
+
+    if (!hypothesis || !causeKey) return false;
+    if (hypothesisId && seenIds[hypothesisId]) return false;
+    if (seenCauses[causeKey]) return false;
+
+    if (leader &&
+        sameFamilyAsLeader &&
+        dominantFamily &&
+        hypothesis !== leader &&
+        hypothesis.family === dominantFamily &&
+        leader.livello !== "non_verifiable" &&
+        hypothesis.livello === "non_verifiable" &&
+        clearlyWeaker) {
+      return false;
+    }
+
+    if (hypothesisId) seenIds[hypothesisId] = true;
+    seenCauses[causeKey] = true;
+    return true;
+  });
+}
+
+function dedupeDiagnosticChecks(checks) {
+  var seen = {};
+
+  return (Array.isArray(checks) ? checks : []).filter(function (check) {
+    var key = normalize(String(check && check.reason || ""));
+
+    if (!key || seen[key]) return false;
+    seen[key] = true;
+    return true;
+  });
+}
+
+function scoreDiagnosticCheckForCase(check, caseState, safetyDecision, decisionPolicy) {
+  var score = check && check.priority || 0;
+  var text = normalize(String(check && check.reason || ""));
+  var factsList = Array.isArray(check && check.basedOnFacts) ? check.basedOnFacts.join(" ") : "";
+
+  if ((safetyDecision.level === "stop" || safetyDecision.level === "danger") && /^CHK-SAFE/.test(String(check && check.id || ""))) {
+    score += 50;
+  }
+  if (caseState.strongestHypothesis &&
+      caseState.strongestHypothesis.family &&
+      factsList.indexOf(caseState.strongestHypothesis.family) >= 0) {
+    score += 16;
+  }
+  if (caseState.dominantRisk === "isolamento" && /isolamento|megohm|pe|differenziale/.test(text)) score += 12;
+  if (caseState.dominantRisk === "differenziale" && /differenziale|isolamento|carichi/.test(text)) score += 12;
+  if (caseState.dominantRisk === "tensione" && /tensione|l-n|l-pe|neutro/.test(text)) score += 12;
+  if (caseState.dominantRisk === "continuita" && /continuita|neutro|morsett|serraggio/.test(text)) score += 12;
+  if (caseState.dominantRisk === "bruciato_fumo_odore" && /termica|temperatura|morsetti|assenza tensione/.test(text)) score += 12;
+
+  (caseState.unresolvedGaps || []).forEach(function (gap) {
+    var token = normalize(String(gap || "")).split(/\s+/).filter(function (part) { return part.length > 4; })[0];
+    if (token && text.indexOf(token) >= 0) score += 8;
+  });
+
+  if (decisionPolicy && decisionPolicy.allowedNextStep && check.reason === decisionPolicy.allowedNextStep) {
+    score += 200;
+  }
+
+  return score;
+}
+
+function rankDiagnosticChecksForCase(checks, caseState, safetyDecision, decisionPolicy) {
+  return dedupeDiagnosticChecks(checks).slice(0).sort(function (a, b) {
+    return scoreDiagnosticCheckForCase(b, caseState, safetyDecision, decisionPolicy) -
+      scoreDiagnosticCheckForCase(a, caseState, safetyDecision, decisionPolicy);
+  });
+}
+
+function filterDiagnosticChecksByDecisionPolicy(checks, decisionPolicy) {
+  if (!decisionPolicy) return Array.isArray(checks) ? checks.slice(0) : [];
+
+  return (Array.isArray(checks) ? checks : []).filter(function (check) {
+    var text = normalize(String(check.reason || ""));
+
+    if (decisionPolicy.blockedActions.indexOf("prove sotto carico") >= 0 &&
+        /sotto carico|durante il funzionamento|rilanciare|riattivare|quando accendo|corrente assorbita|pinza amperometrica|misura corrente/.test(text)) {
+      return false;
+    }
+    if (decisionPolicy.blockedActions.indexOf("riarmo o riattivazione del circuito") >= 0 &&
+        /rilanciare|riarm|riattiv/i.test(text)) {
+      return false;
+    }
+    if (decisionPolicy.blockedActions.indexOf("prove sotto carico non essenziali") >= 0 &&
+        /sotto carico|durante il funzionamento/.test(text) &&
+        !/^disalimentare/.test(text)) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function finalizeDiagnosticOutcome(params) {
+  var safeParams = params || {};
+  var facts = Array.isArray(safeParams.facts) ? safeParams.facts : [];
+  var contradictions = Array.isArray(safeParams.contradictions) ? safeParams.contradictions : [];
+  var hypotheses = Array.isArray(safeParams.hypotheses) ? safeParams.hypotheses.slice(0) : [];
+  var diagnosticChecks = Array.isArray(safeParams.diagnosticChecks) ? safeParams.diagnosticChecks.slice(0) : [];
+  var safetyDecision = safeParams.safetyDecision || { level: "safe", reasons: [] };
+  var evidenceSet = safeParams.evidenceSet || createEmptyEvidenceSet();
+  var causalInferenceResult = safeParams.causalInferenceResult || createEmptyCausalInferenceResult();
+  var caseState = buildCaseState(facts, contradictions, hypotheses, safetyDecision, evidenceSet, causalInferenceResult);
+  var dominantCauseFamily = selectDominantCauseFamily(groupHypothesesByCauseFamily(hypotheses), caseState);
+  var decisionPolicy;
+
+  caseState.dominantCauseFamily = dominantCauseFamily;
+  hypotheses = dedupeFinalHypotheses(downgradeSiblingHypotheses(hypotheses, dominantCauseFamily), dominantCauseFamily);
+  hypotheses = sortHypothesesByDeduction(hypotheses);
+
+  caseState = buildCaseState(facts, contradictions, hypotheses, safetyDecision, evidenceSet, causalInferenceResult);
+  dominantCauseFamily = selectDominantCauseFamily(groupHypothesesByCauseFamily(hypotheses), caseState);
+  caseState.dominantCauseFamily = dominantCauseFamily;
+  caseState.causalSummary = buildCausalSummary(dominantCauseFamily, hypotheses, caseState);
+
+  if (hypotheses.some(function (hypothesis) { return hypothesis.livello !== "non_verifiable"; })) {
+    diagnosticChecks = diagnosticChecks.filter(function (check) {
+      return check.id !== "CHK-GEN-01";
+    });
+  }
+
+  diagnosticChecks = rankDiagnosticChecksForCase(diagnosticChecks, caseState, safetyDecision, null);
+  decisionPolicy = buildDecisionPolicy(caseState, safetyDecision, hypotheses, diagnosticChecks);
+  diagnosticChecks = filterDiagnosticChecksByDecisionPolicy(diagnosticChecks, decisionPolicy);
+  diagnosticChecks = rankDiagnosticChecksForCase(diagnosticChecks, caseState, safetyDecision, decisionPolicy);
+
+  return {
+    hypotheses: hypotheses,
+    diagnosticChecks: diagnosticChecks,
+    caseState: caseState,
+    dominantCauseFamily: dominantCauseFamily,
+    decisionPolicy: decisionPolicy
+  };
+}
+
 function safeGetClosedCaseLearningSignal(payload) {
   try {
     var safePayload = payload || {};
@@ -4362,10 +4488,8 @@ function analyzeTechnicalRequest(input, knowledge) {
   var extractedValues = getMeasuredValuesFromEvidenceSet(evidenceSet);
   var voltageAnomaly = getVoltageSignalFromEvidenceSet(evidenceSet);
   var isTechnical = normalizedInput.isTechnical;
-  var mentionsVoltage = hasEvidenceFact(evidenceSet, "mentions_voltage");
   var mentionsRCD = hasEvidenceFact(evidenceSet, "mentions_rcd");
   var mentionsOutdoor = hasEvidenceFact(evidenceSet, "mentions_outdoor");
-  var mentionsMeasure = hasEvidenceFact(evidenceSet, "mentions_measure");
   var matchedKeywords = normalizedInput.technicalKeywords.slice(0);
   var tokens = structuredQuery.tokens.slice(0);
   var scoredPatterns;
@@ -4471,42 +4595,6 @@ function analyzeTechnicalRequest(input, knowledge) {
   buildChecksFromMissingEvidence(ipotesi, safetyDecision).forEach(function (check) {
     pushDiagnosticCheck(diagnosticChecks, check.id, check.reason, check.priority, check.basedOnFacts);
   });
-  caseState.causalSummary = buildCausalSummary(dominantCauseFamily, ipotesi, caseState);
-  if (ipotesi.some(function (hypothesis) { return hypothesis.livello !== "non_verifiable"; })) {
-    diagnosticChecks = diagnosticChecks.filter(function (check) {
-      return check.id !== "CHK-GEN-01";
-    });
-  }
-  diagnosticChecks.sort(function (a, b) {
-    function getCasePriority(check) {
-      var score = check.priority || 0;
-      var text = normalize(String(check.reason || ""));
-      var factsList = Array.isArray(check.basedOnFacts) ? check.basedOnFacts.join(" ") : "";
-
-      if ((safetyDecision.level === "stop" || safetyDecision.level === "danger") && /^CHK-SAFE/.test(String(check.id || ""))) {
-        score += 50;
-      }
-      if (caseState.strongestHypothesis &&
-          caseState.strongestHypothesis.family &&
-          factsList.indexOf(caseState.strongestHypothesis.family) >= 0) {
-        score += 16;
-      }
-      if (caseState.dominantRisk === "isolamento" && /isolamento|megohm|pe|differenziale/.test(text)) score += 12;
-      if (caseState.dominantRisk === "differenziale" && /differenziale|isolamento|carichi/.test(text)) score += 12;
-      if (caseState.dominantRisk === "tensione" && /tensione|l-n|l-pe|neutro/.test(text)) score += 12;
-      if (caseState.dominantRisk === "continuita" && /continuita|neutro|morsett|serraggio/.test(text)) score += 12;
-      if (caseState.dominantRisk === "bruciato_fumo_odore" && /termica|temperatura|morsetti|assenza tensione/.test(text)) score += 12;
-
-      caseState.unresolvedGaps.forEach(function (gap) {
-        var token = normalize(String(gap || "")).split(/\s+/).filter(function (part) { return part.length > 4; })[0];
-        if (token && text.indexOf(token) >= 0) score += 8;
-      });
-
-      return score;
-    }
-
-    return getCasePriority(b) - getCasePriority(a);
-  });
   var rankedHypotheses = Array.isArray(ipotesi) ? ipotesi.slice() : [];
   var rankedDiagnosticChecks = Array.isArray(diagnosticChecks) ? diagnosticChecks.slice() : [];
 
@@ -4532,6 +4620,21 @@ function analyzeTechnicalRequest(input, knowledge) {
 
   ipotesi = rankedHypotheses;
   diagnosticChecks = rankedDiagnosticChecks;
+  var convergedOutcome = finalizeDiagnosticOutcome({
+    facts: facts,
+    contradictions: contradictions,
+    hypotheses: ipotesi,
+    diagnosticChecks: diagnosticChecks,
+    safetyDecision: safetyDecision,
+    evidenceSet: evidenceSet,
+    causalInferenceResult: causalInferenceResult
+  });
+
+  ipotesi = convergedOutcome.hypotheses;
+  diagnosticChecks = convergedOutcome.diagnosticChecks;
+  caseState = convergedOutcome.caseState;
+  dominantCauseFamily = convergedOutcome.dominantCauseFamily;
+  decisionPolicy = convergedOutcome.decisionPolicy;
   caseFingerprint = closedCaseLearning && closedCaseLearning.fingerprint
     ? closedCaseLearning.fingerprint
     : buildCaseFingerprint({
@@ -4541,66 +4644,6 @@ function analyzeTechnicalRequest(input, knowledge) {
       diagnosticChecks: diagnosticChecks,
       normalizedFacts: facts
     });
-
-  if (closedCaseLearning.applied) {
-    causalGroups = groupHypothesesByCauseFamily(ipotesi);
-    dominantCauseFamily = selectDominantCauseFamily(causalGroups, caseState);
-    ipotesi = downgradeSiblingHypotheses(ipotesi, dominantCauseFamily);
-    ipotesi.sort(function (a, b) { return b.deductionScore - a.deductionScore; });
-    if (ipotesi.length) {
-      var seenCauses = {};
-      var currentStrongest = ipotesi[0];
-      ipotesi = ipotesi.filter(function (hypothesis) {
-        var duplicateCause = seenCauses[hypothesis.causa];
-        var sameFamilyAsStrongest = currentStrongest.family && hypothesis.family === currentStrongest.family;
-        var clearlyWeaker = currentStrongest.deductionScore - hypothesis.deductionScore >= 4;
-
-        if (duplicateCause) return false;
-        seenCauses[hypothesis.causa] = true;
-
-        if (sameFamilyAsStrongest &&
-            hypothesis.causa !== currentStrongest.causa &&
-            currentStrongest.livello !== "non_verifiable" &&
-            hypothesis.livello === "non_verifiable" &&
-            clearlyWeaker) {
-          return false;
-        }
-
-        return true;
-      });
-    }
-    caseState = buildCaseState(facts, contradictions, ipotesi, safetyDecision, evidenceSet, causalInferenceResult);
-    caseState.dominantCauseFamily = dominantCauseFamily;
-    caseState.causalSummary = buildCausalSummary(dominantCauseFamily, ipotesi, caseState);
-  }
-  decisionPolicy = buildDecisionPolicy(caseState, safetyDecision, ipotesi, diagnosticChecks);
-  diagnosticChecks = diagnosticChecks.filter(function (check) {
-    var text = normalize(String(check.reason || ""));
-
-    if (decisionPolicy.blockedActions.indexOf("prove sotto carico") >= 0 &&
-        /sotto carico|durante il funzionamento|rilanciare|riattivare|quando accendo|corrente assorbita|pinza amperometrica|misura corrente/.test(text)) {
-      return false;
-    }
-    if (decisionPolicy.blockedActions.indexOf("riarmo o riattivazione del circuito") >= 0 &&
-        /rilanciare|riarm|riattiv/i.test(text)) {
-      return false;
-    }
-    if (decisionPolicy.blockedActions.indexOf("prove sotto carico non essenziali") >= 0 &&
-        /sotto carico|durante il funzionamento/.test(text) &&
-        !/^disalimentare/.test(text)) {
-      return false;
-    }
-
-    return true;
-  });
-  if (decisionPolicy.allowedNextStep) {
-    diagnosticChecks.sort(function (a, b) {
-      var aIsNext = a.reason === decisionPolicy.allowedNextStep ? 1 : 0;
-      var bIsNext = b.reason === decisionPolicy.allowedNextStep ? 1 : 0;
-      if (aIsNext !== bIsNext) return bIsNext - aIsNext;
-      return (b.priority || 0) - (a.priority || 0);
-    });
-  }
   verifiche = diagnosticChecks.map(function (check) { return check.reason; });
   publicHypotheses = ipotesi.map(function (hypothesis) {
     var clean = Object.assign({}, hypothesis);
