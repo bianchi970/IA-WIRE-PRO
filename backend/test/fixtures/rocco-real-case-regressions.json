@@ -69,6 +69,7 @@
         "assenza tensione"
       ],
       "allowedNextStepAnyOf": [
+        "Disalimentare e verificare assenza tensione",
         "Solo verifica di sicurezza",
         "impianto in sicurezza"
       ],

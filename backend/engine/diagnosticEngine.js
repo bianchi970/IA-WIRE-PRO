@@ -3101,7 +3101,18 @@ function buildChecksFromMissingEvidence(hypotheses, safetyDecision) {
 function buildCaseState(facts, contradictions, hypotheses, safetyDecision, evidenceSet, causalInferenceResult) {
   var observedDomains = [];
   var unresolvedGaps = [];
-  var strongestHypothesis = null;
+  var finalHypotheses = Array.isArray(hypotheses) ? hypotheses : [];
+  var strongestHypothesis = finalHypotheses.length ? finalHypotheses[0] : null;
+  var topHypothesisId = strongestHypothesis && strongestHypothesis.id ? strongestHypothesis.id : null;
+  var competingHypothesisIds = strongestHypothesis
+    ? finalHypotheses.slice(1).filter(function (hypothesis) {
+      var scoreGap = Math.abs(Number(strongestHypothesis.score || 0) - Number(hypothesis && hypothesis.score || 0));
+      var deductionGap = Math.abs(Number(strongestHypothesis.deductionScore || 0) - Number(hypothesis && hypothesis.deductionScore || 0));
+      return scoreGap <= 0.12 || deductionGap <= 2;
+    }).map(function (hypothesis) {
+      return hypothesis.id;
+    }).slice(0, 3)
+    : [];
   var dominantRisk = safetyDecision.level !== "safe" ? safetyDecision.level : "general";
 
   function pushUnique(list, value) {
@@ -3153,19 +3164,8 @@ function buildCaseState(facts, contradictions, hypotheses, safetyDecision, evide
     "bruciato_fumo_odore"
   );
 
-  hypotheses.forEach(function (hypothesis) {
+  finalHypotheses.forEach(function (hypothesis) {
     var missingFacts = Array.isArray(hypothesis._missingFacts) ? hypothesis._missingFacts : [];
-
-    if (!strongestHypothesis) strongestHypothesis = hypothesis;
-    if (causalInferenceResult &&
-        causalInferenceResult.topHypothesisId &&
-        hypothesis.id === causalInferenceResult.topHypothesisId) {
-      strongestHypothesis = hypothesis;
-    } else if (strongestHypothesis &&
-        strongestHypothesis.livello === "non_verifiable" &&
-        hypothesis.livello !== "non_verifiable") {
-      strongestHypothesis = hypothesis;
-    }
 
     missingFacts.forEach(function (missingFact) {
       pushUnique(unresolvedGaps, missingFact);
@@ -3204,10 +3204,8 @@ function buildCaseState(facts, contradictions, hypotheses, safetyDecision, evide
   return {
     observedDomains: observedDomains,
     dominantRisk: dominantRisk,
-    topHypothesisId: causalInferenceResult && causalInferenceResult.topHypothesisId ? causalInferenceResult.topHypothesisId : null,
-    competingHypothesisIds: causalInferenceResult && Array.isArray(causalInferenceResult.competingHypothesisIds)
-      ? causalInferenceResult.competingHypothesisIds.slice(0)
-      : [],
+    topHypothesisId: topHypothesisId,
+    competingHypothesisIds: competingHypothesisIds,
     strongestHypothesis: strongestHypothesis ? {
       causa: strongestHypothesis.causa,
       family: strongestHypothesis.family || null,
@@ -3384,9 +3382,11 @@ function buildDecisionPolicy(caseState, safetyDecision, hypotheses, diagnosticCh
     immediateAction: "",
     allowedNextStep: topCheck ? stripTrailingDot(topCheck.reason) : "",
     blockedActions: [],
-    technicianPriority: caseState && caseState.dominantCauseFamily
-      ? caseState.dominantCauseFamily
-      : (topHypothesis ? (topHypothesis.causa || topHypothesis.family || "general") : "general")
+    technicianPriority: caseState && caseState.strongestHypothesis
+      ? (caseState.strongestHypothesis.family || caseState.strongestHypothesis.causa || "general")
+      : caseState && caseState.dominantCauseFamily
+        ? caseState.dominantCauseFamily
+        : (topHypothesis ? (topHypothesis.family || topHypothesis.causa || "general") : "general")
   };
 
   function pushBlocked(action) {
@@ -3396,7 +3396,7 @@ function buildDecisionPolicy(caseState, safetyDecision, hypotheses, diagnosticCh
 
   if (safetyDecision.level === "stop") {
     policy.immediateAction = "Mettere in sicurezza, disalimentare e verificare assenza tensione prima di qualsiasi altra attivita.";
-    policy.allowedNextStep = "Solo verifica di sicurezza e ispezione a impianto in sicurezza.";
+    policy.allowedNextStep = topCheck ? stripTrailingDot(topCheck.reason) : "Solo verifica di sicurezza e ispezione a impianto in sicurezza.";
     pushBlocked("prove sotto carico");
     pushBlocked("riarmo o riattivazione del circuito");
     pushBlocked("apertura del quadro in tensione");
@@ -3565,6 +3565,8 @@ function finalizeDiagnosticOutcome(params) {
   diagnosticChecks = rankDiagnosticChecksForCase(diagnosticChecks, caseState, safetyDecision, null);
   decisionPolicy = buildDecisionPolicy(caseState, safetyDecision, hypotheses, diagnosticChecks);
   diagnosticChecks = filterDiagnosticChecksByDecisionPolicy(diagnosticChecks, decisionPolicy);
+  diagnosticChecks = rankDiagnosticChecksForCase(diagnosticChecks, caseState, safetyDecision, null);
+  decisionPolicy = buildDecisionPolicy(caseState, safetyDecision, hypotheses, diagnosticChecks);
   diagnosticChecks = rankDiagnosticChecksForCase(diagnosticChecks, caseState, safetyDecision, decisionPolicy);
 
   return {
@@ -4664,6 +4666,9 @@ function analyzeTechnicalRequest(input, knowledge) {
     delete clean.recommendedChecks;
     delete clean.blockedBySafety;
     delete clean.learningBoost;
+    delete clean.deductionScore;
+    delete clean.learningMatchScore;
+    delete clean.learningMatchedCaseIds;
     delete clean.rankScore;
     delete clean._rawScore;
     delete clean._sourceHints;
@@ -4830,7 +4835,7 @@ function formatDiagnosticContext(diag) {
     lines.push("");
     lines.push("IPOTESI (da confermare con misure):");
     diag.ipotesi.slice(0, 6).forEach(function (ip) {
-      lines.push("- [" + ip.livello.toUpperCase() + "] " + ip.causa);
+      lines.push("- [" + String(ip.livello || "probable").toUpperCase() + "] " + ip.causa);
     });
   }
 
@@ -4881,8 +4886,8 @@ function formatOfflineAnswer(diag, message) {
   lines.push("IPOTESI:");
   if (diag.ipotesi.length) {
     diag.ipotesi.slice(0, 5).forEach(function (ip) {
-      var badge = ip.livello === "non_verificabile" ? "DA_VERIFICARE" :
-                  ip.livello === "confermato"       ? "CONFERMATO" : "PROBABILE";
+      var badge = ip.livello === "non_verifiable" ? "DA_VERIFICARE" :
+                  ip.livello === "confirmed"      ? "CONFERMATO" : "PROBABILE";
       lines.push("- [" + badge + "] " + ip.causa);
     });
   } else {
