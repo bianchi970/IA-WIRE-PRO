@@ -3470,10 +3470,20 @@ function safeGetClosedCaseLearningSignal(payload) {
       totalMatchedClosedCases: 0,
       allowCheckReorder: false,
       relevantLearnings: [],
+      learningMatches: [],
+      learningWarnings: [],
+      matchedCaseIds: [],
+      contradictedLearningIds: [],
+      boostedHypothesisIds: [],
+      matchScore: 0,
+      learningBoost: { hypotheses: 0, checks: 0 },
       learningMeta: {
         matchedLearnings: 0,
         recentLearnings: 0,
         staleLearnings: 0,
+        contradictedLearnings: 0,
+        weakLearnings: 0,
+        hardSafetyNeutralized: false,
         freshestAgeDays: null,
         appliedTemporalDecay: true
       },
@@ -3538,55 +3548,304 @@ function isRecentEnoughLearning(wrapper) {
   return !!wrapper && Number(wrapper.freshnessWeight || 0) >= 0.5;
 }
 
-function accumulateTemporalSignal(map, key, wrapper) {
-  var targetKey = normalizeLearningTargetKey(key);
-  var weight = Number(wrapper && wrapper.weightedRelevance || 0);
-
-  if (!targetKey || !weight) return;
-  if (!map[targetKey]) {
-    map[targetKey] = { recent: 0, stale: 0 };
-  }
-  if (isRecentEnoughLearning(wrapper)) {
-    map[targetKey].recent = Math.round((map[targetKey].recent + weight) * 10000) / 10000;
-  } else {
-    map[targetKey].stale = Math.round((map[targetKey].stale + weight) * 10000) / 10000;
-  }
-}
-
-function collapseTemporalSignal(signal) {
-  var recent = Number(signal && signal.recent || 0);
-  var stale = Number(signal && signal.stale || 0);
-  var finalWeight = 0;
-
-  if (recent > 0) {
-    finalWeight = recent + Math.min(stale, recent);
-  } else {
-    finalWeight = Math.min(stale, 0.35);
-  }
-
-  return Math.round(finalWeight * 10000) / 10000;
-}
-
 function toBoundedDelta(weight, maxDelta) {
   return Math.max(0, Math.min(maxDelta, Math.round(Number(weight || 0) * maxDelta)));
 }
 
-function resolveTemporalSignalWeight(signalMap, key) {
-  var targetKey = normalizeLearningTargetKey(key);
-  var bestWeight = 0;
+function uniqueLearningValues(values) {
+  var seen = {};
+  var out = [];
 
-  if (!targetKey) return 0;
-  if (signalMap[targetKey]) return collapseTemporalSignal(signalMap[targetKey]);
-
-  Object.keys(signalMap || {}).forEach(function (candidateKey) {
-    if (candidateKey === targetKey ||
-        candidateKey.indexOf(targetKey) >= 0 ||
-        targetKey.indexOf(candidateKey) >= 0) {
-      bestWeight = Math.max(bestWeight, collapseTemporalSignal(signalMap[candidateKey]));
-    }
+  (Array.isArray(values) ? values : values === undefined || values === null ? [] : [values]).forEach(function (value) {
+    var normalizedValue = normalizeLearningTargetKey(value);
+    if (!normalizedValue || seen[normalizedValue]) return;
+    seen[normalizedValue] = true;
+    out.push(normalizedValue);
   });
 
-  return bestWeight;
+  return out;
+}
+
+function extractLearningComponentHintsFromText(text) {
+  var normalizedText = normalizeLearningTargetKey(text);
+  var hints = [];
+  var componentPatterns = [
+    ["differenziale", /differenzial|salvavita|rcd|rcbo/],
+    ["magnetotermico", /magnetoterm|mcb|interruttor/],
+    ["contattore", /contattor|teleruttor/],
+    ["rele", /rele|relay/],
+    ["bobina", /bobina/],
+    ["motore", /motore/],
+    ["inverter", /inverter/],
+    ["wallbox", /wallbox|ricarica ev|auto elettric/],
+    ["fusibile", /fusibil|portafusibil/],
+    ["morsetto", /morsett/],
+    ["neutro", /neutro/],
+    ["cavo", /cavo|guaina|canalina/],
+    ["trasformatore", /trasformat|trafo/],
+    ["termico", /termic|salvamotor/],
+    ["sensore", /sensore|sonda/]
+  ];
+
+  componentPatterns.forEach(function (entry) {
+    if (entry[1].test(normalizedText)) hints.push(entry[0]);
+  });
+
+  return uniqueLearningValues(hints);
+}
+
+function extractLearningStateHintsFromText(text) {
+  var normalizedText = normalizeLearningTargetKey(text);
+  var states = [];
+  var statePatterns = [
+    ["rcd_trip", /differenzial.*scatta|rcd.*scatta|salvavita.*scatta|differenzial.*intervien/],
+    ["mcb_trip", /magnetoterm.*scatta|mcb.*scatta|interruttor.*scatta/],
+    ["burn_signs", /bruciat|fuma|odore|scintill|sciolto/],
+    ["temperature_high", /temperatur|surriscald|caldo/],
+    ["voltage_anomaly", /sovratension|sottotension|fuori range|anomalia rete/],
+    ["no_voltage_claim", /assenza tensione|manca tensione|senza tensione/],
+    ["high_current", /alta corrente|sovraccaric|assorbiment elevat/],
+    ["under_load", /sotto carico|quando accendo|quando uso|con carico/],
+    ["trips_no_load", /a vuoto|senza carico|tutto staccato/],
+    ["terminal_reference", /morsett|serragg|connession allentat/],
+    ["neutral_reference", /neutro|ritorno/],
+    ["isolation_low", /isolament.*basso|dispersion|guasto isolamento/]
+  ];
+
+  statePatterns.forEach(function (entry) {
+    if (entry[1].test(normalizedText)) states.push(entry[0]);
+  });
+
+  return uniqueLearningValues(states);
+}
+
+function scoreLearningSetOverlap(currentValues, storedValues) {
+  var left = uniqueLearningValues(currentValues);
+  var right = uniqueLearningValues(storedValues);
+  var intersection = 0;
+
+  if (!left.length || !right.length) return 0;
+
+  left.forEach(function (value) {
+    if (right.indexOf(value) >= 0) intersection += 1;
+  });
+
+  return Math.round((intersection / Math.max(left.length, right.length)) * 10000) / 10000;
+}
+
+function scoreLearningTextSimilarity(leftValue, rightValue) {
+  var left = normalizeLearningTargetKey(leftValue);
+  var right = normalizeLearningTargetKey(rightValue);
+  var leftTokens;
+  var rightTokens;
+  var union = {};
+  var unionSize = 0;
+  var intersection = 0;
+
+  if (!left || !right) return 0;
+  if (left === right) return 1;
+  if (left.indexOf(right) >= 0 || right.indexOf(left) >= 0) return 0.92;
+
+  leftTokens = left.split(" ").filter(function (token) { return token.length > 1; });
+  rightTokens = right.split(" ").filter(function (token) { return token.length > 1; });
+
+  leftTokens.forEach(function (token) {
+    if (!union[token]) {
+      union[token] = { left: false, right: false };
+      unionSize += 1;
+    }
+    union[token].left = true;
+  });
+  rightTokens.forEach(function (token) {
+    if (!union[token]) {
+      union[token] = { left: false, right: false };
+      unionSize += 1;
+    }
+    union[token].right = true;
+  });
+
+  if (!unionSize) return 0;
+  Object.keys(union).forEach(function (token) {
+    if (union[token].left && union[token].right) intersection += 1;
+  });
+
+  return Math.round((intersection / unionSize) * 10000) / 10000;
+}
+
+function scoreLearningMeasurementAlignment(currentMeasurements, storedMeasurements) {
+  var matched = 0;
+  var agreement = 0;
+  var conflict = 0;
+
+  (Array.isArray(currentMeasurements) ? currentMeasurements : []).forEach(function (currentMeasurement) {
+    (Array.isArray(storedMeasurements) ? storedMeasurements : []).forEach(function (storedMeasurement) {
+      var currentType = normalizeLearningTargetKey(currentMeasurement && currentMeasurement.type);
+      var storedType = normalizeLearningTargetKey(storedMeasurement && storedMeasurement.type);
+      var currentUnit = normalizeLearningTargetKey(currentMeasurement && currentMeasurement.unit);
+      var storedUnit = normalizeLearningTargetKey(storedMeasurement && storedMeasurement.unit);
+      var currentValue = Number(currentMeasurement && currentMeasurement.value);
+      var storedValue = Number(storedMeasurement && storedMeasurement.value);
+      var relativeGap;
+
+      if (!currentType || currentType !== storedType || currentUnit !== storedUnit) return;
+      if (!Number.isFinite(currentValue) || !Number.isFinite(storedValue)) return;
+
+      matched += 1;
+      relativeGap = Math.abs(currentValue - storedValue) / Math.max(Math.abs(currentValue), Math.abs(storedValue), 1);
+      if (relativeGap <= 0.25) {
+        agreement += 1;
+      } else if (relativeGap >= 0.55) {
+        conflict += 1;
+      }
+    });
+  });
+
+  if (!matched) {
+    return { agreement: 0, conflict: 0 };
+  }
+
+  return {
+    agreement: Math.round((agreement / matched) * 10000) / 10000,
+    conflict: Math.round((conflict / matched) * 10000) / 10000
+  };
+}
+
+function collectCurrentLearningStates(facts, caseState) {
+  var states = [];
+
+  [
+    "rcd_trip",
+    "mcb_trip",
+    "burn_signs",
+    "temperature_high",
+    "voltage_anomaly",
+    "voltage_nominal",
+    "no_voltage_claim",
+    "high_current",
+    "under_load",
+    "trips_no_load",
+    "terminal_reference",
+    "neutral_reference",
+    "isolation_low",
+    "isolation_high"
+  ].forEach(function (key) {
+    if (hasFact(facts, key)) states.push(key);
+  });
+
+  if (caseState && caseState.dominantRisk) {
+    states.push("risk:" + normalizeLearningTargetKey(caseState.dominantRisk));
+  }
+
+  return uniqueLearningValues(states);
+}
+
+function buildCurrentLearningProfile(hypotheses, facts, caseState) {
+  var safeHypotheses = Array.isArray(hypotheses) ? hypotheses : [];
+  var families = [];
+  var categories = [];
+  var components = [];
+  var symptoms = [];
+
+  safeHypotheses.slice(0, 4).forEach(function (hypothesis) {
+    if (hypothesis && hypothesis.family) families.push(hypothesis.family);
+    if (hypothesis && hypothesis.category) categories.push(hypothesis.category);
+    if (hypothesis && hypothesis.causa) symptoms.push(hypothesis.causa);
+    if (hypothesis && hypothesis.symptom) symptoms.push(hypothesis.symptom);
+    components = components.concat(extractLearningComponentHintsFromText([
+      hypothesis && hypothesis.causa,
+      hypothesis && hypothesis.symptom
+    ].join(" ")));
+  });
+
+  if (caseState && caseState.dominantCauseFamily) families.push(caseState.dominantCauseFamily);
+  if (caseState && Array.isArray(caseState.observedDomains)) symptoms = symptoms.concat(caseState.observedDomains);
+  if (caseState && caseState.strongestHypothesis && caseState.strongestHypothesis.causa) {
+    symptoms.push(caseState.strongestHypothesis.causa);
+  }
+
+  getFactsByType(facts, "matched_component").forEach(function (fact) {
+    components.push(fact.value);
+  });
+  getFactsByType(facts, "matched_keyword").forEach(function (fact) {
+    components = components.concat(extractLearningComponentHintsFromText(fact.value));
+  });
+
+  return {
+    families: uniqueLearningValues(families),
+    categories: uniqueLearningValues(categories),
+    components: uniqueLearningValues(components),
+    symptoms: uniqueLearningValues(symptoms),
+    states: collectCurrentLearningStates(facts, caseState),
+    measurements: (Array.isArray(facts) ? facts : []).filter(function (fact) {
+      return fact && fact.unit && typeof fact.value === "number";
+    }).slice(0, 8).map(function (fact) {
+      return {
+        type: fact.type,
+        value: fact.value,
+        unit: fact.unit
+      };
+    }),
+    dominantRisk: normalizeLearningTargetKey(caseState && caseState.dominantRisk)
+  };
+}
+
+function buildStoredLearningProfile(record) {
+  var safeRecord = record || {};
+  var fingerprint = safeRecord.caseFingerprint || {};
+  var family = normalizeLearningTargetKey(safeRecord.dominantCauseFamily || fingerprint.dominantCauseFamily);
+  var confirmedCause = safeRecord.confirmedCause || "";
+  var sourceText = [
+    confirmedCause,
+    (safeRecord.initialTopHypotheses || []).join(" "),
+    (safeRecord.decisiveChecks || []).join(" "),
+    (safeRecord.rejectedCauses || []).join(" "),
+    (safeRecord.reusableSignals || []).join(" "),
+    (fingerprint.topSymptoms || []).join(" "),
+    (fingerprint.topFacts || []).join(" "),
+    (fingerprint.strongSignals || []).join(" ")
+  ].join(" ");
+
+  return {
+    caseId: safeRecord.id || (fingerprint && fingerprint.key) || null,
+    family: family,
+    category: normalizeLearningTargetKey(resolveHypothesisCategory(family, confirmedCause)),
+    components: extractLearningComponentHintsFromText(sourceText),
+    symptoms: uniqueLearningValues(
+      []
+        .concat(safeRecord.initialTopHypotheses || [])
+        .concat([confirmedCause])
+        .concat(fingerprint.topSymptoms || [])
+        .concat(fingerprint.topFacts || [])
+        .concat((safeRecord.reusableSignals || []).map(function (signal) {
+          return String(signal || "").replace(/^(risk|family|top|check):/i, "");
+        }))
+    ),
+    states: uniqueLearningValues(
+      extractLearningStateHintsFromText(sourceText)
+        .concat((fingerprint.strongSignals || []).map(function (signal) {
+          return String(signal || "").split(":")[0];
+        }))
+    ),
+    measurements: Array.isArray(safeRecord.reusableThresholds) && safeRecord.reusableThresholds.length
+      ? safeRecord.reusableThresholds.slice(0, 8)
+      : (Array.isArray(fingerprint.keyMeasurements) ? fingerprint.keyMeasurements.slice(0, 8) : []),
+    dominantRisk: normalizeLearningTargetKey(safeRecord.dominantRisk || fingerprint.dominantRisk),
+    confirmedCause: confirmedCause,
+    decisiveChecks: Array.isArray(safeRecord.decisiveChecks) ? safeRecord.decisiveChecks.slice(0, 6) : []
+  };
+}
+
+function computeLearningStateConflict(currentStates, storedStates) {
+  var current = uniqueLearningValues(currentStates);
+  var stored = uniqueLearningValues(storedStates);
+
+  if (!current.length || !stored.length) return 0;
+  if (stored.indexOf("trips_no_load") >= 0 && current.indexOf("under_load") >= 0 && current.indexOf("trips_no_load") < 0) return 0.8;
+  if (stored.indexOf("no_voltage_claim") >= 0 && current.indexOf("voltage_nominal") >= 0 && current.indexOf("voltage_anomaly") < 0) return 0.8;
+  if (stored.indexOf("isolation_low") >= 0 && current.indexOf("isolation_high") >= 0) return 0.9;
+  if (stored.indexOf("high_current") >= 0 && current.indexOf("high_current") < 0 && current.indexOf("voltage_nominal") >= 0) return 0.5;
+
+  return 0;
 }
 
 function isLearningContradictedByFacts(wrapper, facts) {
@@ -3603,12 +3862,135 @@ function isLearningContradictedByFacts(wrapper, facts) {
     return true;
   }
   if ((family === "sovraccarico" || /sovraccaric/.test(cause)) &&
-      hasFact(facts, "light_load") &&
-      !hasFact(facts, "high_current")) {
+      !hasFact(facts, "high_current") &&
+      hasFact(facts, "voltage_nominal")) {
     return true;
   }
 
   return false;
+}
+
+function evaluateClosedCaseLearningMatch(wrapper, currentProfile, facts) {
+  var storedProfile = buildStoredLearningProfile(wrapper && wrapper.record);
+  var familyMatch = storedProfile.family && currentProfile.families.indexOf(storedProfile.family) >= 0 ? 1 : 0;
+  var categoryMatch = storedProfile.category && currentProfile.categories.indexOf(storedProfile.category) >= 0 ? 1 : 0;
+  var componentOverlap = scoreLearningSetOverlap(currentProfile.components, storedProfile.components);
+  var symptomOverlap = scoreLearningSetOverlap(currentProfile.symptoms, storedProfile.symptoms);
+  var stateOverlap = scoreLearningSetOverlap(currentProfile.states, storedProfile.states);
+  var measurementAlignment = scoreLearningMeasurementAlignment(currentProfile.measurements, storedProfile.measurements);
+  var stateConflict = computeLearningStateConflict(currentProfile.states, storedProfile.states);
+  var explicitContradiction = isLearningContradictedByFacts(wrapper, facts);
+  var priorScore = Math.max(0, Math.min(1, Number(wrapper && wrapper.weightedRelevance || 0)));
+  var dominantRiskMatch = storedProfile.dominantRisk && storedProfile.dominantRisk === currentProfile.dominantRisk ? 1 : 0;
+  var positiveScore =
+    (familyMatch * 0.26) +
+    (categoryMatch * 0.08) +
+    (componentOverlap * 0.12) +
+    (symptomOverlap * 0.18) +
+    (stateOverlap * 0.14) +
+    (measurementAlignment.agreement * 0.14) +
+    (dominantRiskMatch * 0.08) +
+    (priorScore * 0.12);
+  var negativeScore =
+    (measurementAlignment.conflict * 0.22) +
+    (stateConflict * 0.18) +
+    (explicitContradiction ? 0.42 : 0);
+  var matchScore = Math.max(0, Math.min(1, Math.round((positiveScore - negativeScore) * 10000) / 10000));
+  var warnings = [];
+  var contradicted = explicitContradiction || measurementAlignment.conflict >= 0.5 || stateConflict >= 0.8;
+
+  if (!familyMatch && symptomOverlap < 0.2 && componentOverlap < 0.2) {
+    warnings.push("weak_context_alignment");
+  }
+  if (measurementAlignment.conflict >= 0.5) {
+    warnings.push("measurement_conflict");
+  }
+  if (stateConflict >= 0.8) {
+    warnings.push("state_conflict");
+  }
+  if (explicitContradiction) {
+    warnings.push("contradicted_by_current_facts");
+  }
+
+  return {
+    caseId: storedProfile.caseId,
+    storedProfile: storedProfile,
+    matchScore: matchScore,
+    familyMatch: familyMatch,
+    categoryMatch: categoryMatch,
+    componentOverlap: componentOverlap,
+    symptomOverlap: symptomOverlap,
+    stateOverlap: stateOverlap,
+    measurementAlignment: measurementAlignment,
+    stateConflict: stateConflict,
+    contradicted: contradicted,
+    warnings: warnings,
+    decisiveChecks: storedProfile.decisiveChecks
+  };
+}
+
+function resolveLearningHypothesisTargets(matchEntry, hypotheses) {
+  var rankedTargets = [];
+
+  (Array.isArray(hypotheses) ? hypotheses : []).forEach(function (hypothesis) {
+    var causeSimilarity = scoreLearningTextSimilarity(hypothesis && hypothesis.causa, matchEntry && matchEntry.storedProfile && matchEntry.storedProfile.confirmedCause);
+    var familyMatch = matchEntry && matchEntry.storedProfile && hypothesis && hypothesis.family === matchEntry.storedProfile.family ? 1 : 0;
+    var categoryMatch = matchEntry && matchEntry.storedProfile && hypothesis && normalizeLearningTargetKey(hypothesis.category) === matchEntry.storedProfile.category ? 1 : 0;
+    var componentBonus = hypothesis && hypothesis.causa
+      ? scoreLearningSetOverlap(
+          extractLearningComponentHintsFromText(hypothesis.causa),
+          matchEntry && matchEntry.storedProfile ? matchEntry.storedProfile.components : []
+        )
+      : 0;
+    var targetScore = (causeSimilarity * 0.7) + (familyMatch * 0.2) + (categoryMatch * 0.05) + (componentBonus * 0.05);
+    var hasDirectEvidence = causeSimilarity >= 0.38 || (familyMatch && componentBonus >= 0.5);
+
+    if (!hasDirectEvidence || targetScore < 0.58) return;
+    rankedTargets.push({
+      hypothesis: hypothesis,
+      targetScore: targetScore
+    });
+  });
+
+  rankedTargets.sort(function (a, b) { return b.targetScore - a.targetScore; });
+  return rankedTargets.slice(0, 2);
+}
+
+function resolveLearningCheckTargets(matchEntry, diagnosticChecks) {
+  var rankedTargets = [];
+  var decisiveChecks = matchEntry && Array.isArray(matchEntry.decisiveChecks) ? matchEntry.decisiveChecks : [];
+
+  (Array.isArray(diagnosticChecks) ? diagnosticChecks : []).forEach(function (check) {
+    var bestSimilarity = 0;
+    var familyBonus = Array.isArray(check && check.basedOnFacts) &&
+      matchEntry &&
+      matchEntry.storedProfile &&
+      check.basedOnFacts.indexOf(matchEntry.storedProfile.family) >= 0 ? 0.15 : 0;
+
+    decisiveChecks.forEach(function (storedCheck) {
+      bestSimilarity = Math.max(bestSimilarity, scoreLearningTextSimilarity(check && check.reason, storedCheck));
+    });
+
+    if ((bestSimilarity + familyBonus) < 0.58) return;
+    rankedTargets.push({
+      check: check,
+      targetScore: bestSimilarity + familyBonus
+    });
+  });
+
+  rankedTargets.sort(function (a, b) { return b.targetScore - a.targetScore; });
+  return rankedTargets.slice(0, 3);
+}
+
+function buildLearningBoostEntry(boost, matchedClosedCases, matchedLabel, matchedCaseIds, matchScore, warnings) {
+  return {
+    boost: boost,
+    matchedClosedCases: matchedClosedCases,
+    matchedLabel: matchedLabel,
+    matchedCaseIds: uniqueLearningValues(matchedCaseIds),
+    matchScore: Math.round(Number(matchScore || 0) * 10000) / 10000,
+    warnings: uniqueLearningValues(warnings)
+  };
 }
 
 function applyRelevantLearnings(hypotheses, diagnosticChecks, relevantLearnings, facts, caseState, safetyDecision, baseSignal) {
@@ -3633,96 +4015,139 @@ function applyRelevantLearnings(hypotheses, diagnosticChecks, relevantLearnings,
     return String(b.timestamp || "").localeCompare(String(a.timestamp || ""));
   }).slice(0, MAX_RELEVANT_LEARNINGS);
   var safeSafetyDecision = safetyDecision || {};
-  var causeSupportSignals = {};
-  var causeRejectSignals = {};
-  var checkPrioritySignals = {};
-  var correctedErrorSignals = {};
+  var hardSafety = safeSafetyDecision.level === "danger" || safeSafetyDecision.level === "stop";
+  var currentProfile = buildCurrentLearningProfile(safeHypotheses, facts, caseState);
   var hypothesisBoosts = {};
   var checkBoosts = {};
-  var eligibleLearnings = [];
+  var learningMatches = [];
+  var learningWarnings = [];
+  var contradictedLearningIds = [];
+  var matchedCaseIds = [];
+  var boostedHypothesisIds = [];
   var learningMeta = {
     matchedLearnings: 0,
     recentLearnings: 0,
     staleLearnings: 0,
     freshestAgeDays: null,
+    contradictedLearnings: 0,
+    weakLearnings: 0,
+    hardSafetyNeutralized: hardSafety,
     appliedTemporalDecay: true
   };
 
   wrappers.forEach(function (wrapper) {
-    var record = wrapper && wrapper.record ? wrapper.record : {};
+    var matchEntry = evaluateClosedCaseLearningMatch(wrapper, currentProfile, facts);
+    var caseId = matchEntry.caseId || ("learning-" + learningMatches.length);
 
-    if (isLearningContradictedByFacts(wrapper, facts)) return;
-    eligibleLearnings.push(wrapper);
-    learningMeta.matchedLearnings += 1;
-    if (isRecentEnoughLearning(wrapper)) {
-      learningMeta.recentLearnings += 1;
-    } else {
-      learningMeta.staleLearnings += 1;
-    }
     if (wrapper.ageDays !== null && wrapper.ageDays !== undefined) {
       learningMeta.freshestAgeDays = learningMeta.freshestAgeDays === null
         ? wrapper.ageDays
         : Math.min(learningMeta.freshestAgeDays, wrapper.ageDays);
     }
 
-    accumulateTemporalSignal(causeSupportSignals, record.confirmedCause, wrapper);
-    (record.rejectedCauses || []).forEach(function (cause) {
-      accumulateTemporalSignal(causeRejectSignals, cause, wrapper);
-    });
-    (record.decisiveChecks || []).forEach(function (check) {
-      accumulateTemporalSignal(checkPrioritySignals, check, wrapper);
-    });
-    (record.correctedErrors || []).forEach(function (errorKey) {
-      accumulateTemporalSignal(correctedErrorSignals, errorKey, wrapper);
-    });
+    if (matchEntry.contradicted) {
+      contradictedLearningIds.push(caseId);
+      learningMeta.contradictedLearnings += 1;
+      learningWarnings = learningWarnings.concat(matchEntry.warnings);
+      return;
+    }
+
+    if (matchEntry.matchScore < 0.56) {
+      learningMeta.weakLearnings += 1;
+      learningWarnings = learningWarnings.concat(matchEntry.warnings);
+      return;
+    }
+
+    learningMeta.matchedLearnings += 1;
+    if (isRecentEnoughLearning(wrapper)) learningMeta.recentLearnings += 1;
+    else learningMeta.staleLearnings += 1;
+
+    matchEntry.caseId = caseId;
+    matchEntry.recencyBand = wrapper.recencyBand;
+    matchEntry.freshnessWeight = wrapper.freshnessWeight;
+    learningMatches.push(matchEntry);
+    matchedCaseIds.push(caseId);
+    learningWarnings = learningWarnings.concat(matchEntry.warnings);
   });
 
-  safeHypotheses.forEach(function (hypothesis) {
-    var causeKey = normalizeLearningTargetKey(hypothesis && hypothesis.causa);
-    var familyKey = normalizeLearningTargetKey(hypothesis && hypothesis.family);
-    var supportWeight = resolveTemporalSignalWeight(causeSupportSignals, causeKey);
-    var rejectWeight = resolveTemporalSignalWeight(causeRejectSignals, causeKey);
-    var errorWeight = Math.max(
-      resolveTemporalSignalWeight(correctedErrorSignals, causeKey),
-      resolveTemporalSignalWeight(correctedErrorSignals, familyKey)
-    );
-    var supportDelta = toBoundedDelta(supportWeight, 4);
-    var rejectDelta = toBoundedDelta(rejectWeight, 3);
-    var errorDelta = toBoundedDelta(errorWeight, 2);
-    var netDelta = supportDelta - rejectDelta - errorDelta;
+  if (!hardSafety) {
+    learningMatches.forEach(function (matchEntry) {
+      var targetHypotheses = resolveLearningHypothesisTargets(matchEntry, safeHypotheses);
+      var hypothesisDelta = matchEntry.matchScore >= 0.82 && matchEntry.freshnessWeight >= 0.5 ? 2 : 1;
+      var targetChecks;
+      var checkDelta;
 
-    if (!causeKey || !netDelta) return;
-    hypothesisBoosts[causeKey] = {
-      boost: netDelta,
-      matchedClosedCases: learningMeta.matchedLearnings,
-      matchedLabel: hypothesis.causa
-    };
-  });
+      targetHypotheses.forEach(function (target) {
+        var hypothesis = target.hypothesis;
+        var keys = uniqueLearningValues([hypothesis.id, hypothesis.causa]);
+        var existing = hypothesisBoosts[hypothesis.id] || null;
+        var nextBoost = Math.min(2, (existing ? existing.boost : 0) + hypothesisDelta);
+        var entry = buildLearningBoostEntry(
+          nextBoost,
+          learningMeta.matchedLearnings,
+          hypothesis.causa,
+          (existing && existing.matchedCaseIds || []).concat([matchEntry.caseId]),
+          Math.max(existing ? existing.matchScore : 0, matchEntry.matchScore),
+          (existing && existing.warnings || []).concat(matchEntry.warnings || [])
+        );
 
-  if (!(baseSignal && baseSignal.allowCheckReorder) || safeSafetyDecision.level === "danger" || safeSafetyDecision.level === "stop") {
-    checkPrioritySignals = {};
+        keys.forEach(function (key) {
+          if (!key) return;
+          hypothesisBoosts[key] = entry;
+        });
+        boostedHypothesisIds.push(hypothesis.id);
+      });
+
+      targetChecks = resolveLearningCheckTargets(matchEntry, safeChecks);
+      checkDelta = matchEntry.matchScore >= 0.84 && matchEntry.freshnessWeight >= 0.5 ? 2 : 1;
+      targetChecks.forEach(function (target) {
+        var check = target.check;
+        var existing = checkBoosts[check.id] || null;
+        var nextBoost = Math.min(2, (existing ? existing.boost : 0) + checkDelta);
+        var entry = buildLearningBoostEntry(
+          nextBoost,
+          learningMeta.matchedLearnings,
+          check.reason,
+          (existing && existing.matchedCaseIds || []).concat([matchEntry.caseId]),
+          Math.max(existing ? existing.matchScore : 0, matchEntry.matchScore),
+          (existing && existing.warnings || []).concat(matchEntry.warnings || [])
+        );
+
+        checkBoosts[check.id] = entry;
+        checkBoosts[normalizeLearningTargetKey(check.reason)] = entry;
+      });
+    });
+  } else if (learningMatches.length) {
+    learningWarnings.push("neutralized_by_hard_safety");
   }
 
-  safeChecks.forEach(function (check) {
-    var checkKey = normalizeLearningTargetKey(check && check.reason);
-    var checkWeight = resolveTemporalSignalWeight(checkPrioritySignals, checkKey);
-    var checkDelta = toBoundedDelta(checkWeight, 3);
-
-    if (!checkKey || !checkDelta) return;
-    checkBoosts[checkKey] = {
-      boost: checkDelta,
-      matchedClosedCases: learningMeta.matchedLearnings,
-      matchedLabel: check.reason
-    };
-  });
-
   return {
-    applied: Object.keys(hypothesisBoosts).length > 0 || Object.keys(checkBoosts).length > 0,
+    applied: !hardSafety && (Object.keys(hypothesisBoosts).length > 0 || Object.keys(checkBoosts).length > 0),
     fingerprint: baseSignal && baseSignal.fingerprint,
-    totalMatchedClosedCases: learningMeta.matchedLearnings,
-    allowCheckReorder: !!(baseSignal && baseSignal.allowCheckReorder),
-    relevantLearnings: eligibleLearnings,
+    totalMatchedClosedCases: !hardSafety ? learningMeta.matchedLearnings : 0,
+    allowCheckReorder: !!(baseSignal && baseSignal.allowCheckReorder) && !hardSafety,
+    relevantLearnings: learningMatches.slice(0),
     learningMeta: learningMeta,
+    learningMatches: learningMatches.map(function (entry) {
+      return {
+        caseId: entry.caseId,
+        matchScore: entry.matchScore,
+        recencyBand: entry.recencyBand,
+        freshnessWeight: entry.freshnessWeight,
+        family: entry.storedProfile.family,
+        category: entry.storedProfile.category,
+        warnings: entry.warnings.slice(0)
+      };
+    }),
+    learningWarnings: uniqueLearningValues(learningWarnings),
+    matchedCaseIds: uniqueLearningValues(matchedCaseIds),
+    contradictedLearningIds: uniqueLearningValues(contradictedLearningIds),
+    boostedHypothesisIds: uniqueLearningValues(boostedHypothesisIds),
+    matchScore: learningMatches.length ? Math.max.apply(null, learningMatches.map(function (entry) { return entry.matchScore; })) : 0,
+    learningBoost: {
+      hypotheses: Object.keys(hypothesisBoosts).filter(function (key) { return /^H[-_A-Z0-9]/i.test(key); }).length,
+      checks: Object.keys(checkBoosts).filter(function (key) { return /^CHK/i.test(key); }).length
+    },
     hypothesisBoosts: hypothesisBoosts,
     checkBoosts: checkBoosts
   };

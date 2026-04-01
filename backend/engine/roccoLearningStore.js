@@ -536,14 +536,28 @@ function applyClosedCaseLearningToHypotheses(hypotheses, learningSignal) {
 
   return hypotheses.map(function (hypothesis, index) {
     var label = normalizeText(pickHypothesisLabel(hypothesis));
-    var learning = learningSignal.hypothesisBoosts && learningSignal.hypothesisBoosts[label] || null;
+    var hypothesisId = normalizeText(hypothesis && hypothesis.id);
+    var learning = learningSignal.hypothesisBoosts && (
+      learningSignal.hypothesisBoosts[hypothesisId] ||
+      learningSignal.hypothesisBoosts[label]
+    ) || null;
     var baseScore = getHypothesisBaseScore(hypothesis, index);
+    var boost = Number(learning && learning.boost || 0);
+    var adjustedScore = round(baseScore + boost);
+
+    if (learning && boost) {
+      hypothesis.learningBoost = boost;
+      hypothesis.learningMatchScore = Number(learning.matchScore || 0);
+      hypothesis.learningMatchedCaseIds = Array.isArray(learning.matchedCaseIds) ? learning.matchedCaseIds.slice(0, 4) : [];
+      hypothesis.rankScore = adjustedScore;
+      hypothesis.deductionScore = adjustedScore;
+    }
 
     return {
       hypothesis: hypothesis,
       index: index,
       certaintyRank: getHypothesisCertaintyRank(hypothesis),
-      sortScore: round(baseScore + Number(learning && learning.boost || 0))
+      sortScore: adjustedScore
     };
   }).sort(function (left, right) {
     if (right.certaintyRank !== left.certaintyRank) return right.certaintyRank - left.certaintyRank;
@@ -593,14 +607,25 @@ function applyClosedCaseLearningToDiagnosticChecks(diagnosticChecks, learningSig
 
   return diagnosticChecks.map(function (check, index) {
     var label = normalizeText(pickCheckLabel(check));
-    var learning = learningSignal.checkBoosts && learningSignal.checkBoosts[label] || null;
+    var checkId = normalizeText(check && check.id);
+    var learning = learningSignal.checkBoosts && (
+      learningSignal.checkBoosts[checkId] ||
+      learningSignal.checkBoosts[label]
+    ) || null;
+    var boost = Number(learning && learning.boost || 0);
+
+    if (learning && boost) {
+      check.learningBoost = boost;
+      check.learningMatchScore = Number(learning.matchScore || 0);
+      check.learningMatchedCaseIds = Array.isArray(learning.matchedCaseIds) ? learning.matchedCaseIds.slice(0, 4) : [];
+    }
 
     return {
       check: check,
       index: index,
       safetyRank: isSafetyCriticalCheck(check) ? 1 : 0,
       explicitPriority: priorityRank(check && (check.priorityLevel || check.urgency || check.priority)),
-      learningBoost: Number(learning && learning.boost || 0)
+      learningBoost: boost
     };
   }).sort(function (left, right) {
     if (right.safetyRank !== left.safetyRank) return right.safetyRank - left.safetyRank;
