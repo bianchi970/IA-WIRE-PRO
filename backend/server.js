@@ -19,7 +19,7 @@ const OpenAI = require("openai");
 const { Ollama } = require("ollama");
 const rocco = require("./rocco");
 const { fetchKnowledgeContext, getLoadedKnowledge } = require("./knowledge");
-const { analyzeTechnicalRequest, formatDiagnosticContext, formatOfflineAnswer, TEST_CASE } = require("./engine/diagnosticEngine");
+const { analyzeTechnicalRequest, recordClosedCaseLearning, formatDiagnosticContext, formatOfflineAnswer, TEST_CASE } = require("./engine/diagnosticEngine");
 const { normalizeCertainty } = require("./utils/certainty");
 const { extractComponents, formatComponents } = require("./rocco/componentRecognizer");
 const { extractElectricalValues, formatElectricalValues, checkAnomalies } = require("./rocco/numericRecognizer");
@@ -254,6 +254,19 @@ function parseHistory(raw) {
 }
 
 // ✅ Trova un file immagine tra tanti fieldname (compatibilità totale)
+function parseOptionalJsonField(value) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch (_) {
+      return { __invalidJson: true };
+    }
+  }
+  return { __invalidJson: true };
+}
+
 function pickFirstImageFile(files) {
   const arr = Array.isArray(files) ? files : [];
   if (!arr.length) return null;
@@ -674,6 +687,124 @@ function isNetworkError(err) {
          msg.indexOf("econnreset") >= 0 ||
          msg.indexOf("fetch failed") >= 0 ||
          msg.indexOf("network") >= 0;
+}
+
+function isRecoverableProviderError(error) {
+  if (!error) return false;
+  if (isNetworkError(error)) return true;
+
+  var code = String(error.code || "").toUpperCase();
+  var msg = String(error.message || "").toLowerCase();
+  var recoverableCodes = [
+    "ENOTFOUND",
+    "ETIMEDOUT",
+    "ECONNRESET",
+    "ECONNREFUSED",
+    "EAI_AGAIN",
+    "ENETUNREACH",
+    "ECONNABORTED"
+  ];
+
+  if (recoverableCodes.indexOf(code) >= 0) return true;
+
+  return msg.indexOf("timeout") >= 0 ||
+         msg.indexOf("timed out") >= 0 ||
+         msg.indexOf("connection error") >= 0 ||
+         msg.indexOf("connect error") >= 0 ||
+         msg.indexOf("connection refused") >= 0 ||
+         msg.indexOf("provider unavailable") >= 0 ||
+         msg.indexOf("fetch failed") >= 0 ||
+         msg.indexOf("socket hang up") >= 0 ||
+         msg.indexOf("econnreset") >= 0 ||
+         msg.indexOf("etimedout") >= 0 ||
+         msg.indexOf("enotfound") >= 0 ||
+         msg.indexOf("econnrefused") >= 0;
+}
+
+function shouldFallbackToOffline(error, providerResult) {
+  if (isRecoverableProviderError(error)) return true;
+  if (!providerResult || typeof providerResult !== "object") return true;
+  if (typeof providerResult.answer !== "string" || !providerResult.answer.trim()) return true;
+  return false;
+}
+
+function buildChatResponsePayload({ usedProvider, usedModel, fallbackUsed, answer, convId, dbContextText, docChunksText, knowledgeText, visionText, contextBlock, engineDiag, message, foundResult }) {
+  return {
+    ok: true,
+    answer: answer,
+    conversation_id: convId,
+    signature: "ROCCO-CHAT-V2",
+    rag: {
+      usedDbContext: Boolean(dbContextText),
+      usedDocChunks: Boolean(docChunksText),
+      usedKnowledge: Boolean(knowledgeText),
+      visionAnalysis: Boolean(visionText),
+      contextBlockLen: contextBlock.length
+    },
+    engine: engineDiag ? {
+      active: true,
+      isTechnical: engineDiag.isTechnical,
+      isDangerous: engineDiag.isDangerous,
+      matchedPatterns: engineDiag.matchedPatterns,
+      matchedRules: engineDiag.matchedRules,
+      matchedComponents: engineDiag.matchedComponents,
+      recognizedComponents: extractComponents(message),
+    } : { active: false, recognizedComponents: extractComponents(message) },
+    foundation: foundResult && !foundResult.outOfScope ? {
+      patternId:    foundResult.patternId  || null,
+      components:   foundResult.components || [],
+      anomalies:    foundResult.anomalies  || [],
+      topHypothesis: (foundResult.hypotheses && foundResult.hypotheses.length)
+        ? foundResult.hypotheses[0].text || null
+        : null,
+      outOfScope: false,
+    } : (foundResult && foundResult.outOfScope ? { outOfScope: true } : null),
+  };
+}
+
+async function finalizeChatResponse({ req, res, responsePayload, closedCaseFeedback, hasClosedCaseFeedback, diagnosticResult, source, convId, userId, message, plan, usedProvider, usedModel }) {
+  var answer = responsePayload && responsePayload.answer ? responsePayload.answer : "";
+  var learningResultCompact = null;
+
+  await msgInsert({
+    conversation_id: convId,
+    role: "assistant",
+    content: answer,
+    content_format: "text",
+    provider: usedProvider,
+    model: usedModel,
+    certainty: extractCertainty(answer),
+  });
+  await convTouch(convId);
+  generateContextSummary(convId, usedProvider).catch(function () {});
+  autoSaveDiagnosi({ convId, userId: userId, message, answer, domain: plan.domain, certezza: extractCertainty(answer), engineDiag: diagnosticResult }).catch(function () {});
+
+  if (hasClosedCaseFeedback) {
+    if (closedCaseFeedback && closedCaseFeedback.__invalidJson) {
+      learningResultCompact = { recorded: false, reason: "invalid_closed_case_feedback_json" };
+    } else {
+      var learningResult = recordClosedCaseLearning({
+        diagnosticResult: diagnosticResult,
+        closedCase: closedCaseFeedback,
+      });
+      learningResultCompact = {
+        recorded: learningResult && learningResult.recorded === true,
+        reason: learningResult && Object.prototype.hasOwnProperty.call(learningResult, "reason")
+          ? learningResult.reason
+          : null,
+      };
+    }
+
+    if (learningResultCompact.recorded) {
+      console.log("ROCCO learning saved");
+    } else {
+      console.log("ROCCO learning skipped: " + (learningResultCompact.reason || "unknown"));
+    }
+
+  }
+
+  console.log("chat_finalized_source=" + source);
+  return res.json(responsePayload);
 }
 
 // =========================
@@ -1218,6 +1349,8 @@ app.post("/api/chat", uploadAny, async (req, res) => {
     const provider = body.provider || null;
     const user_id = body.user_id || null;
     let convId = body.conversation_id ? parseInt(body.conversation_id, 10) || null : null;
+    const hasClosedCaseFeedback = Object.prototype.hasOwnProperty.call(body, "closedCaseFeedback");
+    const closedCaseFeedback = hasClosedCaseFeedback ? parseOptionalJsonField(body.closedCaseFeedback) : null;
 
     // ✅ immagini: raccoglie tutti i file immagine (max 3) — supporta upload multiplo
     let imagesBase64 = [];
@@ -1498,12 +1631,6 @@ app.post("/api/chat", uploadAny, async (req, res) => {
 
     // ===== ROUTING MULTI-IA + FALLBACK (FASE 6) =====
     const queue = buildProviderQueue(provider);
-    if (!queue.length) {
-      return res.status(500).json({
-        error: "Nessun provider configurato: manca OPENAI_API_KEY e/o ANTHROPIC_API_KEY in .env",
-      });
-    }
-
     const contextBlock = buildContextBlock({ dbContextText, docChunksText, knowledgeText: knowledgeText + (knowledgeCasiText ? "\n\n" + knowledgeCasiText : "") + (memoriaContext ? "\n\n" + memoriaContext : "") + (deviceKbText ? "\n\n" + deviceKbText : ""), engineText, visionText });
     const callParams = { systemPrompt, shortHistory, imageBase64, imagesBase64, message, contextBlock };
 
@@ -1511,13 +1638,14 @@ app.post("/api/chat", uploadAny, async (req, res) => {
     let usedProvider = null;
     let usedModel = null;
     let fallbackUsed = false;
-    let lastErr = null;
+    let providerResult = null;
+    let providerFailure = queue.length ? null : new Error("provider unavailable");
 
     for (var qi = 0; qi < queue.length; qi++) {
       var p = queue[qi];
       if (qi > 0) {
         fallbackUsed = true;
-        console.warn("  \u26A1 Fallback \u2192 " + p + " (primario fallito: " + ((lastErr && lastErr.message) || lastErr) + ")");
+        console.warn("  \u26A1 Fallback \u2192 " + p + " (primario fallito: " + ((providerFailure && providerFailure.message) || providerFailure) + ")");
       }
       try {
         var result = p === "openai"    ? await callOpenAI(callParams)
@@ -1525,73 +1653,103 @@ app.post("/api/chat", uploadAny, async (req, res) => {
                    : (p === "anthropic" && runRocco)
                                        ? await callRoccoRunner(callParams, user_id)
                    :                    await callAnthropic(callParams);
+        if (shouldFallbackToOffline(null, result)) {
+          providerFailure = new Error("provider returned invalid response");
+          console.warn("provider_failure_recoverable");
+          continue;
+        }
+        providerResult = result;
         answer = result.answer;
         usedProvider = p;
         usedModel = result.model;
-        break;
+        if (STRICT_FORMAT) answer = rocco.postcheck(answer);
+        return finalizeChatResponse({
+          req,
+          res,
+          responsePayload: buildChatResponsePayload({
+            usedProvider,
+            usedModel,
+            fallbackUsed,
+            answer,
+            convId,
+            dbContextText,
+            docChunksText,
+            knowledgeText,
+            visionText,
+            contextBlock,
+            engineDiag,
+            message,
+            foundResult
+          }),
+          closedCaseFeedback,
+          hasClosedCaseFeedback,
+          diagnosticResult: engineDiag,
+          source: "provider",
+          convId,
+          userId: user_id,
+          message,
+          plan,
+          usedProvider,
+          usedModel
+        });
       } catch (err) {
-        lastErr = err;
-        console.warn("  \u26A0\uFE0F Provider " + p + " fallito:", (err && err.message) || err);
+        providerFailure = err;
+        if (isRecoverableProviderError(err)) {
+          console.warn("provider_failure_recoverable");
+          continue;
+        }
+        break;
       }
     }
 
-    // ===== OFFLINE FALLBACK (C) =====
-    if (!answer) {
-      // Se il fallimento è di rete E abbiamo un'analisi engine → risposta locale
-      if (isNetworkError(lastErr) && engineDiag && engineDiag.isTechnical) {
-        console.warn("  🔌 LLM irraggiungibile — risposta offline da ROCCO engine.");
-        answer = formatOfflineAnswer(engineDiag, message);
-        usedProvider = "offline_engine";
-        usedModel    = "rocco-local-v2";
-      } else {
-        throw lastErr || new Error("Tutti i provider falliti");
+    try {
+      if (!shouldFallbackToOffline(providerFailure, providerResult)) {
+        throw providerFailure || new Error("Provider failed without offline fallback");
       }
+      if (!engineDiag || !engineDiag.isTechnical) {
+        throw providerFailure || new Error("Offline engine unavailable");
+      }
+      answer = formatOfflineAnswer(engineDiag, message);
+      if (!answer || !String(answer).trim()) {
+        throw new Error("Offline answer unavailable");
+      }
+      usedProvider = "offline_engine";
+      usedModel = "rocco-local-v2";
+      fallbackUsed = true;
+      console.warn("fallback_offline_used");
+      return finalizeChatResponse({
+        req,
+        res,
+        responsePayload: buildChatResponsePayload({
+          usedProvider,
+          usedModel,
+          fallbackUsed,
+          answer,
+          convId,
+          dbContextText,
+          docChunksText,
+          knowledgeText,
+          visionText,
+          contextBlock,
+          engineDiag,
+          message,
+          foundResult
+        }),
+        closedCaseFeedback,
+        hasClosedCaseFeedback,
+        diagnosticResult: engineDiag,
+        source: "offline",
+        convId,
+        userId: user_id,
+        message,
+        plan,
+        usedProvider,
+        usedModel
+      });
+    } catch (offlineErr) {
+      console.error("chat_both_paths_failed");
+      throw (offlineErr || providerFailure || new Error("Tutti i provider falliti"));
     }
-
-    if (STRICT_FORMAT && usedProvider !== "offline_engine") answer = rocco.postcheck(answer);
-
-    // Persistenza + summary
-    await msgInsert({
-      conversation_id: convId,
-      role: "assistant",
-      content: answer,
-      content_format: "text",
-      provider: usedProvider,
-      model: usedModel,
-      certainty: extractCertainty(answer),
-    });
-    await convTouch(convId);
-    generateContextSummary(convId, usedProvider).catch(function () {});
-    autoSaveDiagnosi({ convId, userId: user_id, message, answer, domain: plan.domain, certezza: extractCertainty(answer), engineDiag }).catch(function () {});
-
-    return res.json({
-      ok: true,
-      provider: usedProvider,
-      model: usedModel,
-      fallback_used: fallbackUsed,
-      answer,
-      conversation_id: convId,
-      signature: "ROCCO-CHAT-V2",
-      rag: { usedDbContext: Boolean(dbContextText), usedDocChunks: Boolean(docChunksText), usedKnowledge: Boolean(knowledgeText), visionAnalysis: Boolean(visionText), contextBlockLen: contextBlock.length },
-      engine: engineDiag ? {
-        active: true,
-        isTechnical: engineDiag.isTechnical,
-        isDangerous: engineDiag.isDangerous,
-        matchedPatterns: engineDiag.matchedPatterns,
-        matchedRules: engineDiag.matchedRules,
-        matchedComponents: engineDiag.matchedComponents,
-        recognizedComponents: extractComponents(message),
-      } : { active: false, recognizedComponents: extractComponents(message) },
-      foundation: foundResult && !foundResult.outOfScope ? {
-        patternId:    foundResult.patternId  || null,
-        components:   foundResult.components || [],
-        anomalies:    foundResult.anomalies  || [],
-        topHypothesis: (foundResult.hypotheses && foundResult.hypotheses.length)
-          ? foundResult.hypotheses[0].text || null
-          : null,
-        outOfScope: false,
-      } : (foundResult && foundResult.outOfScope ? { outOfScope: true } : null),
-    });
   } catch (err) {
     console.error("❌ /api/chat error:", err);
     return res.status(500).json({
@@ -2068,3 +2226,4 @@ app.listen(PORT, () => {
     });
   }
 });
+
