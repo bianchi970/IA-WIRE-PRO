@@ -1,0 +1,153 @@
+[
+  {
+    "id": "rcd_low_isolation_base",
+    "title": "RCD scatta con isolamento basso misurato",
+    "category": "dispersione",
+    "message": "Il differenziale scatta continuamente sulla linea cucina e ho misurato isolamento 0.3 Mohm verso terra.",
+    "storeMode": "empty",
+    "expectations": {
+      "safetyLevel": "attention",
+      "topHypothesisWithin": 1,
+      "topHypothesisAnyOf": [
+        "Avvolgimento motore degradato",
+        "dispersione"
+      ],
+      "requiredCheckAnyOf": [
+        "Confermare il guasto di isolamento",
+        "megohmetro 500V"
+      ],
+      "allowedNextStepAnyOf": [
+        "Confermare il guasto di isolamento",
+        "misura circuito per circuito"
+      ],
+      "learningApplied": false
+    }
+  },
+  {
+    "id": "rcd_low_isolation_learning_match",
+    "title": "Riuso prudente di caso chiuso simile su dispersione",
+    "category": "learning",
+    "message": "Il differenziale scatta appena collego lo scaldabagno e con il megger leggo 0.25 Mohm verso terra.",
+    "storeMode": "learning_from_case",
+    "learningSourceCaseId": "rcd_low_isolation_base",
+    "expectations": {
+      "safetyLevel": "attention",
+      "topHypothesisWithin": 1,
+      "topHypothesisAnyOf": [
+        "Avvolgimento motore degradato",
+        "dispersione"
+      ],
+      "requiredCheckAnyOf": [
+        "Confermare il guasto di isolamento",
+        "megger"
+      ],
+      "allowedNextStepAnyOf": [
+        "Confermare il guasto di isolamento",
+        "misura circuito per circuito"
+      ],
+      "learningApplied": true,
+      "matchedCaseIdsInclude": [
+        "closed-from-rcd_low_isolation_base"
+      ]
+    }
+  },
+  {
+    "id": "thermal_damage_stop",
+    "title": "Surriscaldamento e odore di bruciato in quadro",
+    "category": "safety_stop",
+    "message": "Cavo bruciato, odore forte e 95 gradi nel quadro.",
+    "storeMode": "empty",
+    "expectations": {
+      "safetyLevel": "stop",
+      "topHypothesisWithin": 2,
+      "topHypothesisAnyOf": [
+        "Surriscaldamento o resistenza di contatto elevata",
+        "surriscaldamento"
+      ],
+      "requiredCheckAnyOf": [
+        "Disalimentare e verificare assenza tensione",
+        "assenza tensione"
+      ],
+      "allowedNextStepAnyOf": [
+        "Solo verifica di sicurezza",
+        "impianto in sicurezza"
+      ],
+      "learningApplied": false
+    }
+  },
+  {
+    "id": "overload_oven_trip",
+    "title": "Magnetotermico C16 in sovraccarico con forno",
+    "category": "sovraccarico",
+    "message": "Il magnetotermico C16 scatta dopo pochi minuti con il forno acceso e la corrente misurata e 21A.",
+    "storeMode": "empty",
+    "expectations": {
+      "safetyLevel": "attention",
+      "topHypothesisWithin": 1,
+      "topHypothesisAnyOf": [
+        "Sovraccarico elettrico sul circuito o sulla protezione",
+        "sovraccarico"
+      ],
+      "requiredCheckAnyOf": [
+        "Misurare corrente assorbita con pinza amperometrica",
+        "corrente assorbita"
+      ],
+      "allowedNextStepAnyOf": [
+        "Misurare isolamento",
+        "verifica discriminante"
+      ],
+      "learningApplied": false
+    }
+  },
+  {
+    "id": "socket_intermittent_contact",
+    "title": "Presa intermittente con annerimento contatto",
+    "category": "contatto_interruzione",
+    "message": "La presa della cucina va e viene: ho 230V a monte ma 0V sul morsetto uscita della presa, si vede annerimento sul contatto.",
+    "storeMode": "empty",
+    "expectations": {
+      "safetyLevel": "danger",
+      "topHypothesisWithin": 2,
+      "topHypothesisAnyOf": [
+        "Anomalia alimentazione o problema di neutro/riferimento",
+        "alimentazione",
+        "neutro"
+      ],
+      "requiredCheckAnyOf": [
+        "Ripetere le misure L-N e L-PE",
+        "continuita del neutro"
+      ],
+      "allowedNextStepAnyOf": [
+        "Disalimentare e verificare assenza tensione",
+        "Ripetere le misure L-N e L-PE",
+        "verificare la stabilita della tensione a monte"
+      ],
+      "learningApplied": false
+    }
+  },
+  {
+    "id": "pressure_switch_no_output_empty_store",
+    "title": "Pressostato con 230V in ingresso e 0V in uscita",
+    "category": "assenza_tensione",
+    "message": "La pompa non parte: sul pressostato ingresso 230V, uscita 0V con richiesta attiva.",
+    "storeMode": "empty",
+    "expectations": {
+      "safetyLevel": "danger",
+      "topHypothesisWithin": 2,
+      "topHypothesisAnyOf": [
+        "Anomalia alimentazione o problema di neutro/riferimento",
+        "alimentazione"
+      ],
+      "requiredCheckAnyOf": [
+        "Disalimentare e verificare assenza tensione",
+        "Ripetere le misure L-N e L-PE"
+      ],
+      "allowedNextStepAnyOf": [
+        "Disalimentare e verificare assenza tensione",
+        "Ripetere le misure L-N e L-PE",
+        "verificare la stabilita della tensione a monte"
+      ],
+      "learningApplied": false
+    }
+  }
+]

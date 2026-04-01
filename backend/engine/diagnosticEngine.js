@@ -4771,6 +4771,7 @@ function analyzeTechnicalRequest(input, knowledge) {
     caseState: caseState,
     causalSummary: caseState.causalSummary,
     safetyDecision: safetyDecision,
+    decisionPolicy: decisionPolicy,
     hypotheses: ipotesi,
     diagnosticChecks: diagnosticChecks,
     caseFingerprint: caseFingerprint,
