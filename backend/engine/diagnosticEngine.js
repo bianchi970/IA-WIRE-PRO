@@ -5,6 +5,8 @@ var getClosedCaseLearningSignal = require("./roccoLearningStore").getClosedCaseL
 var applyClosedCaseLearningToHypotheses = require("./roccoLearningStore").applyClosedCaseLearningToHypotheses;
 var applyClosedCaseLearningToDiagnosticChecks = require("./roccoLearningStore").applyClosedCaseLearningToDiagnosticChecks;
 var appendClosedCaseLearning = require("./roccoLearningStore").appendClosedCaseLearning;
+var roccoCaseClassifier = require("./roccoCaseClassifier");
+var roccoMethodEngine = require("./roccoMethodEngine");
 var LEARNING_HALF_LIFE_DAYS = 120;
 var MIN_LEARNING_FRESHNESS_WEIGHT = 0.25;
 var UNKNOWN_TIMESTAMP_FRESHNESS_WEIGHT = 0.20;
@@ -3332,9 +3334,9 @@ function downgradeSiblingHypotheses(hypotheses, dominantFamily) {
 
     if (strongSibling) return true;
 
-    if (hypothesis.livello === "confirmed" && scoreGap >= 3) {
-      hypothesis.livello = "probable";
-    } else if (hypothesis.livello === "probable" && scoreGap >= 4) {
+    // PATCH 17 — confirmed è inviolabile da scoreGap: una ipotesi sostenuta da evidenza/misura
+    // non viene retrocessa per effetto di ranking relativo. Solo probable può scendere.
+    if (hypothesis.livello === "probable" && scoreGap >= 4) {
       hypothesis.livello = "non_verifiable";
     }
 
@@ -3372,12 +3374,13 @@ function buildCausalSummary(dominantFamily, hypotheses, caseState) {
     (caseState && caseState.strongestHypothesis ? " Causa guida: " + caseState.strongestHypothesis.causa + "." : "");
 }
 
+function stripTrailingDot(text) {
+  return roccoMethodEngine.stripTrailingDot(text);
+}
+
 function buildDecisionPolicy(caseState, safetyDecision, hypotheses, diagnosticChecks) {
   var topHypothesis = hypotheses[0] || null;
   var topCheck = diagnosticChecks[0] || null;
-  function stripTrailingDot(text) {
-    return String(text || "").replace(/[.\s]+$/, "");
-  }
   var policy = {
     immediateAction: "",
     allowedNextStep: topCheck ? stripTrailingDot(topCheck.reason) : "",
@@ -3496,7 +3499,9 @@ function scoreDiagnosticCheckForCase(check, caseState, safetyDecision, decisionP
     if (token && text.indexOf(token) >= 0) score += 8;
   });
 
-  if (decisionPolicy && decisionPolicy.allowedNextStep && check.reason === decisionPolicy.allowedNextStep) {
+  if (decisionPolicy &&
+      decisionPolicy.allowedNextStep &&
+      stripTrailingDot(check && check.reason) === stripTrailingDot(decisionPolicy.allowedNextStep)) {
     score += 200;
   }
 
@@ -4512,6 +4517,8 @@ function analyzeTechnicalRequest(input, knowledge) {
   var causalGroups;
   var dominantCauseFamily;
   var decisionPolicy;
+  var caseClassification;
+  var methodGateResult;
   var caseFingerprint;
   var closedCaseLearning;
   var finalDiag;
@@ -4637,6 +4644,24 @@ function analyzeTechnicalRequest(input, knowledge) {
   caseState = convergedOutcome.caseState;
   dominantCauseFamily = convergedOutcome.dominantCauseFamily;
   decisionPolicy = convergedOutcome.decisionPolicy;
+  caseClassification = roccoCaseClassifier.classifyCase({
+    facts: facts,
+    caseState: caseState,
+    safetyDecision: safetyDecision,
+    diagnosticChecks: diagnosticChecks,
+    hypotheses: ipotesi
+  });
+  // PATCH 21 — classifier deterministico finale, poi method gate solo su checks e next step.
+  methodGateResult = roccoMethodEngine.applyRoccoMethodGate({
+    caseClassification: caseClassification,
+    caseState: caseState,
+    safetyDecision: safetyDecision,
+    hypotheses: ipotesi,
+    diagnosticChecks: diagnosticChecks,
+    decisionPolicy: decisionPolicy
+  });
+  diagnosticChecks = methodGateResult.diagnosticChecks;
+  decisionPolicy = methodGateResult.decisionPolicy;
   caseFingerprint = closedCaseLearning && closedCaseLearning.fingerprint
     ? closedCaseLearning.fingerprint
     : buildCaseFingerprint({
@@ -4777,6 +4802,8 @@ function analyzeTechnicalRequest(input, knowledge) {
     causalSummary: caseState.causalSummary,
     safetyDecision: safetyDecision,
     decisionPolicy: decisionPolicy,
+    caseClassification: caseClassification || null,
+    methodGate: methodGateResult || null,
     hypotheses: ipotesi,
     diagnosticChecks: diagnosticChecks,
     caseFingerprint: caseFingerprint,
@@ -4985,5 +5012,3 @@ module.exports = {
   validateDiagOutput:      validateDiagOutput,
   TEST_CASE:               TEST_CASE
 };
-
-
