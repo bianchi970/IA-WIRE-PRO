@@ -122,13 +122,29 @@ const OLLAMA_URL   = (process.env.OLLAMA_URL   || "http://localhost:11434").trim
 const OLLAMA_MODEL = (process.env.OLLAMA_MODEL || "mistral").trim();
 let ollamaAvailable = false;
 
+// SEC-01: limiti output e rate limiting
+const OPENAI_MAX_TOKENS = parseInt(process.env.OPENAI_MAX_TOKENS || "2000", 10);
+const RL_CHAT_MAX   = parseInt(process.env.RATE_LIMIT_CHAT_MAX   || "20",    10);
+const RL_UPLOAD_MAX = parseInt(process.env.RATE_LIMIT_UPLOAD_MAX || "10",    10);
+const RL_CALC_MAX   = parseInt(process.env.RATE_LIMIT_CALC_MAX   || "30",    10);
+const RL_WINDOW_MS  = parseInt(process.env.RATE_LIMIT_WINDOW_MS  || "60000", 10);
+
+// SEC-01: CORS allowlist configurabile
+const CORS_ORIGINS = (process.env.CORS_ORIGINS || "http://localhost:3000,http://localhost:5000")
+  .split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+
 // =========================
 // MIDDLEWARE
 // =========================
-// ✅ CORS robusto (compatibilità totale)
+// ✅ CORS con allowlist configurabile (SEC-01)
 app.use(
   cors({
-    origin: true,
+    origin: function (origin, callback) {
+      // Permetti: same-origin browser, server-to-server, curl (origin assente)
+      if (!origin) return callback(null, true);
+      if (CORS_ORIGINS.includes(origin)) return callback(null, true);
+      return callback(null, false); // rifiuto silenzioso, no 500
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -252,6 +268,42 @@ function parseHistory(raw) {
   }
   return [];
 }
+
+// =========================
+// RATE LIMITER (in-memory, zero dipendenze — SEC-01)
+// =========================
+var _rlStore = new Map();
+setInterval(function () {
+  var now = Date.now();
+  _rlStore.forEach(function (v, k) {
+    if (now - v.ts > RL_WINDOW_MS * 2) _rlStore.delete(k);
+  });
+}, 5 * 60 * 1000).unref(); // cleanup ogni 5 min, non blocca exit
+
+function makeRateLimiter(max) {
+  return function (req, res, next) {
+    var key = (req.ip || "unknown") + "|" + req.path;
+    var now = Date.now();
+    var entry = _rlStore.get(key);
+    if (!entry || now - entry.ts > RL_WINDOW_MS) {
+      _rlStore.set(key, { count: 1, ts: now });
+      return next();
+    }
+    entry.count++;
+    if (entry.count > max) {
+      return res.status(429).json({
+        ok: false,
+        error: "Troppe richieste — riprova tra poco.",
+        retry_after: Math.ceil((RL_WINDOW_MS - (now - entry.ts)) / 1000)
+      });
+    }
+    next();
+  };
+}
+
+var rlChat   = makeRateLimiter(RL_CHAT_MAX);
+var rlUpload = makeRateLimiter(RL_UPLOAD_MAX);
+var rlCalc   = makeRateLimiter(RL_CALC_MAX);
 
 // ✅ Trova un file immagine tra tanti fieldname (compatibilità totale)
 function parseOptionalJsonField(value) {
@@ -886,6 +938,7 @@ async function callOpenAI({ systemPrompt, shortHistory, imageBase64, imagesBase6
     model: OPENAI_MODEL,
     messages,
     temperature: 0.1,
+    max_tokens: OPENAI_MAX_TOKENS,
   });
   const answer = (completion && completion.choices && completion.choices[0] &&
                   completion.choices[0].message && completion.choices[0].message.content) || "Nessuna risposta.";
@@ -1340,7 +1393,7 @@ app.get("/api/conversations/:id/messages", async (req, res) => {
  * - conversation_id (opzionale): se assente e DB disponibile, crea una nuova conversation
  * - user_id (opzionale): usato solo alla creazione della conversation
  */
-app.post("/api/chat", uploadAny, async (req, res) => {
+app.post("/api/chat", rlChat, uploadAny, async (req, res) => {
   try {
     const body = req.body || {};
 
@@ -1610,10 +1663,25 @@ app.post("/api/chat", uploadAny, async (req, res) => {
           systemPrompt = "⚠️ SAFETY LOCK — RICHIESTA FUORI DOMINIO BT: " +
             "La richiesta riguarda Media/Alta Tensione. IA Wire Pro gestisce SOLO impianti BT 230/400V.\n" +
             "Comunicare all'utente che è necessario un tecnico abilitato (CEI 11-27 PES/PAV).\n\n" + systemPrompt;
-        } else if (foundResult.formattedContext) {
-          // Aggiunge analisi Foundation Engine al contesto (basicPatterns + domande)
-          engineText = (engineText ? engineText + "\n\n" : "") +
-            "ANALISI FOUNDATION ENGINE:\n" + foundResult.formattedContext;
+        } else {
+          // PATCH 17 — Foundation Engine è supporto secondario: inietta solo il contratto di
+          // riconoscimento componenti (roccoContract) e le domande suggerite.
+          // NON inietta più patternId né IPOTESI ORDINATE: queste restano di competenza
+          // esclusiva di diagnosticEngine per evitare doppia diagnosi concorrente nel prompt.
+          var feLines = [];
+          if (foundResult.roccoContract) {
+            feLines.push(foundResult.roccoContract);
+          }
+          if (Array.isArray(foundResult.questions) && foundResult.questions.length) {
+            feLines.push("DOMANDE SUGGERITE PER L'UTENTE:");
+            foundResult.questions.forEach(function(q, idx) {
+              feLines.push("  " + (idx + 1) + ") " + q);
+            });
+          }
+          if (feLines.length) {
+            engineText = (engineText ? engineText + "\n\n" : "") +
+              "RICONOSCIMENTO COMPONENTI (foundation engine):\n" + feLines.join("\n");
+          }
         }
       } catch (e) {
         console.warn("⚠️ Foundation Engine non disponibile:", (e && e.message) || e);
@@ -1761,7 +1829,7 @@ app.post("/api/chat", uploadAny, async (req, res) => {
 });
 
 // Upload binario "universale"
-app.post("/api/upload", uploadAny, async (req, res) => {
+app.post("/api/upload", rlUpload, uploadAny, async (req, res) => {
   try {
     const file = pickFirstImageFile(req.files) || (Array.isArray(req.files) ? req.files[0] : null);
     if (!file) return res.status(400).json({ error: "Nessun file caricato." });
@@ -1825,7 +1893,7 @@ app.get("/api/engine/test", (req, res) => {
  *   { tool: "diff",     params: { carico: "pompa calore", locale: "garage" } }
  *   { tool: "auto",     params: { message: "circuito da 3kW, 20 metri, monofase" } }
  */
-app.post("/api/calc", (req, res) => {
+app.post("/api/calc", rlCalc, (req, res) => {
   try {
     const { tool, params } = req.body || {};
     const p = params || {};
@@ -1999,7 +2067,8 @@ app.get("/api/rocco/diagnosi", async (req, res) => {
 app.patch("/api/rocco/diagnosi/:id", async (req, res) => {
   if (!pool) return res.status(503).json({ ok: false, error: "DB non disponibile" });
   try {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (!id) return res.status(400).json({ ok: false, error: "id non valido" });
     const { risolto, soluzione_applicata, causa_trovata, tempo_minuti } = req.body || {};
     await pool.query(
       `UPDATE rocco_diagnosi
