@@ -9,7 +9,6 @@
       "safetyLevel": "attention",
       "topHypothesisWithin": 1,
       "topHypothesisAnyOf": [
-        "Avvolgimento motore degradato",
         "dispersione"
       ],
       "requiredCheckAnyOf": [
@@ -80,7 +79,7 @@
     "id": "overload_oven_trip",
     "title": "Magnetotermico C16 in sovraccarico con forno",
     "category": "sovraccarico",
-    "message": "Il magnetotermico C16 scatta dopo pochi minuti con il forno acceso e la corrente misurata e 21A.",
+    "message": "Il magnetotermico C16 scatta dopo pochi minuti con il forno acceso e la pinza amperometrica indica 21A sul circuito.",
     "storeMode": "empty",
     "expectations": {
       "safetyLevel": "attention",
@@ -90,12 +89,11 @@
         "sovraccarico"
       ],
       "requiredCheckAnyOf": [
-        "Misurare corrente assorbita con pinza amperometrica",
-        "corrente assorbita"
+        "confrontarla con la protezione installata",
+        "protezione installata"
       ],
       "allowedNextStepAnyOf": [
-        "Misurare isolamento",
-        "verifica discriminante"
+        "confrontarla con la protezione installata"
       ],
       "learningApplied": false
     }
@@ -115,13 +113,11 @@
         "neutro"
       ],
       "requiredCheckAnyOf": [
-        "Ripetere le misure L-N e L-PE",
-        "continuita del neutro"
+        "Disalimentare e verificare assenza tensione",
+        "Ripetere le misure L-N e L-PE"
       ],
       "allowedNextStepAnyOf": [
-        "Disalimentare e verificare assenza tensione",
-        "Ripetere le misure L-N e L-PE",
-        "verificare la stabilita della tensione a monte"
+        "Disalimentare e verificare assenza tensione"
       ],
       "learningApplied": false
     }
