@@ -12,7 +12,9 @@ if (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
 
 const express = require("express");
 const cors = require("cors");
-const multer = require("multer");
+const multer       = require("multer");
+const cookieParser = require("cookie-parser");
+const crypto       = require("crypto");
 
 const Anthropic = require("@anthropic-ai/sdk");
 const OpenAI = require("openai");
@@ -153,6 +155,31 @@ app.use(
 
 app.use(express.json({ limit: JSON_LIMIT }));
 app.use(express.urlencoded({ extended: true, limit: JSON_LIMIT }));
+app.use(cookieParser());
+
+// =========================
+// SEC-02A: IDENTITY MIDDLEWARE
+// =========================
+// Genera/legge un UUID stabile per utente via cookie httpOnly.
+// req.authenticatedUserId è la fonte autoritativa lato server.
+// req.body.user_id / req.query.user_id NON sono più fonte di verità.
+const IA_UID_COOKIE = "ia_uid";
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+app.use(function identityMiddleware(req, res, next) {
+  let uid = req.cookies[IA_UID_COOKIE];
+  if (!uid || !UUID_RE.test(uid)) {
+    uid = crypto.randomUUID();
+    res.cookie(IA_UID_COOKIE, uid, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 365 * 24 * 60 * 60 * 1000, // 1 anno
+    });
+  }
+  req.authenticatedUserId = uid;
+  next();
+});
 
 // Multer (upload file binari) - ✅ compatibile totale sui fieldname
 const uploadAny = multer({
