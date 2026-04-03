@@ -1243,37 +1243,46 @@ app.get("/api/components/:id/issues", async (req, res) => {
 });
 
 // =========================
+// SEC-02: OWNERSHIP HELPER
+// =========================
+/**
+ * Verifica che la riga (row) appartenga all'utente autenticato.
+ * - Se row.user_id è NULL (legacy, nessun owner assegnato): consente l'accesso.
+ * - Se row.user_id != authenticatedUserId: 403.
+ * - Se authenticatedUserId è assente (middleware non attivo): 401.
+ * Ritorna { ok: true } oppure { ok: false, status, error }.
+ */
+function checkOwnership(row, req) {
+  if (!req.authenticatedUserId) {
+    return { ok: false, status: 401, error: "Identity mancante" };
+  }
+  if (row.user_id && row.user_id !== req.authenticatedUserId) {
+    return { ok: false, status: 403, error: "Non autorizzato" };
+  }
+  return { ok: true };
+}
+
+// =========================
 // ROUTES — Conversations
 // =========================
 
-// GET /api/conversations?user_id=&archived=0&limit=50
+// GET /api/conversations?archived=0&limit=50
+// SEC-02: filtra sempre per req.authenticatedUserId, ignora user_id da query
 app.get("/api/conversations", async (req, res) => {
   try {
     if (!pool) return res.json({ ok: true, count: 0, items: [], note: "DB non configurato" });
 
-    const user_id = (req.query.user_id || "").toString().trim() || null;
     const archived = req.query.archived === "1";
     const limit = Math.min(parseInt(req.query.limit || "50", 10) || 50, 200);
 
-    const where = ["is_archived = $1"];
-    const params = [archived];
-
-    if (user_id) {
-      params.push(user_id);
-      where.push(`user_id = $${params.length}`);
-    }
-
-    params.push(limit);
-
-    const sql = `
-      SELECT id, title, user_id, created_at, updated_at, is_archived
-      FROM conversations
-      WHERE ${where.join(" AND ")}
-      ORDER BY updated_at DESC
-      LIMIT $${params.length}
-    `;
-
-    const r = await pool.query(sql, params);
+    const r = await pool.query(
+      `SELECT id, title, user_id, created_at, updated_at, is_archived
+       FROM conversations
+       WHERE is_archived = $1 AND user_id = $2
+       ORDER BY updated_at DESC
+       LIMIT $3`,
+      [archived, req.authenticatedUserId, limit]
+    );
     res.json({ ok: true, count: r.rowCount, items: r.rows });
   } catch (err) {
     console.error("❌ GET /api/conversations error:", err);
@@ -1282,15 +1291,16 @@ app.get("/api/conversations", async (req, res) => {
 });
 
 // POST /api/conversations
+// SEC-02: user_id scritto da req.authenticatedUserId, non da body
 app.post("/api/conversations", async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ ok: false, error: "DB non configurato" });
 
-    const { title, user_id } = req.body || {};
+    const { title } = req.body || {};
 
     const r = await pool.query(
       `INSERT INTO conversations (title, user_id) VALUES ($1, $2) RETURNING *`,
-      [title || null, user_id || null]
+      [title || null, req.authenticatedUserId]
     );
     res.status(201).json({ ok: true, item: r.rows[0] });
   } catch (err) {
@@ -1300,6 +1310,7 @@ app.post("/api/conversations", async (req, res) => {
 });
 
 // GET /api/conversations/:id  (con messaggi inclusi)
+// SEC-02: ownership check
 app.get("/api/conversations/:id", async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ ok: false, error: "DB non configurato" });
@@ -1313,6 +1324,9 @@ app.get("/api/conversations/:id", async (req, res) => {
       [id]
     );
     if (!conv.rows.length) return res.status(404).json({ ok: false, error: "Conversation non trovata" });
+
+    const own = checkOwnership(conv.rows[0], req);
+    if (!own.ok) return res.status(own.status).json({ ok: false, error: own.error });
 
     const msgs = await pool.query(
       `SELECT id, role, content, content_format, provider, model, certainty, meta_json, created_at
@@ -1330,12 +1344,21 @@ app.get("/api/conversations/:id", async (req, res) => {
 });
 
 // PATCH /api/conversations/:id  (title, is_archived)
+// SEC-02: fetch + ownership check prima dell'update
 app.patch("/api/conversations/:id", async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ ok: false, error: "DB non configurato" });
 
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ ok: false, error: "id non valido" });
+
+    const existing = await pool.query(
+      `SELECT id, user_id FROM conversations WHERE id = $1`, [id]
+    );
+    if (!existing.rows.length) return res.status(404).json({ ok: false, error: "Conversation non trovata" });
+
+    const own = checkOwnership(existing.rows[0], req);
+    if (!own.ok) return res.status(own.status).json({ ok: false, error: own.error });
 
     const fields = [];
     const params = [];
@@ -1359,7 +1382,6 @@ app.patch("/api/conversations/:id", async (req, res) => {
        RETURNING *`,
       params
     );
-    if (!r.rowCount) return res.status(404).json({ ok: false, error: "Conversation non trovata" });
 
     res.json({ ok: true, item: r.rows[0] });
   } catch (err) {
@@ -1369,6 +1391,7 @@ app.patch("/api/conversations/:id", async (req, res) => {
 });
 
 // DELETE /api/conversations/:id
+// SEC-02: fetch + ownership check prima della delete
 app.delete("/api/conversations/:id", async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ ok: false, error: "DB non configurato" });
@@ -1376,9 +1399,15 @@ app.delete("/api/conversations/:id", async (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ ok: false, error: "id non valido" });
 
-    const r = await pool.query(`DELETE FROM conversations WHERE id = $1`, [id]);
-    if (!r.rowCount) return res.status(404).json({ ok: false, error: "Conversation non trovata" });
+    const existing = await pool.query(
+      `SELECT id, user_id FROM conversations WHERE id = $1`, [id]
+    );
+    if (!existing.rows.length) return res.status(404).json({ ok: false, error: "Conversation non trovata" });
 
+    const own = checkOwnership(existing.rows[0], req);
+    if (!own.ok) return res.status(own.status).json({ ok: false, error: own.error });
+
+    await pool.query(`DELETE FROM conversations WHERE id = $1`, [id]);
     res.json({ ok: true });
   } catch (err) {
     console.error("❌ DELETE /api/conversations/:id error:", err);
@@ -1387,12 +1416,21 @@ app.delete("/api/conversations/:id", async (req, res) => {
 });
 
 // GET /api/conversations/:id/messages
+// SEC-02: ownership check sulla conversation prima di restituire i messaggi
 app.get("/api/conversations/:id/messages", async (req, res) => {
   try {
     if (!pool) return res.json({ ok: true, count: 0, items: [], note: "DB non configurato" });
 
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ ok: false, error: "id non valido" });
+
+    const conv = await pool.query(
+      `SELECT id, user_id FROM conversations WHERE id = $1`, [id]
+    );
+    if (!conv.rows.length) return res.status(404).json({ ok: false, error: "Conversation non trovata" });
+
+    const own = checkOwnership(conv.rows[0], req);
+    if (!own.ok) return res.status(own.status).json({ ok: false, error: own.error });
 
     const limit = Math.min(parseInt(req.query.limit || "100", 10) || 100, 500);
 
@@ -1427,7 +1465,8 @@ app.post("/api/chat", rlChat, uploadAny, async (req, res) => {
     let message = String(body.message || body.text || "").trim();
     const history = parseHistory(body.history);
     const provider = body.provider || null;
-    const user_id = body.user_id || null;
+    // SEC-02: fonte autoritativa = cookie, non body
+    const user_id = req.authenticatedUserId;
     let convId = body.conversation_id ? parseInt(body.conversation_id, 10) || null : null;
     const hasClosedCaseFeedback = Object.prototype.hasOwnProperty.call(body, "closedCaseFeedback");
     const closedCaseFeedback = hasClosedCaseFeedback ? parseOptionalJsonField(body.closedCaseFeedback) : null;
@@ -2007,14 +2046,15 @@ app.get("/api/calc/tools", (_req, res) => {
 // =========================
 
 // POST /api/rocco/progetti — crea nuovo progetto
+// SEC-02: user_id da req.authenticatedUserId, non da body
 app.post("/api/rocco/progetti", async (req, res) => {
   if (!pool) return res.status(503).json({ ok: false, error: "DB non disponibile" });
   try {
-    const { user_id, cliente, indirizzo, tipo_locale, potenza_kw, superficie_m2, sistema, tensione, note } = req.body || {};
+    const { cliente, indirizzo, tipo_locale, potenza_kw, superficie_m2, sistema, tensione, note } = req.body || {};
     const r = await pool.query(
       `INSERT INTO rocco_progetti (user_id, cliente, indirizzo, tipo_locale, potenza_kw, superficie_m2, sistema, tensione, note)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [user_id || null, cliente || null, indirizzo || null, tipo_locale || null,
+      [req.authenticatedUserId, cliente || null, indirizzo || null, tipo_locale || null,
        potenza_kw || null, superficie_m2 || null, sistema || "TT", tensione || "230V", note || null]
     );
     res.json({ ok: true, progetto: r.rows[0] });
@@ -2024,17 +2064,18 @@ app.post("/api/rocco/progetti", async (req, res) => {
 });
 
 // GET /api/rocco/progetti — lista progetti utente
+// SEC-02: filtra per req.authenticatedUserId, ignora user_id da query
 app.get("/api/rocco/progetti", async (req, res) => {
   if (!pool) return res.status(503).json({ ok: false, error: "DB non disponibile" });
   try {
-    const { user_id, limit } = req.query;
+    const { limit } = req.query;
     const lim = Math.min(parseInt(limit || "50"), 200);
     const r = await pool.query(
       `SELECT id, cliente, indirizzo, tipo_locale, potenza_kw, superficie_m2, stato, created_at
        FROM rocco_progetti
-       WHERE ($1::text IS NULL OR user_id = $1)
+       WHERE user_id = $1
        ORDER BY created_at DESC LIMIT $2`,
-      [user_id || null, lim]
+      [req.authenticatedUserId, lim]
     );
     res.json({ ok: true, count: r.rows.length, items: r.rows });
   } catch (e) {
@@ -2043,16 +2084,17 @@ app.get("/api/rocco/progetti", async (req, res) => {
 });
 
 // POST /api/rocco/diagnosi — salva diagnosi manualmente
+// SEC-02: user_id da req.authenticatedUserId, non da body
 app.post("/api/rocco/diagnosi", async (req, res) => {
   if (!pool) return res.status(503).json({ ok: false, error: "DB non disponibile" });
   try {
-    const { user_id, descrizione_problema, causa_trovata, soluzione_applicata, risolto, certezza, dominio, tempo_minuti } = req.body || {};
+    const { descrizione_problema, causa_trovata, soluzione_applicata, risolto, certezza, dominio, tempo_minuti } = req.body || {};
     if (!descrizione_problema) return res.status(400).json({ ok: false, error: "descrizione_problema obbligatoria" });
     const r = await pool.query(
       `INSERT INTO rocco_diagnosi
          (user_id, descrizione_problema, causa_trovata, soluzione_applicata, risolto, certezza, dominio, tempo_minuti)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, created_at`,
-      [user_id || null, descrizione_problema, causa_trovata || null,
+      [req.authenticatedUserId, descrizione_problema, causa_trovata || null,
        soluzione_applicata || null, risolto === true, certezza || "MEDIA",
        dominio || "elettrico", tempo_minuti || null]
     );
@@ -2071,18 +2113,19 @@ app.post("/api/rocco/diagnosi", async (req, res) => {
 });
 
 // GET /api/rocco/diagnosi — lista diagnosi utente
+// SEC-02: filtra per req.authenticatedUserId, ignora user_id da query
 app.get("/api/rocco/diagnosi", async (req, res) => {
   if (!pool) return res.status(503).json({ ok: false, error: "DB non disponibile" });
   try {
-    const { user_id, limit, risolto } = req.query;
+    const { limit, risolto } = req.query;
     const lim = Math.min(parseInt(limit || "50"), 200);
     const r = await pool.query(
       `SELECT id, descrizione_problema, causa_trovata, risolto, certezza, dominio, created_at
        FROM rocco_diagnosi
-       WHERE ($1::text IS NULL OR user_id = $1)
+       WHERE user_id = $1
          AND ($2::text IS NULL OR risolto = ($2 = 'true'))
        ORDER BY created_at DESC LIMIT $3`,
-      [user_id || null, risolto !== undefined ? risolto : null, lim]
+      [req.authenticatedUserId, risolto !== undefined ? risolto : null, lim]
     );
     res.json({ ok: true, count: r.rows.length, items: r.rows });
   } catch (e) {
@@ -2091,11 +2134,21 @@ app.get("/api/rocco/diagnosi", async (req, res) => {
 });
 
 // PATCH /api/rocco/diagnosi/:id — aggiorna diagnosi (segna come risolta)
+// SEC-02: fetch + ownership check prima dell'update
 app.patch("/api/rocco/diagnosi/:id", async (req, res) => {
   if (!pool) return res.status(503).json({ ok: false, error: "DB non disponibile" });
   try {
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ ok: false, error: "id non valido" });
+
+    const existing = await pool.query(
+      `SELECT id, user_id FROM rocco_diagnosi WHERE id = $1`, [id]
+    );
+    if (!existing.rows.length) return res.status(404).json({ ok: false, error: "Diagnosi non trovata" });
+
+    const own = checkOwnership(existing.rows[0], req);
+    if (!own.ok) return res.status(own.status).json({ ok: false, error: own.error });
+
     const { risolto, soluzione_applicata, causa_trovata, tempo_minuti } = req.body || {};
     await pool.query(
       `UPDATE rocco_diagnosi
