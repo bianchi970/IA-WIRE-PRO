@@ -2180,9 +2180,55 @@ app.get("/api/admin/ollama/status", requireAdmin, async (req, res) => {
 // ROUTES — Admin
 // =========================
 
-// GET /admin — serve la dashboard admin (HTML statico, non protetto)
+// SEC-03: pagina login admin inline
+function adminLoginPage() {
+  return '<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8">'
+    + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+    + '<title>Admin Login</title>'
+    + '<style>body{font-family:system-ui;background:#071326;color:#d7e2f0;display:flex;'
+    + 'justify-content:center;align-items:center;min-height:100vh;margin:0}'
+    + '.box{background:#0b1c33;border:1px solid rgba(255,255,255,.08);border-radius:12px;'
+    + 'padding:32px;width:340px;text-align:center}'
+    + 'h2{color:#00D9FF;margin-bottom:20px;font-size:1.1rem}'
+    + 'input{width:100%;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);'
+    + 'background:#071326;color:#d7e2f0;font-size:.9rem;margin-bottom:14px;outline:none}'
+    + 'input:focus{border-color:#00D9FF}'
+    + 'button{width:100%;padding:10px;border:none;border-radius:8px;background:#00D9FF;'
+    + 'color:#071326;font-weight:700;font-size:.9rem;cursor:pointer}'
+    + '</style></head>'
+    + '<body><div class="box"><h2>IA Wire Pro — Admin</h2>'
+    + '<form method="GET" action="/admin">'
+    + '<input type="password" name="token" placeholder="Admin Token" required autocomplete="off"/>'
+    + '<button type="submit">Accedi</button></form>'
+    + '</div></body></html>';
+}
+
+// GET /admin — SEC-03: dashboard admin protetta con autenticazione token
 app.get("/admin", (req, res) => {
-  res.sendFile(path.join(FRONTEND_DIR, "admin.html"));
+  if (!ADMIN_TOKEN) {
+    return res.status(403).send("Admin non disponibile.");
+  }
+  const cookieToken = req.cookies["ia_admin_session"] || "";
+  const queryToken = (req.query.token || "").trim();
+  if (cookieToken === ADMIN_TOKEN || queryToken === ADMIN_TOKEN) {
+    if (queryToken === ADMIN_TOKEN && cookieToken !== ADMIN_TOKEN) {
+      res.cookie("ia_admin_session", ADMIN_TOKEN, {
+        httpOnly: true,
+        sameSite: "strict",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 8 * 60 * 60 * 1000,
+      });
+      return res.redirect("/admin");
+    }
+    return res.sendFile(path.join(FRONTEND_DIR, "admin.html"));
+  }
+  return res.send(adminLoginPage());
+});
+
+// GET /admin/logout — SEC-03: logout admin
+app.get("/admin/logout", (req, res) => {
+  res.clearCookie("ia_admin_session");
+  res.redirect("/admin");
 });
 
 // GET /university — ROCCO UNIVERSITY (pagina studio formule + esami)
@@ -2296,6 +2342,13 @@ if (roccoUniversity && roccoUniversity.router) {
 // =========================
 // STATIC FRONTEND + SPA FALLBACK (alla fine)
 // =========================
+// SEC-03: blocca accesso diretto a admin.html via static (deve passare da /admin)
+app.use(function blockAdminHtml(req, res, next) {
+  if (req.path === "/admin.html") {
+    return res.redirect("/admin");
+  }
+  next();
+});
 app.use(express.static(FRONTEND_DIR));
 
 app.get("/", (req, res) => {
