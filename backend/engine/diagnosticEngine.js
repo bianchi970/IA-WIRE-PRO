@@ -3570,7 +3570,6 @@ function finalizeDiagnosticOutcome(params) {
   diagnosticChecks = rankDiagnosticChecksForCase(diagnosticChecks, caseState, safetyDecision, null);
   decisionPolicy = buildDecisionPolicy(caseState, safetyDecision, hypotheses, diagnosticChecks);
   diagnosticChecks = filterDiagnosticChecksByDecisionPolicy(diagnosticChecks, decisionPolicy);
-  diagnosticChecks = rankDiagnosticChecksForCase(diagnosticChecks, caseState, safetyDecision, null);
   decisionPolicy = buildDecisionPolicy(caseState, safetyDecision, hypotheses, diagnosticChecks);
   diagnosticChecks = rankDiagnosticChecksForCase(diagnosticChecks, caseState, safetyDecision, decisionPolicy);
 
@@ -4620,11 +4619,7 @@ function analyzeTechnicalRequest(input, knowledge) {
       rankedHypotheses,
       closedCaseLearning
     );
-    rankedDiagnosticChecks = applyClosedCaseLearningToDiagnosticChecks(
-      rankedDiagnosticChecks,
-      closedCaseLearning,
-      safetyDecision
-    );
+    // LRN-04: check boost applicato dopo methodGate (roccoCheckPlanner crea nuovi oggetti)
   }
 
   ipotesi = rankedHypotheses;
@@ -4662,6 +4657,14 @@ function analyzeTechnicalRequest(input, knowledge) {
   });
   diagnosticChecks = methodGateResult.diagnosticChecks;
   decisionPolicy = methodGateResult.decisionPolicy;
+  // LRN-04: check boost qui — dopo methodGate, su oggetti finali (roccoCheckPlanner non li clona più)
+  if (closedCaseLearning && closedCaseLearning.applied) {
+    diagnosticChecks = applyClosedCaseLearningToDiagnosticChecks(
+      diagnosticChecks,
+      closedCaseLearning,
+      safetyDecision
+    );
+  }
   caseFingerprint = closedCaseLearning && closedCaseLearning.fingerprint
     ? closedCaseLearning.fingerprint
     : buildCaseFingerprint({

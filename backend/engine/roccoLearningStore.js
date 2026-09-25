@@ -201,7 +201,12 @@ function normalizeStore(rawStore) {
 }
 
 function loadLearningStore() {
-  ensureStoreFile();
+  try {
+    ensureStoreFile();
+  } catch (_ensureError) {
+    // directory/file creation failed (permissions, disk full)
+    // readJsonSafe handles missing files gracefully
+  }
   return normalizeStore(readJsonSafe(STORE_PATH));
 }
 
@@ -608,9 +613,11 @@ function applyClosedCaseLearningToDiagnosticChecks(diagnosticChecks, learningSig
   return diagnosticChecks.map(function (check, index) {
     var label = normalizeText(pickCheckLabel(check));
     var checkId = normalizeText(check && check.id);
+    var reasonKey = normalizeText(check && check.reason);
     var learning = learningSignal.checkBoosts && (
       learningSignal.checkBoosts[checkId] ||
-      learningSignal.checkBoosts[label]
+      learningSignal.checkBoosts[label] ||
+      (reasonKey && learningSignal.checkBoosts[reasonKey])
     ) || null;
     var boost = Number(learning && learning.boost || 0);
 
@@ -640,14 +647,9 @@ function applyClosedCaseLearningToDiagnosticChecks(diagnosticChecks, learningSig
 module.exports = {
   STORE_PATH: STORE_PATH,
   STORE_VERSION: STORE_VERSION,
-  MAX_LEARNING_RECORDS: MAX_LEARNING_RECORDS,
   buildCaseFingerprint: buildCaseFingerprint,
-  loadLearningStore: loadLearningStore,
   saveLearningStore: saveLearningStore,
-  validateClosedCaseLearningRecord: validateClosedCaseLearningRecord,
-  buildLearningDedupKey: buildLearningDedupKey,
   appendClosedCaseLearning: appendClosedCaseLearning,
-  findRelevantLearnings: findRelevantLearnings,
   getClosedCaseLearningSignal: getClosedCaseLearningSignal,
   applyClosedCaseLearningToHypotheses: applyClosedCaseLearningToHypotheses,
   applyClosedCaseLearningToDiagnosticChecks: applyClosedCaseLearningToDiagnosticChecks

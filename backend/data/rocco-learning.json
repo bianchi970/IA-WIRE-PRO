@@ -1,4 +1,76 @@
-﻿{
+{
   "version": 1,
-  "records": []
+  "records": [
+    {
+      "id": "lrn04-seed-001",
+      "timestamp": "2026-03-01T10:00:00.000Z",
+      "caseFingerprint": {
+        "observedDomains": [
+          "isolamento",
+          "differenziale"
+        ],
+        "dominantRisk": "isolamento",
+        "dominantCauseFamily": "isolamento",
+        "strongSignals": [
+          "isolamento:0.3MΩ",
+          "isolation_low:0.3MΩ",
+          "rcd_trip",
+          "fusibile-cilindrico",
+          "trasformatore-corrente",
+          "rcd-ac-2p",
+          "technical_request",
+          "mentions_rcd"
+        ],
+        "keyMeasurements": [
+          {
+            "type": "isolamento",
+            "value": 0.3,
+            "unit": "MΩ"
+          },
+          {
+            "type": "isolation_low",
+            "value": 0.3,
+            "unit": "MΩ"
+          }
+        ],
+        "contradictions": [],
+        "safetyLevel": "attention",
+        "topSymptoms": [
+          "RCD scatta senza carichi attivi, o monitor d'isolamento segnala guasto, o megger misura <1 MΩ verso terra",
+          "Il differenziale scatta quando si preme il pulsante o si eccita il relè per accendere le luci"
+        ],
+        "topFacts": [
+          "isolamento",
+          "isolation_low",
+          "rcd_trip",
+          "fusibile-cilindrico",
+          "trasformatore-corrente",
+          "rcd-ac-2p"
+        ],
+        "key": "46bee4ec059b0463"
+      },
+      "observedDomains": [
+        "isolamento",
+        "differenziale"
+      ],
+      "dominantRisk": "isolamento",
+      "dominantCauseFamily": "isolamento",
+      "initialTopHypotheses": [
+        "Avvolgimento motore degradato: invecchiamento dello smalto isolante sulle spire o umidità assorbita",
+        "Cavo BT deteriorato per abrasione, UV, roditori o surriscaldamento: guaina rotta con dispersione verso terra",
+        "Cavo di terra con perdita di isolamento a valle del relè"
+      ],
+      "confirmedCause": "Avvolgimento motore degradato: invecchiamento dello smalto isolante sulle spire o umidità assorbita",
+      "rejectedCauses": [],
+      "decisiveChecks": [
+        "Confermare il guasto di isolamento ripetendo la misura circuito per circuito con carichi scollegati.",
+        "1) Con circuito completamente de-energizzato: misurare l'isolamento con megger 500V (BT) tra ciascuna fase e terra",
+        "1) IMPORTANTE: non aprire mai il secondario del TA sotto carico → tensione pericolosa"
+      ],
+      "correctedErrors": [],
+      "reusableSignals": [],
+      "reusableThresholds": [],
+      "notes": "debug"
+    }
+  ]
 }

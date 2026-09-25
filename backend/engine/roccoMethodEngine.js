@@ -1,5 +1,8 @@
 "use strict";
 
+// PATCH 22 — delega il riordino deterministico al planner
+var roccoCheckPlanner = require("./roccoCheckPlanner");
+
 function ensureArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -10,17 +13,6 @@ function normalizeText(value) {
 
 function stripTrailingDot(text) {
   return String(text || "").replace(/[.\s]+$/, "");
-}
-
-function cloneCheckWithPriority(check, priority) {
-  if (!check || priority === check.priority) return check;
-
-  return {
-    id: check.id,
-    reason: check.reason,
-    priority: priority,
-    basedOnFacts: check.basedOnFacts
-  };
 }
 
 function stableSortChecks(checks) {
@@ -95,68 +87,6 @@ function normalizeCaseClassification(caseClassification) {
 
 function hasMatchedSignal(caseClassification, signal) {
   return normalizeCaseClassification(caseClassification).matchedSignals.indexOf(signal) >= 0;
-}
-
-function adjustChecksForCase(checks, caseClassification) {
-  var normalizedClassification = normalizeCaseClassification(caseClassification);
-  var caseType = normalizedClassification.caseType;
-  var hasIsolationLowSignal = hasMatchedSignal(normalizedClassification, "fact:isolation_low");
-
-  return ensureArray(checks).map(function (check) {
-    var reason = String(check && check.reason || "");
-    var normalizedReason = normalizeText(reason);
-    var nextPriority = check && check.priority;
-
-    if (caseType === "differential_trip") {
-      if (!hasIsolationLowSignal && isIsolationCheck(normalizedReason) && !isCircuitIsolationCheck(normalizedReason)) {
-        nextPriority = Math.min(nextPriority, 40);
-      }
-      if (!hasIsolationLowSignal && isLoadSeparationCheck(normalizedReason)) {
-        nextPriority = Math.max(nextPriority, 98);
-      }
-      if (hasIsolationLowSignal && isLoadSeparationCheck(normalizedReason)) {
-        nextPriority = Math.min(nextPriority, 60);
-      }
-      if (isCircuitIsolationCheck(normalizedReason)) {
-        nextPriority = Math.max(nextPriority, hasIsolationLowSignal ? 99 : 97);
-      }
-    }
-
-    if (caseType === "overload_trip") {
-      if (isIsolationCheck(normalizedReason)) {
-        nextPriority = Math.min(nextPriority, 20);
-      }
-      if (isOverloadFocusCheck(normalizedReason)) {
-        nextPriority = Math.max(nextPriority, 97);
-      }
-      if (/differenzial|rcd|dispersion/.test(normalizedReason)) {
-        nextPriority = Math.min(nextPriority, 28);
-      }
-    }
-
-    if (caseType === "overheating_or_burnt_contact") {
-      if (isSafeIsolationStep(normalizedReason)) {
-        nextPriority = Math.max(nextPriority, 110);
-      } else if (isSafeInspectionCheck(normalizedReason)) {
-        nextPriority = Math.max(nextPriority, 98);
-      }
-
-      if (isLiveMeasurementCheck(normalizedReason) && !isSafeIsolationStep(normalizedReason)) {
-        nextPriority = Math.min(nextPriority, 10);
-      }
-    }
-
-    if (caseType === "no_output_with_input_present") {
-      if (isComponentCommandCheck(normalizedReason)) {
-        nextPriority = Math.max(nextPriority, 96);
-      }
-      if (isIsolationCheck(normalizedReason)) {
-        nextPriority = Math.min(nextPriority, 30);
-      }
-    }
-
-    return cloneCheckWithPriority(check, nextPriority);
-  });
 }
 
 function ensureMethodCheck(checks, reason, priority, basedOnFacts) {
@@ -254,7 +184,13 @@ function applyRoccoMethodGate(params) {
     technicianPriority: "general"
   }, safeParams.decisionPolicy || {});
   var caseClassification = normalizeCaseClassification(safeParams.caseClassification);
-  var gatedChecks = adjustChecksForCase(safeParams.diagnosticChecks, caseClassification);
+  // PATCH 22 — usa il planner deterministico per l'aggiustamento priorità
+  var plannerResult = roccoCheckPlanner.planChecks({
+    caseClassification: caseClassification,
+    diagnosticChecks: safeParams.diagnosticChecks,
+    hypotheses: safeParams.hypotheses
+  });
+  var gatedChecks = plannerResult.diagnosticChecks;
 
   gatedChecks = recoverCaseCheckFromHypotheses(gatedChecks, caseClassification, safeParams.hypotheses);
 
@@ -273,10 +209,12 @@ function applyRoccoMethodGate(params) {
     caseClassification: caseClassification,
     diagnosticChecks: gatedChecks,
     decisionPolicy: Object.assign({}, baseDecisionPolicy, {
+      // PATCH 22 — selectAllowedNextStep mantiene il controllo safety (danger/stop);
+      // plannerResult.allowedNextStep viene usato come base di fallback se i checks non producono un match migliore
       allowedNextStep: selectAllowedNextStep(
         gatedChecks,
         caseClassification,
-        baseDecisionPolicy.allowedNextStep,
+        plannerResult.allowedNextStep || baseDecisionPolicy.allowedNextStep,
         safeParams.safetyDecision
       )
     })
