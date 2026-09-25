@@ -1113,13 +1113,22 @@ var CAUSE_HYPOTHESES = [
     causa: "Sovraccarico — corrente superiore alla portata del cavo o della protezione",
     baseScore: 3,
     pro: [
-      { test: function (f) { return f.tempHigh; },      weight: 6, label: "temperatura >80°C misurata" },
-      { test: function (f) { return f.burnSigns; },     weight: 4, label: "segni bruciatura/fumo" },
-      { test: function (f) { return f.highCurrent; },   weight: 7, label: "corrente alta misurata" },
-      { test: function (f) { return f.heavyLoad; },     weight: 3, label: "carico pesante dichiarato" }
+      { test: function (f) { return f.tempHigh; },            weight: 6, label: "temperatura >80\u00b0C misurata" },
+      { test: function (f) { return f.burnSigns; },           weight: 4, label: "segni bruciatura/fumo" },
+      { test: function (f) { return f.highCurrent; },         weight: 7, label: "corrente alta misurata" },
+      { test: function (f) { return f.heavyLoad; },           weight: 3, label: "carico pesante dichiarato" },
+      // EXPERT-01: carico inadeguato per il circuito e segnale forte
+      { test: function (f) { return f.loadCircuitMismatch; }, weight: 6, label: "carico inadeguato per il circuito rilevato" }
     ],
     contra: [
-      { test: function (f) { return f.lightLoad; },    weight: 4, label: "carico leggero" }
+      { test: function (f) { return f.lightLoad; },
+        weight: 4,  label: "carico leggero" },
+      // EXPERT-01: il differenziale NON scatta per sovraccarico — escludere questa famiglia
+      { test: function (f) { return f.rcdTrips && !f.mcbTrips; },
+        weight: 20, label: "protezione differenziale: sovraccarico non causa scatto RCD — valutare dispersione/isolamento" },
+      // EXPERT-01: scatto istantaneo indica intervento magnetico, non termico
+      { test: function (f) { return f.mcbTripInstant; },
+        weight: 12, label: "scatto istantaneo indica intervento magnetico, non sovraccarico termico" }
     ],
     bestCheck: "Misura corrente con pinza amperometrica e confronto con In della protezione",
     missingEvidence: "Corrente effettiva e taglia protezione"
@@ -1133,7 +1142,11 @@ var CAUSE_HYPOTHESES = [
       { test: function (f) { return f.longRun; },      weight: 3, label: "tratta lunga dichiarata" },
       { test: function (f) { return f.highCurrent; },  weight: 4, label: "corrente alta misurata" }
     ],
-    contra: [],
+    contra: [
+      // EXPERT-01: il differenziale NON scatta per sezione insufficiente
+      { test: function (f) { return f.rcdTrips && !f.mcbTrips; },
+        weight: 16, label: "protezione differenziale: sezione cavo non causa scatto RCD" }
+    ],
     bestCheck: "Verifica sezione cavo vs tabella CEI-UNEL per lunghezza e corrente",
     missingEvidence: "Sezione cavo, lunghezza tratta, corrente di impiego"
   },
@@ -1396,7 +1409,14 @@ function normalizeObservedStates(rawText) {
     { id: "neutral_reference", test: /neutro|sbilanciat/i },
     { id: "zone_wide", test: /palazzo|vicini|zona|quartiere|condomini/i },
     { id: "only_me", test: /solo io|solo a me|solo casa mia/i },
-    { id: "flickering", test: /sbalzi|flicker|intermittent|sfarfall/i }
+    { id: "flickering", test: /sbalzi|flicker|intermittent|sfarfall/i },
+    // EXPERT-01: apparecchi elettronici sensibili al megger 500V
+    { id: "sensitive_electronic_load", test: /caldaia|boiler|inverter|condizionator|climatizzator|pompa.calore/i },
+    // EXPERT-01: carico incompatibile con il circuito (es. clima su linea luci)
+    { id: "load_circuit_mismatch", test: /(clima|condizionator|climatizzator|forno|lavatrice|lavastoviglie).{0,80}luc[ei]|luc[ei].{0,80}(clima|condizionator|climatizzator)|linea.{0,20}(inadeguata|sbagliata|errata)/i },
+    // EXPERT-01: timing scatto magnetotermico (discriminante magnetico vs termico)
+    { id: "mcb_trip_instant", test: /subito|istantane|all.istante|di colpo|immediatamente/i },
+    { id: "mcb_trip_delayed", test: /dopo (un po|qualche|alcuni|pochi)|ritardat/i }
   ];
   var hasNegatedDanger = /nessun(?:a|o)?\s+(?:odore|fumo|scintill\w*|segno di bruciato)|senza\s+(?:odore|fumo|scintill\w*)/i.test(lower);
 
@@ -1966,7 +1986,11 @@ function buildObservedStateEvidence(normalizedInput, evidenceSet) {
     neutral_reference: true,
     flickering: true,
     no_voltage_claim: true,
-    device_off_claim: true
+    device_off_claim: true,
+    sensitive_electronic_load: true,
+    load_circuit_mismatch: true,
+    mcb_trip_instant: true,
+    mcb_trip_delayed: true
   };
 
   (normalizedInput.observedStates || []).forEach(function (state) {
@@ -2354,11 +2378,34 @@ function buildDiagnosticChecks(facts, contradictions, safetyDecision, evidenceSe
   }
   if ((hasEvidenceFact(evidenceSet, "mentions_rcd") || getEvidenceSignalStrength(evidenceSet, "earth_leakage_signal") > 0.5) &&
       (!hasEvidenceFact(evidenceSet, "isolamento") || missingLabels["manca misura isolamento verso terra"])) {
-    pushDiagnosticCheck(checks, "CHK-RCD-01", "Misurare isolamento con megohmetro 500V DC tra ogni conduttore attivo e PE (>1MOhm atteso).", 95, ["mentions_rcd", "measurement_gap_signal"]);
+    // EXPERT-01: apparecchi elettronici — megger 500V va su linea vuota, mai sull'apparecchio completo
+    if (hasEvidenceFact(evidenceSet, "sensitive_electronic_load")) {
+      pushDiagnosticCheck(checks, "CHK-RCD-01",
+        "Prima scollegare fisicamente il carico elettronico dalla linea (caldaia/inverter/clima: rimuovere i morsetti di alimentazione e scollegare eventuali componenti sensibili). Poi misurare isolamento 500V DC sulla sola linea vuota (>1MOhm atteso). Non eseguire mai megger 500V direttamente sull'apparecchio completo: rischio danni irreversibili alla scheda elettronica.",
+        95, ["mentions_rcd", "measurement_gap_signal", "sensitive_electronic_load"]);
+    } else {
+      pushDiagnosticCheck(checks, "CHK-RCD-01", "Misurare isolamento con megohmetro 500V DC tra ogni conduttore attivo e PE (>1MOhm atteso).", 95, ["mentions_rcd", "measurement_gap_signal"]);
+    }
   }
+  // EXPERT-01: misura tensione inutile nel contesto differenziale — escluderla come prima verifica
   if ((hasEvidenceFact(evidenceSet, "mentions_voltage") || missingLabels["manca misura tensione fase-neutro"]) &&
-      !hasEvidenceFact(evidenceSet, "tensione")) {
+      !hasEvidenceFact(evidenceSet, "tensione") &&
+      !hasEvidenceFact(evidenceSet, "mentions_rcd")) {
     pushDiagnosticCheck(checks, "CHK-VOLT-01", "Misurare tensione L-N e L-PE ai morsetti del componente sotto carico.", 90, ["mentions_voltage", "measurement_gap_signal"]);
+  }
+  // EXPERT-01: discriminante magnetico vs termico — obbligatoria se timing sconosciuto
+  if (hasEvidenceFact(evidenceSet, "mcb_trip") &&
+      !hasEvidenceFact(evidenceSet, "mcb_trip_instant") &&
+      !hasEvidenceFact(evidenceSet, "mcb_trip_delayed")) {
+    pushDiagnosticCheck(checks, "CHK-MCB-TIME",
+      "Verificare il tipo di scatto: avviene istantaneamente all'accensione del carico (intervento magnetico — causa probabile corto o guasto franco) oppure dopo alcuni minuti di funzionamento (intervento termico — causa probabile sovraccarico).",
+      97, ["mcb_trip"]);
+  }
+  // EXPERT-01: carico su circuito inadeguato — segnale impiantistico forte
+  if (hasEvidenceFact(evidenceSet, "load_circuit_mismatch")) {
+    pushDiagnosticCheck(checks, "CHK-CIRCUIT-01",
+      "Verificare la compatibilita tra il carico e il circuito su cui e collegato (es. clima su linea luci): controllare In protezione, sezione cavo e somma potenze dei carichi sul circuito. Un carico di potenza elevata richiede una linea dedicata.",
+      93, ["load_circuit_mismatch"]);
   }
   if (hasFact(facts, "matched_keyword", function (fact) {
     var keyword = normalize(String(fact.value || ""));
@@ -2624,7 +2671,12 @@ function buildEvidenceFlags(evidenceSet) {
     neutralRef: hasEvidenceFact(evidenceSet, "neutral_reference"),
     zoneWide: hasEvidenceFact(evidenceSet, "zone_wide"),
     onlyMe: hasEvidenceFact(evidenceSet, "only_me"),
-    flickering: hasEvidenceFact(evidenceSet, "flickering")
+    flickering: hasEvidenceFact(evidenceSet, "flickering"),
+    // EXPERT-01 flags
+    sensitiveElecLoad: hasEvidenceFact(evidenceSet, "sensitive_electronic_load"),
+    loadCircuitMismatch: hasEvidenceFact(evidenceSet, "load_circuit_mismatch"),
+    mcbTripInstant: hasEvidenceFact(evidenceSet, "mcb_trip_instant"),
+    mcbTripDelayed: hasEvidenceFact(evidenceSet, "mcb_trip_delayed")
   };
 }
 

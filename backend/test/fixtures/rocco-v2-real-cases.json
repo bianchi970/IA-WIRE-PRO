@@ -1,0 +1,230 @@
+[
+  {
+    "id": "rcd_boiler_trip_live_01",
+    "input": {
+      "text": "Il differenziale scatta quando accendo la caldaia",
+      "photos": [],
+      "measurements": []
+    },
+    "expected": {
+      "primaryGap": "missing_measurement_insulation",
+      "nextActionType": "request_measurement",
+      "canonicalCheckKey": null,
+      "maxUsefulSteps": 2,
+      "allowStopReasons": [
+        "sufficient_answer",
+        "safety_block",
+        "no_viable_action"
+      ]
+    }
+  },
+  {
+    "id": "mcb_oven_overload_01",
+    "input": {
+      "text": "Forno da 21A: magnetotermico scatta per sovraccarico sotto carico",
+      "photos": [],
+      "measurements": []
+    },
+    "expected": {
+      "primaryGap": "missing_measurement_current",
+      "nextActionType": "request_measurement",
+      "canonicalCheckKey": null,
+      "maxUsefulSteps": 2,
+      "allowStopReasons": [
+        "sufficient_answer",
+        "safety_block",
+        "no_viable_action"
+      ]
+    }
+  },
+  {
+    "id": "socket_no_voltage_01",
+    "input": {
+      "text": "Presa senza tensione in cucina",
+      "photos": [],
+      "measurements": []
+    },
+    "expected": {
+      "primaryGap": "missing_measurement_voltage",
+      "nextActionType": "request_measurement",
+      "canonicalCheckKey": null,
+      "maxUsefulSteps": 2,
+      "allowStopReasons": [
+        "sufficient_answer",
+        "safety_block",
+        "no_viable_action"
+      ]
+    }
+  },
+  {
+    "id": "light_fault_ambiguous_01",
+    "input": {
+      "text": "Luce non funziona: non so se e lampada, interruttore o alimentazione",
+      "photos": [],
+      "measurements": []
+    },
+    "expected": {
+      "primaryGap": "missing_measurement_voltage",
+      "nextActionType": "request_measurement",
+      "canonicalCheckKey": null,
+      "maxUsefulSteps": 2,
+      "allowStopReasons": [
+        "sufficient_answer",
+        "safety_block",
+        "no_viable_action"
+      ]
+    }
+  },
+  {
+    "id": "roller_shutter_motor_01",
+    "input": {
+      "text": "Il motore della tapparella ronza ma non parte",
+      "photos": [],
+      "measurements": []
+    },
+    "expected": {
+      "primaryGap": "missing_trip_context",
+      "nextActionType": "suggest_check",
+      "canonicalCheckKey": "verify_trip_condition_context",
+      "maxUsefulSteps": 2,
+      "allowStopReasons": [
+        "sufficient_answer",
+        "safety_block",
+        "no_viable_action"
+      ]
+    }
+  },
+  {
+    "id": "open_circuit_line_01",
+    "input": {
+      "text": "Linea interrotta: circuito aperto su contatto di uscita",
+      "photos": [],
+      "measurements": []
+    },
+    "expected": {
+      "primaryGap": "missing_measurement_continuity",
+      "nextActionType": "request_measurement",
+      "canonicalCheckKey": null,
+      "maxUsefulSteps": 2,
+      "allowStopReasons": [
+        "sufficient_answer",
+        "safety_block",
+        "no_viable_action"
+      ]
+    }
+  },
+  {
+    "id": "unknown_panel_visual_01",
+    "input": {
+      "text": "Non ho foto del quadro e non conosco la protezione coinvolta",
+      "photos": [],
+      "measurements": []
+    },
+    "expected": {
+      "primaryGap": "missing_visual_panel",
+      "nextActionType": "request_photo",
+      "canonicalCheckKey": null,
+      "maxUsefulSteps": 2,
+      "allowStopReasons": [
+        "sufficient_answer",
+        "safety_block",
+        "no_viable_action"
+      ]
+    }
+  },
+  {
+    "id": "rcd_context_incomplete_prudent_01",
+    "input": {
+      "text": "Il differenziale scatta ma non so quando e non ho misure ne foto",
+      "photos": [],
+      "measurements": []
+    },
+    "expected": {
+      "primaryGap": "missing_trip_context",
+      "nextActionType": "suggest_check",
+      "canonicalCheckKey": "verify_trip_condition_context",
+      "maxUsefulSteps": 2,
+      "allowStopReasons": [
+        "sufficient_answer",
+        "safety_block",
+        "no_viable_action"
+      ]
+    }
+  },
+  {
+    "id": "panel_no_photo_prudent_01",
+    "input": {
+      "text": "Quadro non visibile e non so quale protezione scatta",
+      "photos": [],
+      "measurements": []
+    },
+    "expected": {
+      "primaryGap": "missing_trip_context",
+      "nextActionType": "suggest_check",
+      "canonicalCheckKey": "verify_trip_condition_context",
+      "maxUsefulSteps": 2,
+      "allowStopReasons": [
+        "sufficient_answer",
+        "safety_block",
+        "no_viable_action"
+      ]
+    }
+  },
+  {
+    "id": "unknown_protection_prudent_01",
+    "input": {
+      "text": "Scatta una protezione ma non so quale dispositivo del quadro interviene",
+      "photos": [],
+      "measurements": []
+    },
+    "expected": {
+      "primaryGap": "missing_trip_context",
+      "nextActionType": "suggest_check",
+      "canonicalCheckKey": "verify_trip_condition_context",
+      "maxUsefulSteps": 2,
+      "allowStopReasons": [
+        "sufficient_answer",
+        "safety_block",
+        "no_viable_action"
+      ]
+    }
+  },
+  {
+    "id": "device_nameplate_01",
+    "input": {
+      "text": "Serve identificare la targhetta del motore",
+      "photos": [],
+      "measurements": []
+    },
+    "expected": {
+      "primaryGap": "missing_visual_device_label",
+      "nextActionType": "request_photo",
+      "canonicalCheckKey": null,
+      "maxUsefulSteps": 2,
+      "allowStopReasons": [
+        "sufficient_answer",
+        "safety_block",
+        "no_viable_action"
+      ]
+    }
+  },
+  {
+    "id": "safety_burnt_panel_01",
+    "input": {
+      "text": "Cavo bruciato e odore forte nel quadro",
+      "photos": [],
+      "measurements": []
+    },
+    "expected": {
+      "primaryGap": "safety_block",
+      "nextActionType": "stop",
+      "canonicalCheckKey": null,
+      "maxUsefulSteps": 0,
+      "allowStopReasons": [
+        "safety_block",
+        "sufficient_answer",
+        "no_viable_action"
+      ]
+    }
+  }
+]
