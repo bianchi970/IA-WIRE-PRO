@@ -56,6 +56,15 @@ try {
   console.warn('[ROCCO RUNNER] Non disponibile:', e && e.message);
 }
 
+// ROCCO V2 ORCHESTRATOR — nucleo deduttivo strutturato
+let roccoV2 = null;
+try {
+  roccoV2 = require('./rocco_v2/orchestrator');
+  console.log('[ROCCO V2] Orchestratore caricato ✓');
+} catch (e) {
+  console.warn('[ROCCO V2] Non disponibile:', e && e.message);
+}
+
 // ROCCO VISION — pipeline analisi foto quadri elettrici (FASE 6)
 let analyzePanel = null;
 let buildVisionContract = null;
@@ -2173,6 +2182,71 @@ app.get("/api/admin/ollama/status", requireAdmin, async (req, res) => {
     res.json({ ok: true, available: true, url: OLLAMA_URL, active_model: OLLAMA_MODEL, models: (models.models || []).map(function(m){ return m.name; }) });
   } catch (e) {
     res.json({ ok: true, available: false, url: OLLAMA_URL, error: e.message });
+  }
+});
+
+// =========================
+// ROCCO V2 — endpoint orchestratore
+// =========================
+
+// POST /api/chat/v2 — diagnosi tramite ROCCO v2 orchestratore
+app.post("/api/chat/v2", rlChat, uploadAny, async (req, res) => {
+  if (!roccoV2) {
+    return res.status(503).json({ ok: false, error: "ROCCO v2 non disponibile" });
+  }
+  try {
+    const body = req.body || {};
+    const message = String(body.message || body.text || "").trim();
+    if (!message) {
+      return res.status(400).json({ ok: false, error: "message vuoto" });
+    }
+
+    // SEC-02: fonte autoritativa = cookie
+    const user_id = req.authenticatedUserId;
+
+    // Immagini
+    let imageBuffer = null;
+    let imageMimeType = null;
+    const imageFiles = pickAllImageFiles(req.files);
+    if (imageFiles.length > 0 && imageFiles[0].buffer) {
+      imageBuffer = imageFiles[0].buffer;
+      imageMimeType = imageFiles[0].mimetype || "image/jpeg";
+    }
+
+    // Feedback caso chiuso (opzionale)
+    const closedCaseFeedback = body.closedCaseFeedback
+      ? parseOptionalJsonField(body.closedCaseFeedback)
+      : null;
+
+    const result = await roccoV2.runDiagnosis({
+      message: message,
+      conversation_id: body.conversation_id || null,
+      user_id: user_id,
+      has_image: !!imageBuffer,
+      image_buffer: imageBuffer,
+      image_mime_type: imageMimeType,
+      provider_hint: body.provider || null,
+      max_steps: 5,
+      closed_case_feedback: closedCaseFeedback
+    });
+
+    res.json({
+      ok: result.ok,
+      answer: result.answer,
+      provider: result.runtime_metadata ? result.runtime_metadata.provider_used : null,
+      model: result.runtime_metadata ? result.runtime_metadata.model_used : null,
+      fallback_used: result.runtime_metadata ? result.runtime_metadata.fallback_used : false,
+      orchestrator_version: "rocco_v2",
+      certainty: result.diagnosis_snapshot ? result.diagnosis_snapshot.final_confidence : "non_verifiable",
+      diagnosis_snapshot: result.diagnosis_snapshot || null,
+      next_action_meta: result.nextActionMeta || null,
+      ambiguity_meta: result.ambiguityMeta || null,
+      evidence_meta: result.evidenceMeta || null,
+      memory_result: result.memory_result || null
+    });
+  } catch (err) {
+    logger.error("/api/chat/v2 error: " + (err && err.message || err));
+    res.status(500).json({ ok: false, error: err && err.message || "errore interno ROCCO v2" });
   }
 });
 
