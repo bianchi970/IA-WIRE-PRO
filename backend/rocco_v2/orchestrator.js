@@ -1232,6 +1232,37 @@ function createOrchestrator(options) {
         }
       } catch(e) { /* findSimilarCases graceful degradation */ }
 
+      // ═══ 5e. DISTILLATORE ESPERIENZA — regole apprese dai casi chiusi ═══
+      try {
+        if (neuralIntegration && neuralIntegration.cercaRegoleDistillate) {
+          var sintomoDist = cs.anomaly_type || "";
+          var misureDist = cs.measurements || [];
+          var compDist = cs.components_detected || [];
+          var condDist = []; // condizioni ambientali dal testo
+          var testoProbl = (cs.problem_summary || "").toLowerCase();
+          if (/piov|umid|bagnato/.test(testoProbl)) condDist.push("umidita");
+          if (/vecchi|datato|anni/.test(testoProbl)) condDist.push("impianto_vecchio");
+          if (/intermit|a volte/.test(testoProbl)) condDist.push("intermittente");
+
+          var regoleDist = neuralIntegration.cercaRegoleDistillate(sintomoDist, misureDist, compDist, condDist);
+          if (regoleDist && regoleDist.length > 0) {
+            regoleDist.forEach(function(rd) {
+              if (!rd || !rd.regola || !rd.regola.allora) return;
+              // Boost ipotesi che matcha la regola distillata
+              cs.hypotheses.forEach(function(h) {
+                if (h.status !== "active") return;
+                if (normalize(h.label).indexOf(normalize(rd.regola.allora)) >= 0 ||
+                    normalize(rd.regola.allora).indexOf(normalize(h.label)) >= 0) {
+                  h.distiller_boost = rd.boost;
+                  h.probability = Math.min(0.95, (h.probability || 0.5) + rd.boost * 0.1);
+                }
+              });
+            });
+            runtimeTrace.record(cs, "distiller_regole", { trovate: regoleDist.length });
+          }
+        }
+      } catch(e) { /* distillatore graceful degradation */ }
+
       // ═══ 5b. CONTROFATTUALE — "se fosse vero, cosa dovrei osservare?" ═══
       cs.controfattuale_risultati = [];
       cs.hypotheses.forEach(function(h) {
@@ -1378,6 +1409,23 @@ function createOrchestrator(options) {
             cs.next_action = neuralIntegration.scoreActionInformativeness(cs.next_action, cs.hypotheses, cs);
           }
         } catch(e) { /* neural graceful degradation */ }
+
+        // Distillatore: suggerisci verifica più efficiente dall'esperienza
+        try {
+          if (neuralIntegration && neuralIntegration.suggerisciVerifica) {
+            var sintomoV = cs.anomaly_type || "";
+            var attiveV = cs.hypotheses.filter(function(h) { return h.status === "active"; }).map(function(h) { return h.label; });
+            var sugVerifica = neuralIntegration.suggerisciVerifica(sintomoV, attiveV);
+            if (sugVerifica && sugVerifica.confidenza > 0.5 && sugVerifica.casi_base >= 3) {
+              cs.distiller_verifica = sugVerifica;
+              runtimeTrace.record(cs, "distiller_verifica", {
+                verifica: sugVerifica.verifica,
+                confidenza: sugVerifica.confidenza,
+                casi_base: sugVerifica.casi_base
+              });
+            }
+          }
+        } catch(e) { /* distillatore graceful degradation */ }
       }
 
       // Sincronizza formato legacy

@@ -23,6 +23,8 @@ var NeuralVision = null;
 try { NeuralVision = require("./neural_vision"); } catch(e) { /* opzionale */ }
 var CasiRealiForum = null;
 try { CasiRealiForum = require("./casi_reali_forum"); } catch(e) { /* opzionale */ }
+var ExperienceDistiller = null;
+try { ExperienceDistiller = require("./experience_distiller"); } catch(e) { /* opzionale */ }
 
 var DATA_DIR = path.join(__dirname, "..", "..", "data", "neural");
 
@@ -431,7 +433,15 @@ function trainFromClosedCase(caseState, feedback) {
     // 4. Memory: salva episodio
     var memResult = NeuralMemory.store(caseState, feedback);
 
-    // 5. Auto-evoluzione: ciclo di review se ci sono dati diagnostici
+    // 5. Distillazione esperienza: estrai regole dal caso chiuso
+    var distillerResult = null;
+    if (ExperienceDistiller) {
+      try {
+        distillerResult = ExperienceDistiller.distilla(caseState, feedback);
+      } catch(e) { /* distillazione non critica */ }
+    }
+
+    // 6. Auto-evoluzione: ciclo di review se ci sono dati diagnostici
     var evolutionResult = null;
     if (NeuralEvolution && feedback.diagnosi) {
       try {
@@ -443,7 +453,7 @@ function trainFromClosedCase(caseState, feedback) {
       } catch(e) { /* evoluzione non critica */ }
     }
 
-    // 6. Salva pesi (fire-and-forget, non bloccante)
+    // 7. Salva pesi (fire-and-forget, non bloccante)
     try { saveAll(); } catch(e) { /* non critico */ }
 
     return {
@@ -452,6 +462,7 @@ function trainFromClosedCase(caseState, feedback) {
       patterns: patResult,
       knowledge: knResult,
       memory: memResult ? { id: memResult.id } : null,
+      distiller: distillerResult ? { distillato: distillerResult.distillato } : null,
       evolution: evolutionResult ? evolutionResult.stato : null
     };
   } catch(e) {
@@ -499,6 +510,9 @@ function saveAll(dataDir) {
     if (NeuralSimulator) {
       safeWriteJSON(path.join(dataDir, "simulator_state.json"), NeuralSimulator.salva());
     }
+    if (ExperienceDistiller) {
+      safeWriteJSON(path.join(dataDir, "distiller_rules.json"), ExperienceDistiller.salva());
+    }
 
     return true;
   } catch(e) {
@@ -531,6 +545,10 @@ function loadAll(dataDir) {
       var simData = safeLoadJSON(path.join(dataDir, "simulator_state.json"));
       if (simData) { NeuralSimulator.carica(simData); result.simulator = true; }
     }
+    if (ExperienceDistiller) {
+      var distData = safeLoadJSON(path.join(dataDir, "distiller_rules.json"));
+      if (distData) { ExperienceDistiller.carica(distData); result.distiller = true; }
+    }
   } catch(e) { /* ignore */ }
 
   return result;
@@ -550,7 +568,8 @@ function getStats() {
     memory: NeuralMemory.stats(),
     evolution: NeuralEvolution ? NeuralEvolution.getStato() : null,
     simulator: NeuralSimulator ? NeuralSimulator.getStats() : null,
-    vision: NeuralVision ? NeuralVision.getStats() : null
+    vision: NeuralVision ? NeuralVision.getStats() : null,
+    distiller: ExperienceDistiller ? ExperienceDistiller.getStats() : null
   };
 }
 
@@ -631,6 +650,14 @@ module.exports = {
   CasiRealiForum: CasiRealiForum,
   getForumCases: CasiRealiForum ? CasiRealiForum.getTutti : null,
   searchForumCases: CasiRealiForum ? CasiRealiForum.cerca : null,
+
+  // Distillatore di esperienza
+  cercaRegoleDistillate: ExperienceDistiller ? ExperienceDistiller.cercaRegole : null,
+  suggerisciVerifica: ExperienceDistiller ? ExperienceDistiller.suggerisciVerifica : null,
+  cercaSequenza: ExperienceDistiller ? ExperienceDistiller.cercaSequenza : null,
+  previsioneDistiller: ExperienceDistiller ? ExperienceDistiller.previsione : null,
+  consolidaRegole: ExperienceDistiller ? ExperienceDistiller.consolidaRegole : null,
+  ExperienceDistiller: ExperienceDistiller,
 
   // Sub-modules (esposti per test)
   NeuralLanguage: NeuralLanguage,
