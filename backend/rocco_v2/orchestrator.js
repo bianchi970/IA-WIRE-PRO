@@ -1142,6 +1142,19 @@ function createOrchestrator(options) {
       var nArchi = arr(cs.grafo.archi).length;
       runtimeTrace.record(cs, "grafo", { nodi: nNodi, archi: nArchi, template: cs.system_model.type });
 
+      // ═══ 4c. WORLD MODEL — modello mentale dell'impianto ═══
+      try {
+        if (neuralIntegration && neuralIntegration.buildWorldModel) {
+          cs.world_model = neuralIntegration.buildWorldModel(cs);
+          if (cs.world_model) {
+            runtimeTrace.record(cs, "world_model", {
+              nodi: Object.keys(cs.world_model.nodi).length,
+              tipo: cs.world_model.tipo_impianto
+            });
+          }
+        }
+      } catch(e) { /* world model graceful degradation */ }
+
       // ═══ 5. RAGIONARE — generare ipotesi da conoscenza ═══
       cs.hypotheses = ragiona(cs, percezione);
       runtimeTrace.record(cs, "ragionamento", {
@@ -1163,6 +1176,61 @@ function createOrchestrator(options) {
           }
         }
       } catch(e) { /* neural graceful degradation */ }
+
+      // ═══ 5c. SIMULATORE CAUSALE — ragionamento da tecnico esperto ═══
+      try {
+        if (neuralIntegration && neuralIntegration.simulaCausale) {
+          var simResult = neuralIntegration.simulaCausale(cs);
+          if (simResult && simResult.ipotesi) {
+            cs.simulazione_causale = simResult;
+            simResult.ipotesi.forEach(function(ip) {
+              if (ip.stato !== "attiva") return;
+              var duplicata = cs.hypotheses.some(function(h) {
+                return normalize(h.label).substring(0, 40) === normalize(ip.causa).substring(0, 40);
+              });
+              if (!duplicata) {
+                cs.hypotheses.push(makeHypothesis(
+                  ip.causa, ip.come_verifico || "",
+                  "simulatore_causale",
+                  [ip.come_verifico].filter(Boolean), [],
+                  ["Simulatore causale: probabilità " + Math.round(ip.probabilita * 100) + "%"]
+                ));
+              }
+            });
+            runtimeTrace.record(cs, "simulatore_causale", {
+              sintomo: simResult.sintomo,
+              ipotesi_generate: (simResult.ipotesi || []).length,
+              attive: simResult.attive
+            });
+          }
+        }
+      } catch(e) { /* simulatore causale graceful degradation */ }
+
+      // ═══ 5d. CASI SIMILI — confronta sempre con l'esperienza passata ═══
+      try {
+        if (neuralIntegration && neuralIntegration.findSimilarCases) {
+          var simili = neuralIntegration.findSimilarCases(cs, 3);
+          var casiAggiunti = 0;
+          arr(simili).forEach(function(sim) {
+            if (!sim || !sim.data || !sim.data.confirmed_cause) return;
+            var duplicata = cs.hypotheses.some(function(h) {
+              return normalize(h.label).substring(0, 40) === normalize(sim.data.confirmed_cause).substring(0, 40);
+            });
+            if (!duplicata) {
+              cs.hypotheses.push(makeHypothesis(
+                sim.data.confirmed_cause,
+                "Caso simile (score " + (sim.score || 0).toFixed(2) + ")",
+                "neural_similarita",
+                [], [], ["Trovato da neural knowledge graph"]
+              ));
+              casiAggiunti++;
+            }
+          });
+          if (casiAggiunti > 0) {
+            runtimeTrace.record(cs, "casi_simili", { trovati: simili.length, aggiunti: casiAggiunti });
+          }
+        }
+      } catch(e) { /* findSimilarCases graceful degradation */ }
 
       // ═══ 5b. CONTROFATTUALE — "se fosse vero, cosa dovrei osservare?" ═══
       cs.controfattuale_risultati = [];
@@ -1193,6 +1261,16 @@ function createOrchestrator(options) {
         arr(cf.verifiche_suggerite).forEach(function(v) {
           if (h.confirm_tests.indexOf(v) < 0) h.confirm_tests.push(v);
         });
+
+        // Neural: arricchisci il controfattuale con world model
+        try {
+          if (neuralIntegration && neuralIntegration.enhanceCounterfactual) {
+            var ncf = neuralIntegration.enhanceCounterfactual(h, cf, cs);
+            if (ncf && ncf.neural_predictions) {
+              h.neural_cf = ncf.neural_predictions;
+            }
+          }
+        } catch(e) { /* enhanceCounterfactual graceful degradation */ }
       });
 
       if (cs.controfattuale_risultati.length > 0) {
@@ -1254,6 +1332,19 @@ function createOrchestrator(options) {
         caseStateHelpers.addToolResult(cs, tr);
         if (tr.tool_name === "recognition_tool" && tr.raw_ref) {
           cs.components_detected = caseStateHelpers.pushUniqueStrings(cs.components_detected, arr(tr.raw_ref.legacy_components));
+        }
+        // Neural Vision: interpreta immagine con il cervello visivo
+        if (tr.tool_name === "vision_tool" && neuralIntegration && neuralIntegration.interpretaImmagine) {
+          try {
+            var visObs = arr(tr.raw_ref && tr.raw_ref.observations);
+            if (visObs.length > 0) {
+              cs.neural_vision = neuralIntegration.interpretaImmagine(visObs);
+              runtimeTrace.record(cs, "neural_vision", {
+                anomalie: (cs.neural_vision || {}).anomalie_rilevate || 0,
+                gravita: (cs.neural_vision || {}).gravita_massima || "nessuna"
+              });
+            }
+          } catch(e) { /* neural vision graceful degradation */ }
         }
       }).catch(function(e) { runtimeTrace.record(cs, "tool_fail", { error: s(e && e.message) }); });
     }).then(function() {

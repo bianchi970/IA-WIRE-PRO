@@ -113,12 +113,45 @@ function warmup(options) {
     // curriculum/study_engine non disponibile — bootstrap base sufficiente
   }
 
+  // 7. Bootstrap da casi reali forum — ROCCO impara dai problemi veri
+  //    Nota: trainFromClosedCase richiede initialized=true, ma siamo ancora nel warmup.
+  //    Chiamiamo i moduli direttamente.
+  var forumTrained = 0;
+  if (CasiRealiForum) {
+    var forumCasi = CasiRealiForum.getTutti();
+    for (var fi = 0; fi < forumCasi.length; fi++) {
+      try {
+        var ftr = CasiRealiForum.aTraining(forumCasi[fi]);
+        var fcs = ftr.caseState;
+        var ffb = {
+          confirmedCause: ftr.esito.causa_reale,
+          diagnosi: ftr.esito.causa_reale,
+          componenti: ftr.esito.componenti,
+          come_verificato: ftr.esito.come_verificato
+        };
+        // Language
+        var ftxt = fcs.problem_summary || "";
+        var fent = NeuralLanguage.estraiEntita(ftxt);
+        var fint = NeuralLanguage.classificaIntento(ftxt);
+        NeuralLanguage.imparaDaInterazione(ftxt, fint.intent, fent);
+        // Knowledge
+        NeuralKnowledge.imparaDaCasoChiuso(fcs, ffb);
+        // Memory
+        NeuralMemory.store(fcs, ffb);
+        // Patterns
+        NeuralPatterns.trainDaCasoChiuso(fcs, ffb);
+        forumTrained++;
+      } catch(e) { /* skip caso problematico */ }
+    }
+  }
+
   warmupDone = true;
   return {
     language: NeuralLanguage.getStats(),
     patterns: NeuralPatterns.getStats(),
     knowledge: NeuralKnowledge.getStats(),
-    memory: NeuralMemory.stats()
+    memory: NeuralMemory.stats(),
+    forum_trained: forumTrained
   };
 }
 
