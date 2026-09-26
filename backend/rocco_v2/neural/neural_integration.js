@@ -19,6 +19,8 @@ var WorldModel = null;
 try { WorldModel = require("./world_model"); } catch(e) { /* opzionale */ }
 var NeuralSimulator = null;
 try { NeuralSimulator = require("./neural_simulator"); } catch(e) { /* opzionale */ }
+var NeuralVision = null;
+try { NeuralVision = require("./neural_vision"); } catch(e) { /* opzionale */ }
 
 var DATA_DIR = path.join(__dirname, "..", "..", "data", "neural");
 
@@ -512,7 +514,8 @@ function getStats() {
     knowledge: NeuralKnowledge.getStats(),
     memory: NeuralMemory.stats(),
     evolution: NeuralEvolution ? NeuralEvolution.getStato() : null,
-    simulator: NeuralSimulator ? NeuralSimulator.getStats() : null
+    simulator: NeuralSimulator ? NeuralSimulator.getStats() : null,
+    vision: NeuralVision ? NeuralVision.getStats() : null
   };
 }
 
@@ -583,6 +586,11 @@ module.exports = {
   simulaCausale: NeuralSimulator ? NeuralSimulator.simula : null,
   aggiornaCausale: NeuralSimulator ? NeuralSimulator.aggiorna : null,
   NeuralSimulator: NeuralSimulator,
+
+  // Visione tecnica
+  interpretaImmagine: NeuralVision ? NeuralVision.interpretaImmagine : null,
+  confrontaImmagini: NeuralVision ? NeuralVision.confrontaImmagini : null,
+  NeuralVision: NeuralVision,
 
   // Sub-modules (esposti per test)
   NeuralLanguage: NeuralLanguage,
