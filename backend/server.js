@@ -1923,6 +1923,61 @@ app.post("/api/upload", rlUpload, uploadAny, async (req, res) => {
 });
 
 // =========================
+// VOICE STT — Whisper transcription
+// =========================
+var rlVoice = makeRateLimiter(30); // 30 richieste per finestra
+
+app.post("/api/voice/transcribe", rlVoice, uploadAny, async (req, res) => {
+  try {
+    if (!openai) {
+      return res.status(503).json({ ok: false, error: "OpenAI non configurato — STT non disponibile" });
+    }
+
+    // Trova il file audio tra i campi inviati
+    var audioFile = null;
+    if (Array.isArray(req.files)) {
+      for (var i = 0; i < req.files.length; i++) {
+        var mime = (req.files[i].mimetype || "").toLowerCase();
+        if (mime.indexOf("audio") === 0 || mime === "application/ogg" || mime === "application/octet-stream") {
+          audioFile = req.files[i];
+          break;
+        }
+      }
+    }
+    if (!audioFile || !audioFile.buffer || audioFile.buffer.length < 100) {
+      return res.status(400).json({ ok: false, error: "Nessun file audio valido ricevuto" });
+    }
+
+    // Limita a 25MB (limite Whisper API)
+    if (audioFile.buffer.length > 25 * 1024 * 1024) {
+      return res.status(413).json({ ok: false, error: "File audio troppo grande (max 25MB)" });
+    }
+
+    // Crea un File-like object per l'SDK OpenAI
+    var ext = "webm";
+    var m = (audioFile.mimetype || "").match(/\/([\w]+)/);
+    if (m) ext = m[1];
+    var fileName = "voice." + ext;
+
+    var transcription = await openai.audio.transcriptions.create({
+      file: new File([audioFile.buffer], fileName, { type: audioFile.mimetype || "audio/webm" }),
+      model: "whisper-1",
+      language: "it",
+      response_format: "text"
+    });
+
+    var text = (typeof transcription === "string" ? transcription : (transcription.text || "")).trim();
+
+    logger.info("STT OK: " + text.substring(0, 80) + (text.length > 80 ? "..." : ""));
+
+    res.json({ ok: true, text: text });
+  } catch (err) {
+    logger.error("STT error: " + (err && err.message || err));
+    res.status(500).json({ ok: false, error: "Errore trascrizione: " + (err && err.message || "errore interno") });
+  }
+});
+
+// =========================
 // ROCCO ENGINE TEST ENDPOINT (FASE 6)
 // =========================
 

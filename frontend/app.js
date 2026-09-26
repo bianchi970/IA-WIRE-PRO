@@ -1193,6 +1193,221 @@ console.log('BRIDGE LIVE');
     });
   }
 
+  // ====== VOICE: STT (mic) + TTS (lettura risposta) ======
+  var micBtn = document.getElementById("micBtn");
+  var _mediaRecorder = null;
+  var _audioChunks = [];
+  var _recording = false;
+  var _ttsEnabled = false; // TTS disattivato di default, attivabile con doppio tap mic
+
+  // Controlla supporto MediaRecorder
+  var _hasMediaRecorder = (typeof MediaRecorder !== "undefined") && navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
+
+  if (micBtn && !_hasMediaRecorder) {
+    micBtn.style.display = "none"; // nascondi su browser non supportati
+  }
+
+  function startRecording() {
+    if (_recording || _busy) return;
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      _recording = true;
+      _audioChunks = [];
+      if (micBtn) micBtn.classList.add("recording");
+      setStatus("Registrazione...");
+
+      // Preferisci webm, fallback a qualsiasi formato supportato
+      var mimeType = "audio/webm;codecs=opus";
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = "audio/webm";
+      }
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = "audio/mp4";
+      }
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = ""; // default del browser
+      }
+
+      var opts = {};
+      if (mimeType) opts.mimeType = mimeType;
+      _mediaRecorder = new MediaRecorder(stream, opts);
+
+      _mediaRecorder.ondataavailable = function (e) {
+        if (e.data && e.data.size > 0) _audioChunks.push(e.data);
+      };
+
+      _mediaRecorder.onstop = function () {
+        // Ferma tutte le tracce del microfono
+        stream.getTracks().forEach(function (t) { t.stop(); });
+
+        if (_audioChunks.length === 0) {
+          setStatus("Pronto");
+          return;
+        }
+
+        var blob = new Blob(_audioChunks, { type: _mediaRecorder.mimeType || "audio/webm" });
+        _audioChunks = [];
+
+        // Ignora registrazioni troppo corte (<0.3s ≈ <5KB)
+        if (blob.size < 5000) {
+          setStatus("Registrazione troppo breve");
+          sleep(800).then(function () { setStatus("Pronto"); });
+          return;
+        }
+
+        transcribeAudio(blob);
+      };
+
+      _mediaRecorder.start();
+    }).catch(function (err) {
+      console.warn("Mic error:", err);
+      _recording = false;
+      if (micBtn) micBtn.classList.remove("recording");
+      setStatus("Mic non disponibile");
+      sleep(1500).then(function () { setStatus("Pronto"); });
+    });
+  }
+
+  function stopRecording() {
+    if (!_recording || !_mediaRecorder) return;
+    _recording = false;
+    if (micBtn) micBtn.classList.remove("recording");
+    if (_mediaRecorder.state === "recording") {
+      _mediaRecorder.stop();
+    }
+  }
+
+  function transcribeAudio(blob) {
+    setStatus("Trascrizione...");
+
+    var formData = new FormData();
+    var ext = (blob.type || "").indexOf("mp4") >= 0 ? "mp4" : "webm";
+    formData.append("audio", blob, "voice." + ext);
+
+    var urls = candidateTranscribeEndpoints();
+    var lastErr = null;
+
+    function tryOne(i) {
+      if (i >= urls.length) {
+        setStatus("Errore trascrizione");
+        sleep(1000).then(function () { setStatus("Pronto"); });
+        console.error("STT failed:", lastErr);
+        return;
+      }
+      fetch(urls[i], { method: "POST", body: formData })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (!data.ok || !data.text) throw new Error(data.error || "Nessun testo");
+          // Inserisci il testo trascritto nel campo e invia automaticamente
+          if (textInput) {
+            textInput.value = data.text;
+            autoResize();
+          }
+          setStatus("Pronto");
+          updateSendState();
+          // Auto-invio dopo trascrizione
+          if (sendBtn && !sendBtn.disabled) sendBtn.click();
+        })
+        .catch(function (e) {
+          lastErr = e;
+          tryOne(i + 1);
+        });
+    }
+    tryOne(0);
+  }
+
+  function candidateTranscribeEndpoints() {
+    var path = "/api/voice/transcribe";
+    if (isProdSameOrigin()) return [location.origin + path];
+    return [location.origin + path, "http://localhost:3000" + path];
+  }
+
+  // TTS — lettura risposta con SpeechSynthesis nativo
+  function speakText(text) {
+    if (!_ttsEnabled) return;
+    if (!window.speechSynthesis) return;
+
+    // Cancella eventuale lettura precedente
+    window.speechSynthesis.cancel();
+
+    // Pulisci il testo dalle sezioni markdown
+    var clean = text
+      .replace(/#{1,4}\s*/g, "")
+      .replace(/\*{1,2}([^*]+)\*{1,2}/g, "$1")
+      .replace(/\[([^\]]+)\]/g, "$1")
+      .replace(/---+/g, "")
+      .replace(/\n{2,}/g, ". ");
+
+    // Limita a 500 char per evitare letture infinite
+    if (clean.length > 500) clean = clean.substring(0, 500) + "...";
+
+    var utter = new SpeechSynthesisUtterance(clean);
+    utter.lang = "it-IT";
+    utter.rate = 1.0;
+    utter.pitch = 1.0;
+
+    // Prova a selezionare una voce italiana
+    var voices = window.speechSynthesis.getVoices();
+    for (var v = 0; v < voices.length; v++) {
+      if (voices[v].lang && voices[v].lang.indexOf("it") === 0) {
+        utter.voice = voices[v];
+        break;
+      }
+    }
+
+    window.speechSynthesis.speak(utter);
+  }
+
+  // Eventi mic: press-and-hold (touch + mouse)
+  if (micBtn && _hasMediaRecorder) {
+    // Touch events (mobile — primario)
+    micBtn.addEventListener("touchstart", function (e) {
+      e.preventDefault();
+      startRecording();
+    }, { passive: false });
+
+    micBtn.addEventListener("touchend", function (e) {
+      e.preventDefault();
+      stopRecording();
+    }, { passive: false });
+
+    micBtn.addEventListener("touchcancel", function () {
+      stopRecording();
+    });
+
+    // Mouse events (desktop — fallback)
+    micBtn.addEventListener("mousedown", function (e) {
+      if (e.button !== 0) return; // solo click sinistro
+      startRecording();
+    });
+
+    micBtn.addEventListener("mouseup", function () {
+      stopRecording();
+    });
+
+    micBtn.addEventListener("mouseleave", function () {
+      if (_recording) stopRecording();
+    });
+
+    // Doppio click: toggle TTS
+    micBtn.addEventListener("dblclick", function (e) {
+      e.preventDefault();
+      _ttsEnabled = !_ttsEnabled;
+      setStatus(_ttsEnabled ? "TTS attivo" : "TTS disattivato");
+      sleep(1000).then(function () { setStatus("Pronto"); });
+    });
+  }
+
+  // Hook TTS nelle risposte AI — sovrascrive addMessage per intercettare le risposte
+  var _origAddMessage = addMessage;
+  addMessage = function (role, content, meta) {
+    var result = _origAddMessage(role, content, meta);
+    if (role === "ai" && _ttsEnabled && content) {
+      speakText(content);
+    }
+    return result;
+  };
+
   setStatus("Pronto");
   updateSendState();
   loadConversationOnStart();

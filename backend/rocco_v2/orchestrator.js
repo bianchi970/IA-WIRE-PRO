@@ -1,1952 +1,1088 @@
 "use strict";
 
-var contracts = require("./contracts");
+// ============================================================
+// ROCCO — CERVELLO COGNITIVO
+// ============================================================
+//
+// L'intelligenza è la capacità di percepire, comprendere e
+// adattare il proprio comportamento per risolvere problemi
+// nuovi o sconosciuti. (Stern, Claparède, Gardner)
+//
+// ROCCO ha studiato. Conosce leggi fisiche, elettrotecnica,
+// norme CEI, componenti, fenomeni di guasto.
+//
+// Quando riceve un problema:
+//   1. PERCEPISCE — capisce cosa succede, estrae fatti e relazioni
+//   2. COMPRENDE — modella il sistema e identifica l'anomalia
+//   3. RAGIONA — applica ciò che sa per generare ipotesi giustificate
+//   4. DISCRIMINA — sceglie la verifica che riduce più incertezza
+//   5. VERIFICA — controlla le conclusioni contro i fatti
+//   6. SI ADATTA — se il ragionamento non basta, cambia strategia
+//
+// Ogni conclusione risponde a: "da quali fatti e leggi deriva?"
+// Se non può rispondere, non è diagnosi — è ipotesi da verificare.
+//
+// ============================================================
+
 var caseStateHelpers = require("./case_state");
-var runtimeTrace = require("./runtime_trace");
-var providerGatewayFactory = require("./provider_gateway");
 var safetyGuard = require("./safety_guard");
-var planner = require("./planner");
 var toolRegistryFactory = require("./tool_registry");
-var reasoner = require("./reasoner");
-var verifier = require("./verifier");
+var providerGatewayFactory = require("./provider_gateway");
 var responseFormatter = require("./response_formatter");
+var runtimeTrace = require("./runtime_trace");
 var memory = require("./memory");
+var contracts = require("./contracts");
+var reasoner = require("./reasoner");
+var causalModel = require("./causal_model");
 
-function safeText(value) {
-  return String(value === undefined || value === null ? "" : value).trim();
+// Neural Integration — sensore cognitivo (graceful degradation)
+var neuralIntegration = null;
+try {
+  neuralIntegration = require("./neural/neural_integration");
+  neuralIntegration.init({ autoWarmup: true });
+} catch(e) { /* neural non disponibile — ROCCO funziona come prima */ }
+
+// ====== UTILITÀ ======
+
+function s(v) { return String(v == null ? "" : v).trim(); }
+function arr(v) { return Array.isArray(v) ? v : []; }
+
+function normalize(text) {
+  return s(text).toLowerCase()
+    .replace(/[àáâã]/g, "a").replace(/[èéêë]/g, "e")
+    .replace(/[ìíîï]/g, "i").replace(/[òóôõ]/g, "o").replace(/[ùúûü]/g, "u")
+    .replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function safeArray(value) {
-  return Array.isArray(value) ? value : [];
-}
+function has(text, pattern) { return pattern.test(normalize(text)); }
 
-function normalizeConfidence(value) {
-  var normalized = safeText(value).toLowerCase();
-  if (normalized === "confirmed" || normalized === "probable" || normalized === "non_verifiable") {
-    return normalized;
+function hasToolResult(cs, name) {
+  for (var i = 0; i < cs.tool_results.length; i++) {
+    if (cs.tool_results[i] && cs.tool_results[i].tool_name === name) return true;
   }
-  return "non_verifiable";
+  return false;
 }
 
-function normalizeEvidenceConfidence(value) {
-  var normalized = safeText(value).toLowerCase();
-  if (normalized === "high" || normalized === "medium" || normalized === "low") {
-    return normalized;
+// ============================================================
+// A. CONOSCENZA — ciò che ROCCO ha studiato
+// ============================================================
+//
+// FENOMENI: ogni fenomeno è un evento osservabile che ROCCO
+// ha studiato. Per ognuno conosce il PRINCIPIO FISICO che lo
+// spiega e le IPOTESI che derivano dal ragionamento deduttivo.
+//
+// La differenza tra pattern matching e intelligenza:
+//   Pattern matching: keyword → label
+//   Intelligenza: osservazione → principio → deduzione → ipotesi
+//
+// Ogni ipotesi ha una CATENA logica: la sequenza di ragionamento
+// che porta dall'osservazione alla conclusione.
+// ============================================================
+
+var FENOMENI = [
+
+  // ─── PROTEZIONE DIFFERENZIALE ───
+  { id: "FEN-01",
+    fenomeno: /differenziale|rcd|rcbo|salvavita|id\b/,
+    condizione: /scatt|salt|trip|intervi/,
+    principio: "Kirchhoff: in un circuito sano la somma delle correnti di fase e neutro attraverso il toroide è zero. Se il RCD sgancia, la corrente esce per un percorso non monitorato (terra).",
+    area: "elettrotecnica",
+    ipotesi: [
+      { causa: "Dispersione verso terra su carico o linea",
+        catena: ["RCD misura Delta_I tra fase e neutro", "Delta_I > I_dn (30mA civile) → sgancio", "Corrente fugge per terra: isolamento degradato su un circuito"],
+        conferma: ["sezionare i carichi uno alla volta e richiudere il RCD dopo ogni sezionamento", "misura isolamento con megger: se R < 1 MOhm → circuito trovato"],
+        esclude: ["isolamento > 1 MOhm su tutti i circuiti"] },
+      { causa: "Umidita o infiltrazione in giunzione/presa",
+        catena: ["Acqua è conduttrice", "Acqua in scatola/presa abbassa R_isolamento", "R_isolamento basso → corrente di dispersione → RCD sgancia"],
+        conferma: ["ispezione visiva scatole derivazione in zone umide o esterne", "isolamento migliora dopo asciugatura"],
+        esclude: ["tutte le giunzioni asciutte e isolamento OK"] },
+      { causa: "Dispositivo RCD difettoso",
+        catena: ["Un RCD puo avere usura meccanica del meccanismo di sgancio", "Un RCD difettoso sgancia anche senza dispersione reale"],
+        conferma: ["scatta anche senza alcun carico collegato a valle", "sostituzione con nuovo RCD elimina gli scatti"],
+        esclude: ["senza carichi collegati NON scatta → guasto a valle, RCD OK"] }
+    ]
+  },
+
+  // ─── MAGNETOTERMICO — SGANCIO ISTANTANEO ───
+  { id: "FEN-02",
+    fenomeno: /magnetotermico|mcb|automatico/,
+    condizione: /scatt.*istan|trip.*istan|subito|immedia/,
+    principio: "Lo sgancio magnetico dell'MCB è un solenoide che interviene istantaneamente (<10ms) quando la corrente supera 5-10 volte In. Tipico di cortocircuito.",
+    area: "elettrotecnica",
+    ipotesi: [
+      { causa: "Cortocircuito fase-neutro o fase-fase",
+        catena: ["Scatto istantaneo = corrente >> In", "Corrente altissima in <10ms = sgancio magnetico", "Causa: contatto diretto tra conduttori (fase-neutro, fase-fase, fase-terra)"],
+        conferma: ["scatta istantaneamente anche al riarmo senza carico", "R fase-neutro prossima a 0 Ohm a impianto spento"],
+        esclude: ["scatta solo dopo minuti sotto carico → non e cortocircuito, e sovraccarico"] },
+      { causa: "Guasto interno a un carico",
+        catena: ["Dispositivo con corto interno → corrente altissima al momento dell'inserzione", "MCB interviene per proteggere il circuito"],
+        conferma: ["scatta solo inserendo un carico specifico"],
+        esclude: ["scatta anche senza carichi collegati"] }
+    ]
+  },
+
+  // ─── MAGNETOTERMICO — SGANCIO TERMICO ───
+  { id: "FEN-03",
+    fenomeno: /magnetotermico|mcb|automatico/,
+    condizione: /scatt.*dopo|scatt.*minut|scatt.*carico|caldo|surriscald/,
+    principio: "Lo sgancio termico usa un bimetallo che si deforma con il calore. La corrente > In per tempo prolungato riscalda il bimetallo fino allo sgancio. Tempo inversamente proporzionale a I/In.",
+    area: "elettrotecnica",
+    ipotesi: [
+      { causa: "Sovraccarico: corrente > In prolungata",
+        catena: ["Effetto Joule: P = R × I² → calore proporzionale a I²", "Corrente > In per minuti → bimetallo si deforma → sgancio termico", "Causa: troppi carichi su un circuito, o carico che assorbe piu del previsto"],
+        conferma: ["misura corrente con pinza amperometrica: I > In del magnetotermico", "scatta dopo minuti sotto carico, non istantaneamente"],
+        esclude: ["corrente misurata < In del magnetotermico", "scatta istantaneamente → magnetico, non termico"] },
+      { causa: "Magnetotermico sottodimensionato rispetto al carico",
+        catena: ["CEI 64-8: In deve essere ≤ Iz (portata cavo) ma >= carico previsto", "Se MCB ha In troppo basso per il carico installato → scatta in uso normale"],
+        conferma: ["confronto In MCB con assorbimento reale del carico: In < I_carico"],
+        esclude: ["In MCB adeguato al carico installato"] }
+    ]
+  },
+
+  // ─── ASSENZA TENSIONE / NON FUNZIONA ───
+  { id: "FEN-04",
+    fenomeno: /non funziona|non accende|non parte|non va|senza tensione|manca corrente|morto|spento|buio/,
+    condizione: null,
+    principio: "Un circuito funziona solo se il percorso dall'alimentazione al carico è integro: sorgente → protezioni → conduttori → carico → ritorno. Se un elemento è aperto, V_carico = 0.",
+    area: "elettrotecnica",
+    ipotesi: [
+      { causa: "Assenza di alimentazione a monte",
+        catena: ["Legge di Ohm: V = 0 al carico → circuito aperto", "Se la tensione manca già a monte (quadro, protezione scattata, interruttore aperto) → niente arriva al punto"],
+        conferma: ["misura tensione al punto: 0V confermato", "controllare stato protezioni a monte: qualcuna scattata?"],
+        esclude: ["tensione 230V ±10% presente al punto"] },
+      { causa: "Conduttore interrotto nel percorso",
+        catena: ["Un cavo puo interrompersi per danno meccanico, roditore, chiodo, o morsetto sfilato", "Circuito aperto → V = 0 al carico anche se monte OK"],
+        conferma: ["misura continuita tra quadro e punto a impianto spento"],
+        esclude: ["continuita presente su tutti i conduttori del circuito"] },
+      { causa: "Dispositivo/carico guasto internamente",
+        catena: ["Il dispositivo stesso puo avere circuito aperto interno", "Alimentazione presente ma il carico non risponde"],
+        conferma: ["tensione presente ai morsetti del carico ma non funziona", "sostituzione con dispositivo noto funzionante risolve"],
+        esclude: ["anche il sostitutivo non funziona → guasto nel circuito, non nel carico"] },
+      { causa: "Protezione a monte scattata o aperta",
+        catena: ["Un interruttore, MCB o sezionatore a monte puo essere aperto", "Il circuito a valle resta senza alimentazione"],
+        conferma: ["controllo visivo quadro: una o piu protezioni in posizione OFF"],
+        esclude: ["tutte le protezioni chiuse e tensione presente al quadro"] }
+    ]
+  },
+
+  // ─── SURRISCALDAMENTO ───
+  { id: "FEN-05",
+    fenomeno: /surriscald|caldo|brucia|odore|annerit|fonde|fum|sciogl/,
+    condizione: null,
+    principio: "Effetto Joule: P = R × I². Il calore e proporzionale alla resistenza e al quadrato della corrente. Surriscaldamento = R troppo alta (contatto degradato) oppure I troppo alta (sovraccarico).",
+    area: "fisica",
+    ipotesi: [
+      { causa: "Morsetto allentato → resistenza di contatto elevata",
+        catena: ["Morsetto non serrato → superficie di contatto ridotta → R_contatto alta", "P = R_contatto × I² → calore concentrato nel punto", "Segni: annerimento, fusione locale, odore"],
+        conferma: ["termografia o tatto: calore localizzato su un punto specifico", "riserraggio morsetto elimina il problema"],
+        esclude: ["tutti i morsetti serrati correttamente senza segni di calore"] },
+      { causa: "Sovraccarico: corrente oltre la portata del cavo",
+        catena: ["CEI 64-8: ogni cavo ha una portata Iz massima", "Se I > Iz per tempo prolungato → cavo si surriscalda uniformemente", "Rischio: degradazione isolamento, incendio"],
+        conferma: ["misura corrente con pinza: I > Iz del cavo installato", "surriscaldamento uniforme lungo il cavo, non localizzato"],
+        esclude: ["corrente sotto la portata del cavo"] },
+      { causa: "Sezione cavo sottodimensionata",
+        catena: ["Cavo di sezione insufficiente per il carico collegato", "Iz del cavo < I_carico → sovraccarico permanente"],
+        conferma: ["verifica sezione cavo: confronto con tabelle CEI 64-8 per il tipo di posa"],
+        esclude: ["sezione adeguata al carico e alla posa"] }
+    ]
+  },
+
+  // ─── GUASTO INTERMITTENTE ───
+  { id: "FEN-06",
+    fenomeno: /intermittente|a volte|random|saltuari|ogni tanto|va e viene|qualche volta/,
+    condizione: null,
+    principio: "Un guasto intermittente indica una condizione al limite: un contatto che apre/chiude, un componente che funziona solo in certe condizioni (temperatura, vibrazione, umidita). La causa e spesso meccanica.",
+    area: "esperienza",
+    ipotesi: [
+      { causa: "Connessione allentata o contatto ossidato",
+        catena: ["Morsetto non serrato o contatto ossidato → superficie di contatto instabile", "Vibrazioni, temperatura o corrente causano apertura/chiusura", "Guasto appare/scompare senza logica apparente"],
+        conferma: ["muovere cavi durante funzionamento: guasto si manifesta/scompare", "riserraggio sistematico elimina l'intermittenza"],
+        esclude: ["tutti i morsetti serrati e l'intermittenza persiste identica"] },
+      { causa: "Componente sensibile a temperatura",
+        catena: ["Alcuni componenti cambiano comportamento con la temperatura", "Funziona a freddo e non a caldo (o viceversa)", "Tipico di semiconduttori degradati o saldature fredde"],
+        conferma: ["guasto appare/scompare con il riscaldamento del componente"],
+        esclude: ["guasto non correlato alla temperatura ambiente o di esercizio"] }
+    ]
+  },
+
+  // ─── MOTORE TRIFASE NON PARTE ───
+  { id: "FEN-07",
+    fenomeno: /motore.*trifas|trifas.*motore/,
+    condizione: /non part|non avvia|non gira|ronza|bloccato/,
+    principio: "Un motore asincrono trifase richiede 3 fasi bilanciate per generare un campo magnetico rotante. Senza una fase il campo e pulsante: il motore ronza ma non genera coppia sufficiente.",
+    area: "elettrotecnica",
+    ipotesi: [
+      { causa: "Mancanza di una fase ai morsetti motore",
+        catena: ["Campo rotante richiede 3 fasi sfasate di 120°", "Con 2 fasi: campo pulsante → coppia insufficiente → motore fermo, assorbe corrente, ronza"],
+        conferma: ["misura tensione L1-L2, L2-L3, L1-L3 ai morsetti: una concatenata assente o bassa"],
+        esclude: ["tutte e tre le tensioni concatenate presenti e bilanciate (±5%)"] },
+      { causa: "Carico meccanico bloccato",
+        catena: ["Se l'albero e bloccato meccanicamente → coppia resistente infinita", "Motore assorbe corrente di spunto indefinitamente → protezione termica interviene"],
+        conferma: ["l'albero non ruota nemmeno a mano (scollegato)", "motore gira a vuoto normalmente"],
+        esclude: ["albero libero di ruotare a mano"] }
+    ]
+  },
+
+  // ─── MOTORE MONOFASE NON PARTE ───
+  { id: "FEN-08",
+    fenomeno: /motore/,
+    condizione: /non part|non avvia|ronza|monofas/,
+    principio: "Un motore monofase ha bisogno di un condensatore (o avvolgimento ausiliario) per creare lo sfasamento necessario all'avviamento. Senza condensatore: ronza ma non parte, perché il campo è pulsante.",
+    area: "elettrotecnica",
+    ipotesi: [
+      { causa: "Condensatore di avviamento guasto",
+        catena: ["Condensatore crea sfasamento tra avvolgimento principale e ausiliario", "Senza condensatore: campo pulsante, coppia di avviamento zero", "Sintomo classico: motore ronza, parte solo se spinto a mano"],
+        conferma: ["motore monofase che ronza e parte solo a mano", "misura capacita condensatore: valore fuori tolleranza o 0"],
+        esclude: ["motore trifase → condensatore non pertinente"] },
+      { causa: "Interruttore centrifugo difettoso",
+        catena: ["L'interruttore centrifugo scollega l'avvolgimento di avviamento a regime", "Se non chiude a motore fermo → avvolgimento ausiliario escluso → non parte"],
+        conferma: ["verificare continuita interruttore centrifugo a motore fermo"],
+        esclude: ["interruttore centrifugo chiuso e funzionante"] }
+    ]
+  },
+
+  // ─── MOTORE VIBRA / RUMORE ───
+  { id: "FEN-09",
+    fenomeno: /motore/,
+    condizione: /vibra|rumore|cuscinett|battit|striscia/,
+    principio: "Le vibrazioni in un motore possono essere di origine meccanica (cuscinetti, squilibrio, allineamento) o elettrica (squilibrio fasi, cortocircuito spire). Il tipo di rumore e la frequenza indicano la causa.",
+    area: "meccanica",
+    ipotesi: [
+      { causa: "Cuscinetti usurati",
+        catena: ["Cuscinetti degradati → gioco radiale eccessivo", "Gioco → vibrazioni proporzionali alla velocita", "Rumore metallico crescente con i giri"],
+        conferma: ["rumore meccanico che aumenta con la velocita", "gioco percepibile sull'albero a mano"],
+        esclude: ["motore gira liscio e silenzioso a vuoto"] },
+      { causa: "Squilibrio fasi (trifase)",
+        catena: ["Fasi sbilanciate → campo magnetico non uniforme", "Risultato: coppia pulsante → vibrazioni a frequenza 2f (100Hz)"],
+        conferma: ["misura correnti sulle 3 fasi: squilibrio > 5%"],
+        esclude: ["correnti bilanciate sulle 3 fasi"] }
+    ]
+  },
+
+  // ─── QUADRO: RONZIO O ARCO ───
+  { id: "FEN-10",
+    fenomeno: /quadro|centralino|pannello|distribuzione/,
+    condizione: /ronzio|ronza|arco|scintill|rumore|puzza/,
+    principio: "Un ronzio anomalo in quadro indica vibrazione di componenti sotto carico (contattore, trasformatore) o arco elettrico su contatto degradato. L'arco produce ozono (odore caratteristico) ed e pericoloso.",
+    area: "esperienza",
+    ipotesi: [
+      { causa: "Morsetto con arco elettrico",
+        catena: ["Contatto allentato sotto carico → micro-archi", "Arco produce calore localizzato, rumore e ozono", "Pericoloso: rischio incendio"],
+        conferma: ["ispezione quadro: segni di annerimento o fusione su morsetto", "odore di bruciato/ozono in quadro"],
+        esclude: ["tutti i morsetti integri e serrati"] },
+      { causa: "Contattore che vibra (bobina degradata)",
+        catena: ["Contattore AC: la bobina produce campo magnetico alternato", "Se il nucleo non chiude bene → vibra a 50Hz → ronzio udibile"],
+        conferma: ["ronzio proveniente da contattore specifico", "ronzio diminuisce premendo il contattore"],
+        esclude: ["nessun contattore nel quadro"] }
+    ]
+  },
+
+  // ─── INVERTER / ERRORE ───
+  { id: "FEN-11",
+    fenomeno: /inverter|vfd|drive|variatore/,
+    condizione: /errore|allarme|codice|fault|blocca/,
+    principio: "L'inverter converte frequenza e tensione per controllare la velocita del motore. Ha protezioni interne (sovracorrente, sovratensione, sovratemperatura, guasto a terra) che generano codici di errore specifici.",
+    area: "elettrotecnica",
+    ipotesi: [
+      { causa: "Sovracorrente in uscita (cortocircuito cavo o motore)",
+        catena: ["Inverter misura corrente in uscita", "Se I > soglia → fault istantaneo per proteggere gli IGBT", "Causa: corto nel cavo motore, isolamento motore degradato, o carico bloccato"],
+        conferma: ["misura isolamento cavo motore e avvolgimenti motore", "errore si ripresenta subito alla ripartenza"],
+        esclude: ["isolamento cavo e motore OK, errore non si ripresenta"] },
+      { causa: "Sovratemperatura inverter",
+        catena: ["Semiconduttori (IGBT) generano calore durante la commutazione", "Se ventilazione insufficiente o temperatura ambiente alta → sovratemperatura"],
+        conferma: ["ventola inverter ferma o ostruita", "temperatura ambiente elevata nel quadro"],
+        esclude: ["ventola funzionante e temperatura quadro nella norma"] }
+    ]
+  },
+
+  // ─── CALDAIA ───
+  { id: "FEN-12",
+    fenomeno: /caldaia|riscaldamento|scaldabagno|boiler/,
+    condizione: /non accende|non parte|errore|codice|blocca|non scalda/,
+    principio: "Una caldaia ha una sequenza di avviamento: richiesta termostato → scheda accensione → valvola gas → elettrodo accensione → fiamma → ionizzazione confermata. Se un passo fallisce, la scheda blocca per sicurezza.",
+    area: "componenti",
+    ipotesi: [
+      { causa: "Problema nella catena di accensione",
+        catena: ["La scheda tenta l'accensione: apre gas, attiva elettrodo", "Se non rileva fiamma (ionizzazione) entro il timeout → blocco di sicurezza", "Causa: elettrodo sporco, gas non arriva, scheda difettosa"],
+        conferma: ["si sente lo scatto della valvola gas?", "scintilla visibile sull'elettrodo?", "codice errore della scheda"],
+        esclude: ["caldaia si accende normalmente e produce fiamma stabile"] },
+      { causa: "Termostato o sonda temperatura difettosa",
+        catena: ["La caldaia non riceve il segnale di richiesta calore", "Oppure la sonda indica temperatura errata → la scheda non accende"],
+        conferma: ["ponticellare i morsetti del termostato: se parte, il termostato e guasto", "misura resistenza sonda e confronto con tabella NTC"],
+        esclude: ["termostato correttamente in richiesta e sonda con valori normali"] }
+    ]
+  },
+
+  // ─── FOTOVOLTAICO ───
+  { id: "FEN-13",
+    fenomeno: /fotovoltaico|pannell|stringa|solare/,
+    condizione: /produzione|bassa|errore|non produce|isolamento/,
+    principio: "Un impianto FV produce in proporzione all'irraggiamento. Se la produzione cala rispetto all'atteso: ombreggiamento, pannello degradato, cavo interrotto, inverter in fault, o mismatch nella stringa.",
+    area: "elettrotecnica",
+    ipotesi: [
+      { causa: "Ombreggiamento parziale o sporcizia pannelli",
+        catena: ["Anche un'ombra parziale su un modulo puo ridurre la produzione dell'intera stringa", "I diodi di bypass limitano il danno ma riducono la tensione"],
+        conferma: ["ispezione visiva: ombre, foglie, sporcizia sui moduli", "produzione diversa tra stringhe"],
+        esclude: ["pannelli puliti e senza ombre in tutte le ore"] },
+      { causa: "Inverter in errore o limitazione",
+        catena: ["L'inverter puo limitare la potenza per sovratemperatura, sovratensione DC, o fault interno"],
+        conferma: ["verificare display inverter: errori o limitazioni attive", "confronto potenza DC in ingresso vs AC in uscita"],
+        esclude: ["inverter funzionante senza allarmi, potenza AC proporzionale a DC"] }
+    ]
+  },
+
+  // ─── SQUILIBRIO FASI ───
+  { id: "FEN-14",
+    fenomeno: /squilibr|sbilanci|fase.*bassa|neutro.*caldo|neutro.*carico/,
+    condizione: null,
+    principio: "In un sistema trifase equilibrato le correnti di neutro si annullano. Se i carichi sono sbilanciati la corrente di neutro cresce, e con essa le perdite e il rischio di sovraccarico del neutro.",
+    area: "elettrotecnica",
+    ipotesi: [
+      { causa: "Distribuzione carichi sbilanciata tra fasi",
+        catena: ["Carichi concentrati su una fase → I_neutro alta", "Neutro sovraccaricato → surriscaldamento"],
+        conferma: ["misura correnti sulle 3 fasi e sul neutro", "una fase assorbe molto piu delle altre"],
+        esclude: ["correnti bilanciate e neutro sotto carico nominale"] },
+      { causa: "Neutro interrotto in sistema trifase",
+        catena: ["Senza neutro le tensioni monofasi fluttuano", "Carichi leggeri vedono sovratensione, carichi pesanti vedono sottotensione", "Molto pericoloso per gli apparecchi collegati"],
+        conferma: ["tensioni monofasi anomale (alcune alte, alcune basse)", "continuita neutro assente"],
+        esclude: ["tensioni monofasi normali (230V ±10%) e neutro integro"] }
+    ]
+  },
+
+  // ─── PRESA / PUNTO LUCE ───
+  { id: "FEN-15",
+    fenomeno: /presa|punto luce|lampada|lampadario|plafoniera|faretto/,
+    condizione: /non funziona|non accende|non va|spento|morto/,
+    principio: "Un punto presa o luce è l'ultimo anello della catena: quadro → protezione → conduttore → interruttore/deviatore → punto. L'analisi parte dal punto e risale verso il quadro.",
+    area: "esperienza",
+    ipotesi: [
+      { causa: "Lampada/carico bruciato",
+        catena: ["La causa piu semplice e spesso la piu comune", "Il carico stesso ha finito la sua vita utile"],
+        conferma: ["sostituzione lampada/carico con uno noto funzionante"],
+        esclude: ["anche il sostitutivo non funziona → guasto nel circuito"] },
+      { causa: "Interruttore o deviatore difettoso",
+        catena: ["L'interruttore ha contatti interni che si usurano", "Contatto aperto permanente → circuito aperto"],
+        conferma: ["misura continuita attraverso l'interruttore in posizione ON"],
+        esclude: ["interruttore commuta correttamente"] },
+      { causa: "Connessione interrotta nella scatola di derivazione",
+        catena: ["Le giunzioni nelle scatole possono allentarsi nel tempo", "Un morsetto sfilato = circuito aperto per quel punto"],
+        conferma: ["ispezione scatola di derivazione: un morsetto scollegato"],
+        esclude: ["tutte le connessioni salde e integre"] }
+    ]
   }
-  return "low";
+];
+
+// ============================================================
+// A2. PRIMI PRINCIPI — per problemi sconosciuti
+// ============================================================
+//
+// Quando nessun fenomeno specifico corrisponde, ROCCO ragiona
+// per principi generali. Questa è la capacità di adattarsi
+// a situazioni nuove o mai incontrate. (Stern)
+
+var PRIMI_PRINCIPI = [
+  { id: "PP-01", nome: "Scomposizione del sistema",
+    metodo: "Dividere il sistema in sottosistemi e verificare ciascuno separatamente",
+    domanda: "Quale sottosistema funziona e quale no?",
+    scopo: "Isolare la sezione guasta" },
+  { id: "PP-02", nome: "Half-split (bisezione)",
+    metodo: "Verificare a metà percorso tra sorgente e carico. Se OK a meta: guasto nella seconda meta. Se NO: prima meta.",
+    domanda: "C'e tensione/continuita a meta del percorso?",
+    scopo: "Dimezzare l'area di ricerca ad ogni verifica" },
+  { id: "PP-03", nome: "Analisi energetica",
+    metodo: "L'energia si conserva (primo principio). Se non arriva al carico, dove va? Dispersione, resistenza parassita, circuito aperto.",
+    domanda: "Dove si dissipa l'energia che non arriva al carico?",
+    scopo: "Trovare il punto di perdita" },
+  { id: "PP-04", nome: "Analisi temporale",
+    metodo: "Quando è iniziato il problema? Cosa è cambiato prima? Nuova installazione, temporale, lavori edilizi, aggiunta carico?",
+    domanda: "Il problema è improvviso o graduale? Cosa è cambiato?",
+    scopo: "Correlare causa e effetto nel tempo" },
+  { id: "PP-05", nome: "Confronto A/B",
+    metodo: "Confrontare con un sistema identico funzionante. Cosa c'è di diverso?",
+    domanda: "Un punto/circuito simile funziona correttamente?",
+    scopo: "Evidenziare la differenza che causa il guasto" },
+  { id: "PP-06", nome: "Analisi ambientale",
+    metodo: "Temperatura, umidita, vibrazioni, polvere, animali possono degradare componenti e isolamenti.",
+    domanda: "L'ambiente in cui si trova il componente è aggressivo?",
+    scopo: "Identificare cause ambientali non immediatamente evidenti" }
+];
+
+// ============================================================
+// B. PERCEZIONE — capire cosa succede
+// ============================================================
+//
+// Non solo estrarre keyword, ma comprendere RELAZIONI:
+// - causa → effetto (quando X succede → Y accade)
+// - temporale (da quando? dopo cosa?)
+// - spaziale (dove esattamente?)
+// - condizionale (solo quando...)
+
+function percepire(cs) {
+  var text = normalize(cs.problem_summary);
+  var percezione = {
+    fenomeno_principale: null,     // cosa succede
+    condizione_temporale: null,    // quando
+    localizzazione: null,          // dove
+    componenti_menzionati: cs.components_detected.slice(),
+    misure_fornite: cs.measurements.slice(),
+    gia_provato: [],               // cosa ha già fatto l'utente
+    novita: "sconosciuto"          // noto | parziale | sconosciuto
+  };
+
+  // Fenomeno principale
+  if (/scatt|trip|salt|intervi/.test(text)) percezione.fenomeno_principale = "intervento_protezione";
+  else if (/non funziona|non va|non parte|non accende|morto|spento/.test(text)) percezione.fenomeno_principale = "non_funzionamento";
+  else if (/surriscald|caldo|brucia|fum|odore/.test(text)) percezione.fenomeno_principale = "surriscaldamento";
+  else if (/intermittente|a volte|ogni tanto|saltuari/.test(text)) percezione.fenomeno_principale = "guasto_intermittente";
+  else if (/motore/.test(text)) percezione.fenomeno_principale = "guasto_motore";
+  else if (/ronzio|arco|rumore/.test(text)) percezione.fenomeno_principale = "rumore_anomalo";
+  else if (/errore|codice|fault|allarme/.test(text)) percezione.fenomeno_principale = "errore_dispositivo";
+
+  // Condizione temporale
+  if (/da ieri|da stamattina|da quando|dopo.*temporal|dopo.*pioggia/.test(text)) percezione.condizione_temporale = "recente_correlato";
+  else if (/sempre|da sempre|mai funzionato/.test(text)) percezione.condizione_temporale = "cronico";
+  else if (/a volte|ogni tanto|random/.test(text)) percezione.condizione_temporale = "intermittente";
+
+  // Localizzazione
+  if (/cucina|bagno|camera|soggiorno|cantina|garage|esterno|giardino|balcone/.test(text))
+    percezione.localizzazione = text.match(/cucina|bagno|camera|soggiorno|cantina|garage|esterno|giardino|balcone/)[0];
+
+  // Cosa ha già provato
+  if (/ho provato|ho verificato|ho misurato|ho cambiato|ho sostituito/.test(text))
+    percezione.gia_provato.push(text.match(/ho (?:provato|verificato|misurato|cambiato|sostituito)[^.!?]*/)[0]);
+
+  // Classificazione novità
+  var fenomeniMatch = 0;
+  FENOMENI.forEach(function(f) {
+    if (f.fenomeno.test(text)) fenomeniMatch++;
+  });
+  if (fenomeniMatch > 0) percezione.novita = fenomeniMatch > 1 ? "noto" : "parziale";
+
+  return percezione;
 }
 
-function mapEvidenceConfidenceToCaseConfidence(value) {
-  var normalized = normalizeEvidenceConfidence(value);
-  if (normalized === "high") return "confirmed";
-  if (normalized === "medium") return "probable";
-  return "non_verifiable";
-}
+// ============================================================
+// C. MODELLO DEL SISTEMA — cos'è, come dovrebbe funzionare
+// ============================================================
 
-function collectVerificationIssues(result) {
-  var issues = [];
-  if (!result) return issues;
-  if (Array.isArray(result.contradictions)) issues = issues.concat(result.contradictions);
-  if (Array.isArray(result.safetyFlags)) issues = issues.concat(result.safetyFlags);
-  if (Array.isArray(result.notes)) issues = issues.concat(result.notes);
-  return issues;
-}
+var SISTEMI = [
+  { id: "protezione_differenziale", match: /differenziale|rcd|rcbo|salvavita|id\b/,
+    funzionamento: "protegge dalle correnti di dispersione verso terra", atteso: "non interviene in condizioni normali" },
+  { id: "protezione_sovracorrente", match: /magnetotermico|mcb|fusibile|termico|automatico/,
+    funzionamento: "protegge da sovraccarico e cortocircuito", atteso: "non interviene se I < In" },
+  { id: "sistema_motore", match: /motore|avviamento|trifase|contattore|inverter|vfd/,
+    funzionamento: "converte energia elettrica in meccanica", atteso: "gira, produce coppia, silenzioso" },
+  { id: "quadro_distribuzione", match: /quadro|distribuzione|sbarra|centralino/,
+    funzionamento: "distribuisce energia ai circuiti", atteso: "silenzioso, morsetti freddi, protezioni chiuse" },
+  { id: "impianto_utilizzatore", match: /presa|interruttore|punto luce|lampada|lampadario|luce|faretto/,
+    funzionamento: "alimenta il carico finale", atteso: "tensione presente, carico funzionante" },
+  { id: "impianto_fotovoltaico", match: /fotovoltaico|inverter solare|pannell|stringa|solare/,
+    funzionamento: "converte luce solare in energia elettrica", atteso: "produce in proporzione all'irraggiamento" },
+  { id: "sistema_termico", match: /caldaia|riscaldamento|termostato|scaldabagno|boiler/,
+    funzionamento: "genera calore per riscaldamento o ACS", atteso: "si accende su richiesta, produce acqua calda" },
+  { id: "impianto_domotico", match: /knx|dali|domotica|bus|attuatore/,
+    funzionamento: "controlla dispositivi via bus di comunicazione", atteso: "comandi eseguiti, comunicazione attiva" },
+  { id: "sistema_ups", match: /ups|continuita|batteria|gruppo/,
+    funzionamento: "fornisce alimentazione di riserva", atteso: "commuta su batteria senza interruzione" },
+  { id: "wallbox_ev", match: /wallbox|colonnina|ricarica|ev\b/,
+    funzionamento: "ricarica veicoli elettrici", atteso: "eroga corrente secondo il protocollo di ricarica" }
+];
 
-function extractToolResult(caseState, toolName) {
+function buildSystemModel(cs) {
+  var text = normalize(cs.problem_summary);
+  var systemType = "generico";
+  var sys = null;
   var i;
-  for (i = 0; i < caseState.tool_results.length; i += 1) {
-    if (caseState.tool_results[i] && caseState.tool_results[i].tool_name === toolName) {
-      return caseState.tool_results[i];
-    }
+
+  for (i = 0; i < SISTEMI.length; i++) {
+    if (SISTEMI[i].match.test(text)) { sys = SISTEMI[i]; systemType = sys.id; break; }
   }
+
+  // Discrepanza: cosa dovrebbe fare vs cosa fa
+  var expected = sys ? sys.atteso : "funzionamento normale";
+  var discrepancy = "";
+
+  if (/scatt|salt|intervi|trip/.test(text)) {
+    discrepancy = "protezione interviene → guasto, sovraccarico, o dispersione";
+  } else if (/non funziona|non accende|non parte|non va|morto|spento/.test(text)) {
+    discrepancy = "non funziona → circuito aperto, alimentazione mancante, o guasto interno";
+  } else if (/surriscald|caldo|brucia|odore|fonde|annerit|fum/.test(text)) {
+    discrepancy = "surriscaldamento → effetto Joule eccessivo (R alta o I alta)";
+  } else if (/intermittente|a volte|random|saltuari|ogni tanto/.test(text)) {
+    discrepancy = "guasto intermittente → condizione al limite, contatto instabile";
+  } else if (/rumore|ronzio|vibra|arco/.test(text)) {
+    discrepancy = "rumore anomalo → componente degradato, contatto con arco, o vibrazione meccanica";
+  } else if (/errore|codice|fault|allarme/.test(text)) {
+    discrepancy = "dispositivo segnala errore → protezione interna attiva";
+  }
+
+  return {
+    type: systemType,
+    funzionamento: sys ? sys.funzionamento : null,
+    components: cs.components_detected.slice(),
+    expected_behavior: expected,
+    actual_behavior: s(cs.problem_summary),
+    discrepancy: discrepancy
+  };
+}
+
+// ============================================================
+// D. RAGIONAMENTO — il cuore dell'intelligenza
+// ============================================================
+//
+// ROCCO ragiona in 3 modalità (Gardner: intelligenze multiple):
+//
+// 1. RAGIONAMENTO DA CONOSCENZA — applica ciò che ha studiato
+//    (fenomeni noti → ipotesi con catena deduttiva)
+//
+// 2. RAGIONAMENTO PER PRIMI PRINCIPI — per problemi nuovi
+//    (leggi fisiche generali → ipotesi per esclusione)
+//
+// 3. RAGIONAMENTO PER ANALOGIA — casi simili già risolti
+//    (memoria casi validati → ipotesi per somiglianza)
+//
+// La strategia dipende dalla classificazione del problema:
+//   noto → modalità 1 + 3
+//   parziale → modalità 1 + 2 + 3
+//   sconosciuto → modalità 2 + 3
+
+function makeHypothesis(label, reason, source, confirmTests, denyTests, catena) {
+  return {
+    label: s(label), reason: s(reason), source: source || "unknown",
+    catena: arr(catena),
+    supporting_evidence: [], contradicting_evidence: [],
+    confirm_tests: arr(confirmTests), deny_tests: arr(denyTests),
+    confidence: "possible", status: "active", rejection_reason: null
+  };
+}
+
+// D1. Ragionamento da conoscenza (fenomeni studiati)
+function ragionaPerConoscenza(cs) {
+  var text = normalize(cs.problem_summary);
+  var hyps = [];
+
+  FENOMENI.forEach(function(fen) {
+    // Il fenomeno corrisponde?
+    if (!fen.fenomeno.test(text)) return;
+    // Se ha una condizione aggiuntiva, deve matchare anche quella
+    if (fen.condizione && !fen.condizione.test(text)) return;
+
+    fen.ipotesi.forEach(function(ip) {
+      hyps.push(makeHypothesis(
+        ip.causa,
+        fen.principio,
+        fen.area,
+        ip.conferma, ip.esclude,
+        ip.catena
+      ));
+    });
+  });
+
+  return hyps;
+}
+
+// D2. Ragionamento per primi principi (problemi nuovi)
+function ragionaPerPrincipi(cs) {
+  var text = normalize(cs.problem_summary);
+  var hyps = [];
+
+  // Se il problema ha elementi concreti ma nessun fenomeno specifico,
+  // applica i primi principi per generare domande e ipotesi generali
+  if (/non funziona|non va|guasto|problema|difett/.test(text)) {
+    hyps.push(makeHypothesis(
+      "Causa da localizzare tramite scomposizione",
+      "Nessun fenomeno specifico identificato. Applico metodo di scomposizione (PP-01): dividere il sistema in parti e verificare ciascuna.",
+      "primi_principi",
+      [PRIMI_PRINCIPI[0].domanda, PRIMI_PRINCIPI[1].domanda],
+      [],
+      ["Problema generico senza fenomeno specifico", "Applico scomposizione del sistema", "Verifico ciascun sottosistema separatamente"]
+    ));
+  }
+
+  if (/improvvis|cambiato|dopo|da quando/.test(text)) {
+    hyps.push(makeHypothesis(
+      "Causa correlata a cambiamento recente",
+      "Analisi temporale (PP-04): un guasto improvviso è spesso correlato a un evento recente — lavori, temporale, aggiunta carico, modifica impianto.",
+      "primi_principi",
+      [PRIMI_PRINCIPI[3].domanda],
+      [],
+      ["Il guasto è improvviso, non graduale", "Cerco correlazione temporale con un evento", "Cosa è cambiato prima del guasto?"]
+    ));
+  }
+
+  return hyps;
+}
+
+// D3. Ragionamento per analogia (casi simili)
+function ragionaPerAnalogia(cs) {
+  var hyps = [];
+  try {
+    var casi = memory.findRelevantClosedCases(cs, 2);
+    arr(casi).forEach(function(caso) {
+      if (!caso || !caso.confirmed_cause || caso.match_score < 0.25) return;
+      hyps.push(makeHypothesis(
+        caso.confirmed_cause,
+        "Caso simile risolto (score " + caso.match_score + "): " + s(caso.summary).substring(0, 80),
+        "caso_validato",
+        arr(caso.decisive_checks).slice(0, 2), [],
+        ["Caso simile trovato nella memoria", "Causa confermata: " + caso.confirmed_cause, "Verificare se le condizioni corrispondono"]
+      ));
+    });
+  } catch (e) { /* memoria non disponibile */ }
+  return hyps;
+}
+
+// D4. Ragionamento da knowledge base locale
+function ragionaDaKnowledge(cs) {
+  var hyps = [];
+  try {
+    var kb = require("../knowledge").getLoadedKnowledge();
+    if (!kb || !kb.failurePatterns) return hyps;
+    var words = normalize(cs.problem_summary).split(" ").filter(function(w) { return w.length > 3; });
+    if (!words.length) return hyps;
+
+    arr(kb.failurePatterns).forEach(function(p) {
+      if (!p || !p.symptom) return;
+      var sym = normalize(p.symptom);
+      var hits = 0;
+      words.forEach(function(w) { if (sym.indexOf(w) >= 0) hits++; });
+      if (hits < 2) return;
+      arr(p.likely_causes).slice(0, 2).forEach(function(cause) {
+        hyps.push(makeHypothesis(
+          s(cause).substring(0, 120),
+          "Pattern " + s(p.id) + ": " + s(p.symptom).substring(0, 80),
+          "knowledge", arr(p.checks).slice(0, 2), [],
+          ["Pattern di guasto dalla knowledge base"]
+        ));
+      });
+    });
+  } catch (e) { /* knowledge non disponibile */ }
+  return hyps;
+}
+
+// D5. Ipotesi dal safety seed (motore deterministico legacy)
+function ragionaDaSafetySeed(cs) {
+  return arr(cs.hypotheses_active).map(function(h) {
+    return makeHypothesis(h.label, h.reason, "motore_deterministico", [], [],
+      ["Ipotesi dal motore diagnostico deterministico"]);
+  });
+}
+
+// D6. Strategia adattiva — sceglie come ragionare
+function ragiona(cs, percezione) {
+  var all = [];
+
+  // Sempre: conoscenza studiata + safety seed
+  all = all.concat(ragionaPerConoscenza(cs));
+  all = all.concat(ragionaDaSafetySeed(cs));
+
+  // Se poco dalla conoscenza: primi principi + knowledge
+  if (all.length < 2 || percezione.novita === "sconosciuto") {
+    all = all.concat(ragionaPerPrincipi(cs));
+    all = all.concat(ragionaDaKnowledge(cs));
+  }
+
+  // Sempre: analogia con casi validati (se disponibile)
+  all = all.concat(ragionaPerAnalogia(cs));
+
+  // Deduplica per label normalizzata
+  var seen = {};
+  return all.filter(function(h) {
+    var key = normalize(h.label).substring(0, 60);
+    if (!key || seen[key]) return false;
+    seen[key] = true;
+    return true;
+  });
+}
+
+// ============================================================
+// E. KILL RULES — leggi fisiche che escludono ipotesi
+// ============================================================
+//
+// Se una misura reale contraddice un'ipotesi per legge fisica,
+// l'ipotesi viene eliminata con certezza. Una misura vale più
+// di qualsiasi opinione.
+
+var KILL_RULES = [
+  { id: "KR-01", signal: /isolamento.*>.*1\s*m|isolamento.*ok|isolamento.*buon/,
+    kills: /dispersione|terra|isolament/, reason: "Isolamento > 1 MOhm esclude dispersione (CEI 64-8)" },
+  { id: "KR-02", signal: /tensione.*230|tensione.*present|alimentazione.*ok/,
+    kills: /assenza.*alimentazione|manca.*tensione|manca.*corrente/, reason: "Tensione presente esclude assenza alimentazione" },
+  { id: "KR-03", signal: /continuita.*ok|continuita.*present/,
+    kills: /interruzione|circuito.*aperto|conduttore.*interrotto/, reason: "Continuita presente esclude interruzione" },
+  { id: "KR-04", signal: /corrente.*sotto|corrente.*inferiore|corrente.*ok|corrente.*<.*in/,
+    kills: /sovraccarico/, reason: "Corrente sotto il calibro esclude sovraccarico" },
+  { id: "KR-05", signal: /scatta.*istantan|trip.*istantan|intervento.*istantan/,
+    kills: /sovraccarico.*termico|sovraccarico.*prolungat/, reason: "Intervento istantaneo = magnetico, non termico" },
+  { id: "KR-06", signal: /scatta.*dopo.*minut|scatta.*sotto.*carico.*prolungat/,
+    kills: /cortocircuito/, reason: "Intervento ritardato = termico, non magnetico (cortocircuito)" },
+  { id: "KR-07", signal: /solo.*differenziale|differenziale.*scatta.*magnetotermico.*no/,
+    kills: /sovraccarico|cortocircuito/, reason: "Solo differenziale = dispersione, non sovracorrente" },
+  { id: "KR-08", signal: /solo.*magnetotermico|magnetotermico.*scatta.*differenziale.*no/,
+    kills: /dispersione|terra/, reason: "Solo magnetotermico = sovracorrente, non dispersione" },
+  { id: "KR-09", signal: /morsetti.*serrat|morsetti.*ok|morsetti.*verificat/,
+    kills: /morsetto.*allentato|contatto.*resistiv|contatto.*instabile/, reason: "Morsetti verificati escludono contatto allentato" },
+  { id: "KR-10", signal: /senza.*carico.*scatta|vuoto.*scatta|carico.*scollegat.*scatta/,
+    kills: /guasto.*carico|carico.*difettoso|elettrodomestico/, reason: "Scatta senza carico = guasto non nel carico" }
+];
+
+function killImpossible(cs) {
+  var evidence = normalize([
+    cs.facts_confirmed.join(" "),
+    cs.measurements.map(function(m) { return typeof m === "string" ? m : JSON.stringify(m); }).join(" "),
+    cs.facts_uncertain.join(" "),
+    cs.visual_findings.join(" ")
+  ].join(" "));
+  if (!evidence) return;
+
+  cs.hypotheses.forEach(function(h) {
+    if (h.status === "rejected") return;
+    var lab = normalize(h.label);
+
+    // Kill rules fisiche
+    KILL_RULES.forEach(function(rule) {
+      if (h.status === "rejected") return;
+      if (rule.signal.test(evidence) && rule.kills.test(lab)) {
+        h.status = "rejected";
+        h.confidence = "rejected";
+        h.rejection_reason = rule.id + ": " + rule.reason;
+        runtimeTrace.record(cs, "hypothesis_killed", { label: h.label, rule: rule.id, reason: rule.reason });
+      }
+    });
+
+    // Deny tests soddisfatti
+    if (h.status !== "rejected") {
+      h.deny_tests.forEach(function(test) {
+        if (h.status === "rejected") return;
+        var tw = normalize(test).split(" ").filter(function(w) { return w.length > 4; });
+        var hits = 0;
+        tw.forEach(function(w) { if (evidence.indexOf(w) >= 0) hits++; });
+        if (tw.length > 0 && hits >= Math.ceil(tw.length * 0.6)) {
+          h.status = "rejected";
+          h.confidence = "rejected";
+          h.rejection_reason = "Test escludente soddisfatto: " + test;
+          runtimeTrace.record(cs, "hypothesis_killed", { label: h.label, reason: h.rejection_reason });
+        }
+      });
+    }
+  });
+}
+
+// ============================================================
+// F. DISCRIMINAZIONE — la verifica che separa più ipotesi
+// ============================================================
+//
+// L'intelligenza non sceglie la prossima domanda a caso.
+// Sceglie quella che RIDUCE PIÙ INCERTEZZA.
+// Se restano 4 ipotesi e una misura ne elimina 3, quella misura
+// ha priorità.
+
+function scoreDiscrimination(testText, activeHypotheses) {
+  var tw = normalize(testText).split(" ").filter(function(w) { return w.length > 4; });
+  var confirms = 0, denies = 0;
+
+  activeHypotheses.forEach(function(h) {
+    var c = h.confirm_tests.some(function(t) { return tw.some(function(w) { return normalize(t).indexOf(w) >= 0; }); });
+    var d = h.deny_tests.some(function(t) { return tw.some(function(w) { return normalize(t).indexOf(w) >= 0; }); });
+    if (c) confirms++;
+    if (d) denies++;
+  });
+
+  var separation = Math.min(confirms, denies);
+  var coverage = confirms + denies;
+  return { separation: separation, coverage: coverage, score: separation * 10 + coverage * 3 };
+}
+
+function inferActionType(text) {
+  var n = normalize(text);
+  if (/misura|tensione|corrente|isolamento|continuita|pinza|multimetro|megger|ohm|volt|ampere/.test(n)) return "measurement";
+  if (/foto|immagine|visivo|targhetta|ispezion|controllo visivo/.test(n)) return "visual_check";
+  if (/scolleg|stacca|rimuov|disconnett|sezion/.test(n)) return "physical_check";
+  if (/verific|controll/.test(n)) return "check";
+  return "ask_user";
+}
+
+function selectBestAction(cs) {
+  var active = cs.hypotheses.filter(function(h) { return h.status === "active"; });
+
+  if (active.length === 0) {
+    return { type: "insufficient", action: "Servono piu informazioni: descrivi il tipo di impianto, cosa succede, e quando.", reason: "nessuna ipotesi attiva",
+      discrimination: { separation: 0, coverage: 0, score: 0 } };
+  }
+
+  var confirmed = active.filter(function(h) { return h.confidence === "confirmed"; });
+  if (confirmed.length) {
+    return { type: "conclude", action: "Diagnosi: " + confirmed[0].label, reason: confirmed[0].reason,
+      hypothesis: confirmed[0], discrimination: { separation: 0, coverage: 0, score: 999 } };
+  }
+
+  // Raccogli tutti i test dalle ipotesi attive
+  var cands = [], seen = {};
+  active.forEach(function(h) {
+    h.confirm_tests.concat(h.deny_tests).forEach(function(t) {
+      var key = normalize(t).substring(0, 60);
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      cands.push({ action: s(t), actionType: inferActionType(t), source: h.label });
+    });
+  });
+
+  // Scora ogni candidato per potere discriminante
+  cands.forEach(function(c) {
+    c.discrimination = scoreDiscrimination(c.action, active);
+    var safety = (cs.safety.level === "danger" || cs.safety.level === "stop") && c.actionType === "measurement" ? -100 : 0;
+    var simple = c.actionType === "visual_check" ? 5 : c.actionType === "ask_user" ? 3 : 0;
+    var dup = cs.checks_requested.some(function(cr) {
+      return normalize(cr).substring(0, 40) === normalize(c.action).substring(0, 40);
+    }) ? -50 : 0;
+    c.totalScore = c.discrimination.score + safety + simple + dup;
+  });
+
+  cands.sort(function(a, b) { return b.totalScore - a.totalScore; });
+
+  if (!cands.length) {
+    // Nessun test specifico — usa primi principi per generare domande
+    var ppDomande = PRIMI_PRINCIPI.slice(0, 3).map(function(pp) { return pp.domanda; });
+    return { type: "ask_user", action: ppDomande[0] || "Descrivere meglio il problema: cosa, dove, quando.",
+      reason: "Applico primi principi per raccogliere informazioni",
+      alternatives: ppDomande.slice(1),
+      discrimination: { separation: 0, coverage: 0, score: 0 } };
+  }
+
+  var best = cands[0];
+  runtimeTrace.record(cs, "best_action", {
+    action: best.action, score: best.totalScore,
+    discrimination: best.discrimination, alternatives: cands.length - 1
+  });
+  return best;
+}
+
+// ============================================================
+// G. TOOL / AI — solo quando il cervello locale non basta
+// ============================================================
+
+function decideToolNeeded(cs) {
+  if (cs.runtime.has_image && !hasToolResult(cs, "vision_tool"))
+    return { tool: "vision_tool", reason: "immagine da analizzare" };
+  if (has(cs.problem_summary, /kw|watt|ampere|sezione|caduta|icc|cos|portata/) && !hasToolResult(cs, "calc_tool"))
+    return { tool: "calc_tool", reason: "calcolo numerico necessario" };
+  if (cs.components_detected.length === 0 && !hasToolResult(cs, "recognition_tool"))
+    return { tool: "recognition_tool", reason: "identificare componenti" };
   return null;
 }
 
-function normalizeHypothesis(value, source) {
-  if (!value) return null;
-  if (typeof value === "string") {
-    return { label: safeText(value), reason: "", source: source || "orchestrator" };
-  }
-  return {
-    label: safeText(value.label || value.causa || value.name || value.text),
-    reason: safeText(value.reason || value.perche || value.motivo || value.family),
-    source: safeText(source || value.source || "orchestrator")
-  };
-}
-
-function safeJsonStringify(value) {
-  try {
-    return JSON.stringify(value);
-  } catch (_error) {
-    return "";
-  }
-}
-
-function buildEvidenceText(evidence) {
-  if (typeof evidence === "string") return safeText(evidence);
-  if (!evidence || typeof evidence !== "object") return safeText(evidence);
-  if (safeText(evidence.text)) return safeText(evidence.text);
-  if (safeText(evidence.summary)) return safeText(evidence.summary);
-  if (safeText(evidence.reason)) return safeText(evidence.reason);
-  if (safeText(evidence.label)) return safeText(evidence.label) + " " + safeText(evidence.reason || evidence.summary);
-  return safeText(safeJsonStringify(evidence));
-}
-
-function inferEvidenceSourceType(evidence, normalizedText) {
-  var explicit = safeText(evidence && evidence.sourceType).toLowerCase();
-  if (explicit === "measurement" ||
-      explicit === "direct_observation" ||
-      explicit === "photo_visible" ||
-      explicit === "user_statement" ||
-      explicit === "inference") {
-    return explicit;
-  }
-  if (evidence && typeof evidence === "object" &&
-      (safeText(evidence.type) || (evidence.value && typeof evidence.value === "object"))) {
-    return "measurement";
-  }
-  if (/misuro|tester|multimetro|strumentale|volt|230|400|ampere|ohm|mohm|misura/.test(normalizedText)) {
-    return "measurement";
-  }
-  if (/foto|immagine|visibile|targhetta|etichetta|label/.test(normalizedText)) {
-    return "photo_visible";
-  }
-  if (/vedo|visibile|annerit|bruciato|fusione|odore|scatta|salta|interviene/.test(normalizedText)) {
-    return "direct_observation";
-  }
-  if (/probabil|forse|ipotes|deduc|infer|sembra/.test(normalizedText)) {
-    return "inference";
-  }
-  return "user_statement";
-}
-
-function inferEvidenceSpecificityScore(evidence, normalizedText) {
-  var score = 0.08;
-  if (!normalizedText) return score;
-  if (normalizedText.length >= 24) score += 0.08;
-  if (/\b\d+([.,]\d+)?\b/.test(normalizedText)) score += 0.08;
-  if (/differenziale|magnetotermico|forno|caldaia|presa|quadro|linea|terra|cucina|tapparella|motore/.test(normalizedText)) {
-    score += 0.09;
-  }
-  if (evidence && typeof evidence === "object" && safeText(evidence.type) && evidence.value && typeof evidence.value === "object") {
-    score += 0.1;
-  }
-  if (score > 0.35) score = 0.35;
-  return score;
-}
-
-function inferEvidenceReliabilityScore(sourceType, normalizedText) {
-  if (sourceType === "measurement") return 0.28;
-  if (sourceType === "direct_observation" || sourceType === "photo_visible") return 0.2;
-  if (sourceType === "user_statement") {
-    if (/\b\d+([.,]\d+)?\b/.test(normalizedText) || /esattamente|preciso|specifico/.test(normalizedText)) {
-      return 0.14;
-    }
-    return 0.09;
-  }
-  return 0.04;
-}
-
-function inferEvidenceRecencyScore(normalizedText) {
-  if (/ieri|settimana scorsa|mesi fa|storico|da tempo|gia successo/.test(normalizedText)) return 0.03;
-  return 0.08;
-}
-
-function inferEvidenceSafetyScore(normalizedText) {
-  if (/bruciato|annerit|fusione|carbonizz|dispersion|terra|differenziale|scatta|salta|interviene|surriscald/.test(normalizedText)) {
-    return 0.1;
-  }
-  return 0;
-}
-
-function deriveEvidenceReliabilityBand(sourceType, normalizedText) {
-  if (sourceType === "measurement") return "measured";
-  if (sourceType === "direct_observation" || sourceType === "photo_visible") return "observed";
-  if (sourceType === "user_statement") {
-    if (/\b\d+([.,]\d+)?\b/.test(normalizedText)) return "reported";
-    return "vague";
-  }
-  return "inferred";
-}
-
-function scoreEvidenceWeight(evidence) {
-  var text = buildEvidenceText(evidence);
-  var normalizedText = normalizeFingerprintText(text);
-  var sourceType = inferEvidenceSourceType(evidence, normalizedText);
-  var baseMap = {
-    measurement: 0.44,
-    direct_observation: 0.33,
-    photo_visible: 0.27,
-    user_statement: 0.16,
-    inference: 0.07
-  };
-  var weight = (baseMap[sourceType] || 0.1) +
-    inferEvidenceSpecificityScore(evidence, normalizedText) +
-    inferEvidenceReliabilityScore(sourceType, normalizedText) +
-    inferEvidenceRecencyScore(normalizedText) +
-    inferEvidenceSafetyScore(normalizedText);
-  var strength = "weak";
-  if (weight > 0.99) weight = 0.99;
-  if (weight >= 0.75) strength = "strong";
-  else if (weight >= 0.5) strength = "medium";
-  return {
-    weight: Math.round(weight * 100) / 100,
-    strength: strength,
-    reliabilityBand: deriveEvidenceReliabilityBand(sourceType, normalizedText)
-  };
-}
-
-function extractEvidenceSignals(evidence) {
-  var text = buildEvidenceText(evidence);
-  var normalizedText = normalizeFingerprintText(text);
-  var signals = [];
-  var numericValue = null;
-
-  if (evidence && typeof evidence === "object" &&
-      evidence.value && typeof evidence.value === "object" &&
-      evidence.value.value !== undefined && evidence.value.value !== null) {
-    numericValue = Number(evidence.value.value);
-  }
-
-  if ((evidence && typeof evidence === "object" && safeText(evidence.type).toLowerCase() === "voltage" && isFinite(numericValue) && numericValue > 20) ||
-      /tensione presente|presenza tensione|misuro 230|misura 230|230v|400v|fase neutro presenti|alimentazione presente/.test(normalizedText)) {
-    signals.push("voltage_present");
-  }
-  if ((evidence && typeof evidence === "object" && safeText(evidence.type).toLowerCase() === "voltage" && isFinite(numericValue) && numericValue <= 1) ||
-      /nessuna tensione|assenza di tensione|tensione assente|non c e tensione|presa senza tensione|alimentazione assente/.test(normalizedText)) {
-    signals.push("voltage_absent");
-  }
-  if (/sovraccarico|assorbimento alto|corrente alta|carico eccessivo|magnetotermico scatta|termico interviene/.test(normalizedText)) {
-    signals.push("overload_signal");
-  }
-  if ((evidence && typeof evidence === "object" && safeText(evidence.type).toLowerCase() === "insulation" && isFinite(numericValue) && numericValue > 0 && numericValue < 1) ||
-      /dispersion|terra|isolament basso|misura di isolamento bassa|megger/.test(normalizedText)) {
-    signals.push("ground_fault_signal");
-  }
-  if (/corto circuito|cortocircuito|guasto franco/.test(normalizedText)) {
-    signals.push("short_circuit_signal");
-  }
-  if (/interruzione|circuito aperto|continuita assente|linea interrotta|filo spezzato/.test(normalizedText)) {
-    signals.push("open_circuit_signal");
-  }
-  if (/bruciato|annerit|fusione|carbonizz|surriscald/.test(normalizedText)) {
-    signals.push("safety_damage_signal");
-  }
-  if (/(differenziale|salvavita|rcd|rcbo)/.test(normalizedText) && /(scatta|salta|interviene|trip)/.test(normalizedText)) {
-    signals.push("rcd_trip_signal");
-  }
-  if (/(magnetotermico|fusibile|termico)/.test(normalizedText) && /(scatta|salta|interviene|trip)/.test(normalizedText)) {
-    signals.push("mcb_trip_signal");
-  }
-
-  return signals;
-}
-
-function buildEvidenceRecord(evidence) {
-  var text = buildEvidenceText(evidence);
-  var normalizedText = normalizeFingerprintText(text);
-  var scored = scoreEvidenceWeight(evidence);
-
-  return {
-    raw: contracts.safeClone(evidence),
-    text: text,
-    normalizedText: normalizedText,
-    sourceType: inferEvidenceSourceType(evidence, normalizedText),
-    weight: scored.weight,
-    strength: scored.strength,
-    reliabilityBand: scored.reliabilityBand,
-    signals: extractEvidenceSignals(evidence)
-  };
-}
-
-function buildConflictNote(winnerSignal, loserSignal) {
-  var map = {
-    "voltage_present|voltage_absent": "Contraddizione: presenza tensione sostenuta da evidenza piu forte rispetto ad assenza tensione.",
-    "voltage_absent|voltage_present": "Contraddizione: assenza tensione sostenuta da evidenza piu forte rispetto a presenza tensione.",
-    "ground_fault_signal|overload_signal": "Contraddizione: dispersione verso terra sostenuta da evidenza piu forte rispetto a sovraccarico puro.",
-    "overload_signal|ground_fault_signal": "Contraddizione: sovraccarico sostenuto da evidenza piu forte rispetto a dispersione verso terra.",
-    "open_circuit_signal|voltage_present": "Contraddizione: circuito aperto sostenuto da evidenza piu forte rispetto a tensione presente.",
-    "voltage_present|open_circuit_signal": "Contraddizione: tensione presente sostenuta da evidenza piu forte rispetto a circuito aperto."
-  };
-  return map[winnerSignal + "|" + loserSignal] || "Contraddizione tra evidenze tecniche con peso diverso.";
-}
-
-function resolveEvidenceConflicts(input) {
-  var payload = input || {};
-  var evidenceSet = [];
-  var signalBest = {};
-  var contradictions = [];
-  var strongEvidenceCount = 0;
-  var weakEvidenceCount = 0;
-  var dominantSignals = {};
-  var suppressedSignals = {};
-
-  safeArray(payload.facts).forEach(function (item) {
-    evidenceSet.push(buildEvidenceRecord(item));
-  });
-  safeArray(payload.measurements).forEach(function (item) {
-    evidenceSet.push(buildEvidenceRecord(item));
-  });
-  safeArray(payload.observations).forEach(function (item) {
-    evidenceSet.push(buildEvidenceRecord(item));
-  });
-
-  evidenceSet.forEach(function (record) {
-    if (record.strength === "strong") strongEvidenceCount += 1;
-    if (record.strength === "weak") weakEvidenceCount += 1;
-    record.signals.forEach(function (signal) {
-      if (!signalBest[signal] || record.weight > signalBest[signal].weight) {
-        signalBest[signal] = record;
-      }
-    });
-  });
-
-  function addConflict(leftSignal, rightSignal) {
-    var left = signalBest[leftSignal];
-    var right = signalBest[rightSignal];
-    var winner;
-    var loser;
-    if (!left || !right) return;
-    winner = left.weight >= right.weight ? left : right;
-    loser = winner === left ? right : left;
-    dominantSignals[winner.signals.indexOf(leftSignal) >= 0 ? leftSignal : rightSignal] = true;
-    suppressedSignals[loser.signals.indexOf(leftSignal) >= 0 ? leftSignal : rightSignal] = true;
-    contradictions.push({
-      winnerSignal: winner.signals.indexOf(leftSignal) >= 0 ? leftSignal : rightSignal,
-      loserSignal: loser.signals.indexOf(leftSignal) >= 0 ? leftSignal : rightSignal,
-      note: buildConflictNote(
-        winner.signals.indexOf(leftSignal) >= 0 ? leftSignal : rightSignal,
-        loser.signals.indexOf(leftSignal) >= 0 ? leftSignal : rightSignal
-      )
-    });
-  }
-
-  addConflict("voltage_present", "voltage_absent");
-  addConflict("ground_fault_signal", "overload_signal");
-  addConflict("open_circuit_signal", "voltage_present");
-
-  return {
-    evidenceSet: evidenceSet,
-    contradictions: contradictions,
-    strongEvidenceCount: strongEvidenceCount,
-    weakEvidenceCount: weakEvidenceCount,
-    conflictCount: contradictions.length,
-    dominantSignals: dominantSignals,
-    suppressedSignals: suppressedSignals
-  };
-}
-
-function getHypothesisSignalProfile(label) {
-  var normalized = normalizeFingerprintText(label);
-
-  if (/dispersion|terra|isolament/.test(normalized)) {
-    return {
-      supportSignals: ["ground_fault_signal", "rcd_trip_signal"],
-      contradictionSignals: ["overload_signal"]
-    };
-  }
-  if (/sovraccarico|assorb|overload/.test(normalized)) {
-    return {
-      supportSignals: ["overload_signal", "mcb_trip_signal"],
-      contradictionSignals: ["ground_fault_signal"]
-    };
-  }
-  if (/assenza di tensione|mancanza tensione|tensione assente|alimentazione assente/.test(normalized)) {
-    return {
-      supportSignals: ["voltage_absent", "open_circuit_signal"],
-      contradictionSignals: ["voltage_present"]
-    };
-  }
-  if (/circuito aperto|interruzione|continuita/.test(normalized)) {
-    return {
-      supportSignals: ["open_circuit_signal", "voltage_absent"],
-      contradictionSignals: ["voltage_present"]
-    };
-  }
-  if (/corto circuito|cortocircuito|guasto franco/.test(normalized)) {
-    return {
-      supportSignals: ["short_circuit_signal", "mcb_trip_signal"],
-      contradictionSignals: ["ground_fault_signal"]
-    };
-  }
-
-  return {
-    supportSignals: [],
-    contradictionSignals: []
-  };
-}
-
-function evaluateHypothesisCoverage(hypothesis, evidenceSet, conflictInfo) {
-  var normalized = normalizeHypothesis(hypothesis, "arbitration");
-  var profile = getHypothesisSignalProfile(normalized && normalized.label);
-  var evidenceItems = safeArray(evidenceSet);
-  var conflicts = conflictInfo || {};
-  var supportWeight = 0;
-  var contradictionWeight = 0;
-  var supportingEvidenceCount = 0;
-  var contradictingEvidenceCount = 0;
-  var supportingStrongCount = 0;
-  var contradictingStrongCount = 0;
-  var bestReliability = "inferred";
-  var coverageLevel = "none";
-  var overlapTokens;
-
-  function bandRank(value) {
-    if (value === "measured") return 4;
-    if (value === "observed") return 3;
-    if (value === "reported") return 2;
-    if (value === "vague") return 1;
-    return 0;
-  }
-
-  evidenceItems.forEach(function (record) {
-    var matchedSupport = false;
-    var matchedContradiction = false;
-
-    if (!record) return;
-    record.signals.forEach(function (signal) {
-      if (profile.supportSignals.indexOf(signal) >= 0) {
-        if (conflicts.suppressedSignals && conflicts.suppressedSignals[signal]) {
-          matchedContradiction = true;
-          return;
-        }
-        matchedSupport = true;
-      }
-      if (profile.contradictionSignals.indexOf(signal) >= 0) {
-        matchedContradiction = true;
-      }
-    });
-
-    if (!profile.supportSignals.length && normalized && normalized.label) {
-      overlapTokens = normalizeFingerprintText(normalized.label).split(" ").filter(function (item) {
-        return item && item.length > 4;
-      });
-      if (overlapTokens.some(function (item) { return record.normalizedText.indexOf(item) >= 0; })) {
-        matchedSupport = true;
-      }
-    }
-
-    if (matchedSupport) {
-      supportingEvidenceCount += 1;
-      supportWeight += record.weight;
-      if (record.strength === "strong") supportingStrongCount += 1;
-      if (bandRank(record.reliabilityBand) > bandRank(bestReliability)) {
-        bestReliability = record.reliabilityBand;
-      }
-    }
-    if (matchedContradiction) {
-      contradictingEvidenceCount += 1;
-      contradictionWeight += record.weight;
-      if (record.strength === "strong") contradictingStrongCount += 1;
-    }
-  });
-
-  if (contradictingStrongCount > 0 && contradictionWeight >= supportWeight) {
-    coverageLevel = "conflicted";
-  } else if (supportingEvidenceCount === 0 && contradictingEvidenceCount === 0) {
-    coverageLevel = "none";
-  } else if (bestReliability === "measured" &&
-      supportingEvidenceCount >= 1 &&
-      contradictingEvidenceCount === 0 &&
-      supportWeight >= 0.75) {
-    coverageLevel = "supported";
-  } else if (supportingEvidenceCount >= 1 && contradictionWeight < supportWeight && supportWeight >= 0.55) {
-    coverageLevel = "partial";
-  } else if (supportingEvidenceCount >= 1 && contradictionWeight === 0) {
-    coverageLevel = "weak";
-  } else if (contradictingEvidenceCount > 0) {
-    coverageLevel = "conflicted";
-  }
-
-  return {
-    supportingEvidenceCount: supportingEvidenceCount,
-    contradictingEvidenceCount: contradictingEvidenceCount,
-    coverageLevel: coverageLevel,
-    reliabilityBand: bestReliability,
-    supportWeight: Math.round(supportWeight * 100) / 100,
-    contradictionWeight: Math.round(contradictionWeight * 100) / 100
-  };
-}
-
-function deriveCoverageConfidence(coverageLevel, coverageMeta) {
-  var meta = coverageMeta || {};
-  if (coverageLevel === "supported" && !meta.contradictingEvidenceCount) return "high";
-  if (coverageLevel === "partial" && !meta.contradictingEvidenceCount) return "medium";
-  return "low";
-}
-
-function hypothesisCoverageRank(coverageLevel) {
-  var rank = {
-    supported: 5,
-    partial: 4,
-    weak: 3,
-    conflicted: 2,
-    none: 1
-  };
-  return rank[coverageLevel] || 0;
-}
-
-function mapRecognitionHypotheses(rawRef) {
-  var scored = rawRef && rawRef.scored_components ? rawRef.scored_components : [];
-  return scored.slice(0, 3).map(function (item) {
-    return {
-      label: item.component_name,
-      reason: "riconoscimento componente con confidenza " + item.confidence.toFixed(2),
-      source: "recognition_tool"
-    };
-  });
-}
-
-function needsCalcTool(caseState) {
-  return /(kw|w\b|ampere|a\b|caduta|sezione|icc|cos|differenziale|curva|terra)/i.test(caseState.problem_summary || "");
-}
-
-function hasEnoughFacts(caseState) {
-  return caseState.facts_confirmed.length + caseState.measurements.length >= 2;
-}
-
-function normalizeFingerprintText(text) {
-  return safeText(text)
-    .toLowerCase()
-    .replace(/[^\w\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function buildSignalText(caseState, planningFrame) {
-  var frame = planningFrame || {};
-  var text = [
-    caseState.problem_summary,
-    caseState.facts_confirmed.join(" "),
-    caseState.facts_uncertain.join(" "),
-    caseState.components_detected.join(" "),
-    caseState.visual_findings.join(" "),
-    caseState.checks_requested.join(" "),
-    caseState.missing_critical_data.join(" "),
-    Array.isArray(frame.missing_critical_data) ? frame.missing_critical_data.join(" ") : "",
-    caseState.hypotheses_active.map(function (item) {
-      return safeText(item && item.label);
-    }).join(" ")
-  ].join(" ");
-  return normalizeFingerprintText(text);
-}
-
-function hasMeasurement(caseState, kind) {
-  var measurementsText = normalizeFingerprintText(JSON.stringify(caseState.measurements || []));
-  var signalText = buildSignalText(caseState);
-
-  if (kind === "voltage") {
-    return /voltage|volt|230|400|tensione/.test(measurementsText) || /misura di tensione/.test(signalText);
-  }
-  if (kind === "current") {
-    return /current|corrente|ampere|assorb/.test(measurementsText) || /misura di corrente/.test(signalText);
-  }
-  if (kind === "insulation") {
-    return /isolament|megger|dispersion|terra/.test(measurementsText) || /misura di isolamento/.test(signalText);
-  }
-  if (kind === "continuity") {
-    return /continuit|ohm|resistenza/.test(measurementsText) || /misura di continuita/.test(signalText);
-  }
+function decideAINeeded(cs) {
+  var active = cs.hypotheses.filter(function(h) { return h.status === "active"; });
+  // AI confermata non serve se abbiamo ipotesi attive gestibili
+  if (active.some(function(h) { return h.confidence === "confirmed"; })) return false;
+  if (active.length >= 1 && active.length <= 5) return false;
+  // AI serve se: 0 ipotesi e ci sono fatti, oppure safety non critica
+  if (active.length === 0 && cs.facts_confirmed.length > 0) return true;
+  if (cs.safety.level === "stop") return false;
   return false;
 }
 
-function hasVisualEvidence(caseState, kind) {
-  var findingsText = normalizeFingerprintText(caseState.visual_findings.join(" "));
-  if (kind === "panel") {
-    return !!caseState.runtime.has_image || /quadro|pannello|cablaggio|morsetto/.test(findingsText);
+function buildAIPrompt(cs) {
+  var active = cs.hypotheses.filter(function(h) { return h.status === "active"; });
+  var rejected = cs.hypotheses.filter(function(h) { return h.status === "rejected"; });
+  var parts = [
+    "Sei ROCCO, tecnico elettricista con 25 anni di esperienza.",
+    "Rispondi SOLO in JSON: {\"ipotesi\":[{\"causa\":\"\",\"perche\":\"\"}],\"certezza\":\"confirmed|probable|non_verifiable\"}",
+    "Non inventare fatti. Se mancano misure NON usare confirmed.",
+    "",
+    "PROBLEMA: " + cs.problem_summary,
+    "SICUREZZA: " + cs.safety.level,
+    "FATTI: " + (cs.facts_confirmed.length ? cs.facts_confirmed.join("; ") : "nessuno"),
+    "COMPONENTI: " + (cs.components_detected.length ? cs.components_detected.join(", ") : "non identificati")
+  ];
+  if (active.length) {
+    parts.push("IPOTESI GIA FORMULATE: " + active.map(function(h) { return h.label; }).join("; "));
   }
-  if (kind === "device_label") {
-    return !!caseState.runtime.has_image && /targhetta|etichetta|matricola|label|sigla/.test(findingsText);
+  if (rejected.length) {
+    parts.push("IPOTESI GIA ESCLUSE: " + rejected.map(function(h) { return h.label + " (" + (h.rejection_reason || "") + ")"; }).join("; "));
   }
-  return !!caseState.runtime.has_image || caseState.visual_findings.length > 0;
+  return parts.join("\n");
 }
 
-function hasKnownProtectionIdentity(caseState, planningFrame) {
-  var signalText = buildSignalText(caseState, planningFrame);
-  return /differenziale|magnetotermico|fusibile|salvavita|rcd|rcbo|mt/.test(signalText);
-}
-
-function hasKnownTripContext(caseState, planningFrame) {
-  var signalText = buildSignalText(caseState, planningFrame);
-  if (!/scatta|salta|interviene|trip/.test(signalText)) return true;
-  if (/non so quando|non e chiaro quando|non chiaro quando|non ricordo quando/.test(signalText)) return false;
-  return /quando|appena|solo quando|all accensione|durante|sotto carico|a vuoto|riarmo|all avvio|mentre/.test(signalText);
-}
-
-function hasKnownDeviceIdentity(caseState, planningFrame) {
-  var signalText = buildSignalText(caseState, planningFrame);
-  return caseState.components_detected.length > 0 ||
-    /presa|interruttore|quadro|motore|contattore|caldaia|tapparella|rel[eè]|scheda|pompa|termostato|magnetotermico|differenziale|fusibile|salvavita/.test(signalText);
-}
-
-function hasKnownLoadIdentity(caseState, planningFrame) {
-  var signalText = buildSignalText(caseState, planningFrame);
-  return /caldaia|motore|tapparella|forno|pompa|compressore|frigo|boiler|carico|linea cucina|presa/.test(signalText);
-}
-
-function canAskInsulation(caseState, planningFrame) {
-  var signalText = buildSignalText(caseState, planningFrame);
-  if (caseState.safety.level === "stop" || caseState.safety.level === "danger") return false;
-  if (!hasKnownProtectionIdentity(caseState, planningFrame)) return false;
-  if (!hasKnownTripContext(caseState, planningFrame)) return false;
-  if (!/differenziale|dispersion|terra/.test(signalText)) return false;
-  if (!caseState.hypotheses_active.length && !/dispersion|terra/.test(signalText)) return false;
-  return true;
-}
-
-function hasSufficientAnswer(caseState, planningFrame) {
-  var frame = planningFrame || planner.buildPlanningFrame(caseState);
-  if (caseState.status === "closed") return true;
-  if (!hasEnoughFacts(caseState)) return false;
-  if (Array.isArray(frame.missing_critical_data) && frame.missing_critical_data.length > 0) return false;
-  if (caseState.final_confidence === "confirmed") return true;
-  if (caseState.final_confidence === "probable" && caseState.hypotheses_active.length > 0) return true;
-  return caseState.measurements.length > 0 && caseState.hypotheses_active.length > 0;
-}
-
-function buildAmbiguityMeta(caseState, planningFrame) {
-  var frame = planningFrame || planner.buildPlanningFrame(caseState);
-  var signalText = buildSignalText(caseState, frame);
-  var problemText = normalizeFingerprintText(caseState.problem_summary);
-  var signals = [];
-  var coreSignals = [];
-  var noVisual = !hasVisualEvidence(caseState, "panel");
-  var noMeasurements = !caseState.measurements.length;
-  var liveTripLowContext;
-  var ambiguousLowContext;
-
-  if (!hasKnownProtectionIdentity(caseState, frame) &&
-      /differenziale|magnetotermico|fusibile|salvavita|protezione|scatta|salta|interviene|trip/.test(signalText)) {
-    signals.push("missing_protection_identity");
-    coreSignals.push("missing_protection_identity");
-  }
-  if (!hasKnownTripContext(caseState, frame) &&
-      /scatta|salta|interviene|trip|differenziale|magnetotermico/.test(signalText)) {
-    signals.push("missing_trip_context");
-    coreSignals.push("missing_trip_context");
-  }
-  if (noVisual &&
-      (/quadro|pannello|cablaggio|morsetto/.test(problemText) ||
-      ((signals.indexOf("missing_protection_identity") >= 0 || signals.indexOf("missing_trip_context") >= 0) &&
-      /protezione|scatta|salta|interviene|trip/.test(signalText)))) {
-    signals.push("missing_visual_panel");
-  }
-  if (noMeasurements) {
-    signals.push("missing_measurement_context");
-  }
-  if (!hasKnownDeviceIdentity(caseState, frame)) {
-    signals.push("weak_device_identity");
-    coreSignals.push("weak_device_identity");
-  }
-  if (!hasKnownLoadIdentity(caseState, frame) &&
-      /caldaia|motore|tapparella|forno|pompa|presa|luce|lampada|carico|linea/.test(problemText)) {
-    signals.push("weak_load_identity");
-    coreSignals.push("weak_load_identity");
-  }
-  if (caseState.safety.level === "attention" &&
-      !hasSufficientAnswer(caseState, frame) &&
-      caseState.hypotheses_active.length === 0 &&
-      coreSignals.length > 0) {
-    signals.push("risk_without_supporting_evidence");
-  }
-
-  liveTripLowContext = /differenziale|scatta|salta|interviene|trip/.test(signalText) &&
-    (!hasKnownProtectionIdentity(caseState, frame) || !hasKnownTripContext(caseState, frame)) &&
-    noMeasurements;
-
-  if (liveTripLowContext) {
-    signals.push("live_trip_low_context");
-    coreSignals.push("live_trip_low_context");
-  }
-
-  ambiguousLowContext = (coreSignals.length >= 2 && noMeasurements) ||
-    (liveTripLowContext && noVisual) ||
-    (signals.indexOf("missing_protection_identity") >= 0 && signals.indexOf("missing_trip_context") >= 0) ||
-    (signals.indexOf("weak_device_identity") >= 0 && noMeasurements && noVisual);
-
-  return {
-    ambiguousLowContext: !!ambiguousLowContext,
-    ambiguitySignals: signals,
-    prudentialClampApplied: !!ambiguousLowContext
-  };
-}
-
-function isAmbiguousLowContextCase(caseState, planningFrame) {
-  return buildAmbiguityMeta(caseState, planningFrame).ambiguousLowContext;
-}
-
-function derivePrimaryGapReason(primaryGap) {
-  var reasonMap = {
-    missing_measurement_current: "missing_current_measurement",
-    missing_measurement_voltage: "missing_voltage_measurement",
-    missing_measurement_insulation: "missing_insulation_measurement",
-    missing_measurement_continuity: "missing_continuity_measurement",
-    missing_trip_context: "missing_trip_trigger_context",
-    missing_visual_panel: "missing_panel_visual",
-    missing_visual_device_label: "missing_device_label_visual",
-    missing_device_identity: "missing_device_identity",
-    missing_load_identity: "missing_load_identity",
-    missing_protection_identity: "missing_protection_type",
-    safety_block: "safety_policy_block",
-    sufficient_answer: "case_mature_enough"
-  };
-  return reasonMap[primaryGap] || "missing_trip_trigger_context";
-}
-
-function detectMeasurementTarget(caseState, planningFrame, primaryGap) {
-  var missing = planningFrame && Array.isArray(planningFrame.missing_critical_data)
-    ? planningFrame.missing_critical_data
-    : [];
-  var i;
-  var item;
-
-  if (primaryGap === "missing_measurement_voltage") return "misura di tensione";
-  if (primaryGap === "missing_measurement_current") return "misura di corrente o assorbimento";
-  if (primaryGap === "missing_measurement_insulation") return "misura di isolamento verso terra";
-  if (primaryGap === "missing_measurement_continuity") return "misura di continuita del circuito";
-
-  for (i = 0; i < missing.length; i += 1) {
-    item = safeText(missing[i]);
-    if (/misur|tension|volt|corrente|ampere|isolament|terra|dispersion|resistenza/i.test(item)) {
-      return item;
-    }
-  }
-
-  if (/differenziale|dispersione|terra/i.test(caseState.problem_summary || "")) {
-    return "misura di isolamento o dispersione";
-  }
-  if (/presa|tensione|230v|alimentazione/i.test(caseState.problem_summary || "")) {
-    return "misura di tensione";
-  }
-  if (needsCalcTool(caseState)) {
-    return "misura o verifica numerica decisiva";
-  }
-  return "measurement";
-}
-
-function detectPhotoTarget(caseState, primaryGap) {
-  if (primaryGap === "missing_visual_panel") return "panel";
-  if (primaryGap === "missing_visual_device_label") return "device_label";
-  if (/quadro|pannello/i.test(caseState.problem_summary || "")) return "panel";
-  if (/presa|interruttore|spina/i.test(caseState.problem_summary || "")) return "device_label";
-  return "photo";
-}
-
-function detectCheckTarget(caseState, planningFrame, primaryGap) {
-  var missing = planningFrame && Array.isArray(planningFrame.missing_critical_data)
-    ? planningFrame.missing_critical_data
-    : [];
-  var first = safeText(missing[0]);
-
-  if (primaryGap === "missing_protection_identity") return "identificazione della protezione coinvolta";
-  if (primaryGap === "missing_trip_context") return "contesto esatto di scatto della protezione";
-  if (primaryGap === "missing_device_identity") return "identificazione del dispositivo coinvolto";
-  if (primaryGap === "missing_load_identity") return "identificazione del carico coinvolto";
-  if (first) return first;
-  if (caseState.components_detected.length === 0) return "identificazione dispositivo o protezione";
-  if (/scatta|differenziale|magnetotermico/i.test(caseState.problem_summary || "")) return "contesto di scatto della protezione";
-  return "unknown";
-}
-
-function derivePrimaryGap(caseState, planningFrame) {
-  var frame = planningFrame || planner.buildPlanningFrame(caseState);
-  var signalText = buildSignalText(caseState, frame);
-  var problemText = normalizeFingerprintText(caseState.problem_summary);
-  var ambiguityMeta = buildAmbiguityMeta(caseState, frame);
-
-  if (caseState.safety.level === "stop" || caseState.safety.level === "danger") {
-    return "safety_block";
-  }
-
-  if (hasSufficientAnswer(caseState, frame)) {
-    return "sufficient_answer";
-  }
-
-  if (!hasKnownProtectionIdentity(caseState, frame) && /differenziale|magnetotermico|fusibile|salvavita|protezione|scatta|salta|interviene/.test(signalText)) {
-    return "missing_protection_identity";
-  }
-
-  if (!hasKnownTripContext(caseState, frame)) {
-    return "missing_trip_context";
-  }
-
-  if (!hasKnownDeviceIdentity(caseState, frame)) {
-    return "missing_device_identity";
-  }
-
-  if (!hasKnownLoadIdentity(caseState, frame) && /caldaia|motore|tapparella|forno|pompa|carico|presa|linea/.test(problemText)) {
-    return "missing_load_identity";
-  }
-
-  if (!hasVisualEvidence(caseState, "panel") && /quadro|pannello|cablaggio|morsetto|bruciato|annerit/.test(problemText)) {
-    return "missing_visual_panel";
-  }
-
-  if (!hasVisualEvidence(caseState, "device_label") && /targhetta|etichetta|label|matricola|sigla/.test(problemText)) {
-    return "missing_visual_device_label";
-  }
-
-  if (!hasMeasurement(caseState, "voltage") && /tensione|230|400|alimentazione|presa non funziona|assenza di tensione|non c e tensione/.test(problemText)) {
-    return "missing_measurement_voltage";
-  }
-
-  if (!hasMeasurement(caseState, "current") && /sovraccarico|assorbimento|corrente|ampere|carico eccessivo|scalda troppo/.test(problemText)) {
-    return "missing_measurement_current";
-  }
-
-  if (!ambiguityMeta.ambiguousLowContext &&
-      !hasMeasurement(caseState, "insulation") &&
-      canAskInsulation(caseState, frame)) {
-    return "missing_measurement_insulation";
-  }
-
-  if (!hasMeasurement(caseState, "continuity") && /interruzione|circuito aperto|continuita|filo spezzato|linea interrotta/.test(problemText)) {
-    return "missing_measurement_continuity";
-  }
-
-  if (Array.isArray(frame.missing_critical_data) && frame.missing_critical_data.length > 0) {
-    return "missing_trip_context";
-  }
-
-  return "missing_trip_context";
-}
-
-function buildAvailableActions(caseState, loopState, planningFrame) {
-  var primaryGap = derivePrimaryGap(caseState, planningFrame);
-  var ambiguityMeta = buildAmbiguityMeta(caseState, planningFrame);
-  var actions = [];
-
-  if (primaryGap === "safety_block" || primaryGap === "sufficient_answer") {
-    actions.push({
-      actionType: "stop",
-      target: primaryGap === "safety_block" ? "safety" : "case_closed",
-      reason: primaryGap === "safety_block" ? "safety_block" : "sufficient_answer"
+function callAI(cs, gateway, hint) {
+  return reasoner.execute(gateway, {
+    requested_provider: hint,
+    system_prompt: "Sei ROCCO v2 reasoner. Solo JSON valido. Non inventare fatti.",
+    user_prompt: buildAIPrompt(cs)
+  }).then(function(r) {
+    runtimeTrace.mergeRuntime(cs, {
+      provider_used: r.provider_used, model_used: r.model_used,
+      fallback_used: !!r.fallback_used, fallback_reason: r.fallback_reason
     });
-  }
+    var json = null;
+    try {
+      var raw = s(r.text), i = raw.indexOf("{"), j = raw.lastIndexOf("}");
+      if (i >= 0 && j > i) json = JSON.parse(raw.slice(i, j + 1));
+    } catch (e) { /* parse fail */ }
 
-  if (/^missing_measurement_/.test(primaryGap)) {
-    actions.push({
-      actionType: "request_measurement",
-      target: detectMeasurementTarget(caseState, planningFrame, primaryGap),
-      reason: "manca una misura tecnica decisiva"
+    runtimeTrace.record(cs, "ai_called", { provider: r.provider_used, parsed: !!json });
+
+    if (!json) return;
+    // Output AI è PROPOSTA — non verità. Fonte: external_ai
+    arr(json.ipotesi || json.active).forEach(function(item) {
+      var lab = s(item && (item.causa || item.label));
+      if (!lab) return;
+      if (cs.hypotheses.some(function(h) { return normalize(h.label).substring(0, 40) === normalize(lab).substring(0, 40); })) return;
+      cs.hypotheses.push(makeHypothesis(lab, s(item.perche || item.reason), "external_ai", [], [],
+        ["Ipotesi generata da AI esterna — da verificare con misure"]));
     });
-    actions.push({
-      actionType: "suggest_check",
-      target: detectCheckTarget(caseState, planningFrame, primaryGap),
-      reason: "serve una verifica tecnica concreta"
-    });
-  }
-
-  if (primaryGap === "missing_visual_panel" || primaryGap === "missing_visual_device_label") {
-    actions.push({
-      actionType: "request_photo",
-      target: detectPhotoTarget(caseState, primaryGap),
-      reason: "manca evidenza visiva concreta"
-    });
-    actions.push({
-      actionType: "ask_user",
-      target: detectPhotoTarget(caseState, primaryGap),
-      reason: "serve chiarire il contesto visivo"
-    });
-  }
-
-  if (primaryGap === "missing_device_identity" ||
-      primaryGap === "missing_trip_context" ||
-      primaryGap === "missing_load_identity" ||
-      primaryGap === "missing_protection_identity") {
-    actions.push({
-      actionType: "suggest_check",
-      target: detectCheckTarget(caseState, planningFrame, primaryGap),
-      reason: "serve una verifica concreta sul gap principale"
-    });
-    actions.push({
-      actionType: "ask_user",
-      target: detectCheckTarget(caseState, planningFrame, primaryGap),
-      reason: "serve un chiarimento strutturato"
-    });
-  }
-
-  if (ambiguityMeta.ambiguousLowContext &&
-      (primaryGap === "missing_trip_context" || primaryGap === "missing_protection_identity")) {
-    if (!hasVisualEvidence(caseState, "panel")) {
-      actions.push({
-        actionType: "request_photo",
-        target: "panel",
-        reason: "manca evidenza visiva concreta"
-      });
-    }
-  }
-
-  return {
-    primaryGap: primaryGap,
-    primaryGapReason: derivePrimaryGapReason(primaryGap),
-    actions: actions,
-    ambiguityMeta: ambiguityMeta
-  };
-}
-
-function scoreActionPriority(action, caseState, primaryGap, ambiguityMeta) {
-  var scoreMap = {
-    stop: 500,
-    request_measurement: 400,
-    request_photo: 300,
-    suggest_check: 200,
-    ask_user: 100
-  };
-  var score = scoreMap[action.actionType] || 0;
-  var ambiguity = ambiguityMeta || buildAmbiguityMeta(caseState);
-
-  if (normalizeFingerprintText(action.target) && normalizeFingerprintText(action.target) !== "unknown") {
-    score += 20;
-  }
-  if (/^missing_measurement_/.test(primaryGap) && action.actionType === "request_measurement") {
-    score += 40;
-  }
-  if ((primaryGap === "missing_visual_panel" || primaryGap === "missing_visual_device_label") &&
-      action.actionType === "request_photo") {
-    score += 40;
-  }
-  if ((primaryGap === "missing_device_identity" ||
-      primaryGap === "missing_trip_context" ||
-      primaryGap === "missing_load_identity" ||
-      primaryGap === "missing_protection_identity" ||
-      /^missing_measurement_/.test(primaryGap)) &&
-      action.actionType === "suggest_check") {
-    score += 30;
-  }
-  if (caseState.safety.level === "attention" && action.actionType === "ask_user") {
-    score -= 10;
-  }
-  if (ambiguity.ambiguousLowContext) {
-    if (action.actionType === "request_measurement") {
-      score -= 180;
-      if (primaryGap === "missing_measurement_insulation") score -= 200;
-    }
-    if (action.actionType === "request_photo" && ambiguity.ambiguitySignals.indexOf("missing_visual_panel") >= 0) {
-      score += 80;
-    }
-    if (action.actionType === "suggest_check" &&
-        /protezione coinvolta|contesto esatto di scatto|contesto di scatto/.test(normalizeFingerprintText(action.target))) {
-      score += 90;
-    }
-    if (action.actionType === "ask_user") {
-      score += 15;
-    }
-  }
-  return score;
-}
-
-function isGenericAction(action) {
-  var target = normalizeFingerprintText(action && action.target);
-  var reason = normalizeFingerprintText(action && action.reason);
-
-  if (!target || target === "unknown" || target === "photo" || target === "measurement") return true;
-  if (/verificare impianto|controllare impianto|fare una verifica|serve controllo generico/.test(reason)) return true;
-  return false;
-}
-
-function buildAbstractActionFingerprint(action) {
-  return normalizeFingerprintText([
-    action && action.actionType,
-    action && action.target,
-    action && action.reason
-  ].join(" "));
-}
-
-function hasDuplicateAction(action, caseState, loopState) {
-  var fingerprint = buildAbstractActionFingerprint(action);
-  var expected = normalizeFingerprintText(action && action.target);
-  var history = loopState && Array.isArray(loopState.history) ? loopState.history : [];
-  var i;
-
-  if (action.actionType === "request_measurement" ||
-      action.actionType === "request_photo" ||
-      action.actionType === "suggest_check" ||
-      action.actionType === "ask_user") {
-    if (caseState.checks_requested.some(function (item) {
-      return normalizeFingerprintText(item) === expected;
-    })) {
-      return true;
-    }
-  }
-
-  for (i = 0; i < history.length; i += 1) {
-    if (normalizeFingerprintText(history[i].fingerprint) === fingerprint) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-function isAlreadySatisfiedAction(action, caseState, primaryGap) {
-  var target = normalizeFingerprintText(action && action.target);
-  var completedChecks = Array.isArray(caseState.checks_completed) ? caseState.checks_completed : [];
-  var requestedChecks = Array.isArray(caseState.checks_requested) ? caseState.checks_requested : [];
-
-  if (action.actionType === "request_photo") {
-    if (target === "panel") return hasVisualEvidence(caseState, "panel");
-    if (target === "device_label") return hasVisualEvidence(caseState, "device_label");
-    return !!caseState.runtime.has_image || caseState.visual_findings.length > 0;
-  }
-  if (action.actionType === "request_measurement") {
-    if (primaryGap === "missing_measurement_voltage" || /tensione|volt|230|400/.test(target)) {
-      return hasMeasurement(caseState, "voltage");
-    }
-    if (primaryGap === "missing_measurement_current" || /corrente|assorb|ampere/.test(target)) {
-      return hasMeasurement(caseState, "current");
-    }
-    if (primaryGap === "missing_measurement_insulation" || /isolament|dispersion|terra/.test(target)) {
-      return hasMeasurement(caseState, "insulation");
-    }
-    if (primaryGap === "missing_measurement_continuity" || /continuita|circuito aperto|interruzione/.test(target)) {
-      return hasMeasurement(caseState, "continuity");
-    }
-    return caseState.measurements.length > 0;
-  }
-  if (action.actionType === "suggest_check" || action.actionType === "ask_user") {
-    return requestedChecks.some(function (item) {
-      return normalizeFingerprintText(item) === target;
-    }) || completedChecks.some(function (item) {
-      return normalizeFingerprintText(item) === target;
-    });
-  }
-  return false;
-}
-
-function isUnsafeAction(action, caseState) {
-  if (action.actionType === "stop") return false;
-  if (caseState.safety.level === "stop" || caseState.safety.level === "danger") return true;
-  return false;
-}
-
-function isPrematureAction(action, caseState, primaryGap, planningFrame) {
-  var ambiguity = buildAmbiguityMeta(caseState, planningFrame);
-
-  if (action.actionType === "request_measurement" && !/^missing_measurement_/.test(primaryGap)) return true;
-  if (ambiguity.ambiguousLowContext &&
-      action.actionType === "request_measurement" &&
-      (primaryGap === "missing_measurement_insulation" ||
-      ambiguity.ambiguitySignals.indexOf("missing_protection_identity") >= 0 ||
-      ambiguity.ambiguitySignals.indexOf("missing_trip_context") >= 0)) {
-    return true;
-  }
-  if (action.actionType === "request_photo" &&
-      primaryGap !== "missing_visual_panel" &&
-      primaryGap !== "missing_visual_device_label") {
-    return true;
-  }
-  if (action.actionType === "suggest_check" &&
-      primaryGap !== "missing_device_identity" &&
-      primaryGap !== "missing_trip_context" &&
-      primaryGap !== "missing_load_identity" &&
-      primaryGap !== "missing_protection_identity" &&
-      !/^missing_measurement_/.test(primaryGap)) {
-    return true;
-  }
-  if (action.actionType === "ask_user" &&
-      (/^missing_measurement_/.test(primaryGap) ||
-      primaryGap === "missing_visual_panel" ||
-      primaryGap === "missing_visual_device_label")) {
-    return true;
-  }
-  return false;
-}
-
-function buildInternalActionFromSelectedAction(selectedAction) {
-  if (!selectedAction) return null;
-
-  if (selectedAction.actionType === "stop") {
-    return {
-      action_type: "finalize",
-      tool_name: null,
-      reason: selectedAction.reason,
-      expected_discriminator: selectedAction.target
-    };
-  }
-
-  return {
-    action_type: "ask_user",
-    tool_name: null,
-    reason: selectedAction.reason,
-    expected_discriminator: selectedAction.target
-  };
-}
-
-function getCanonicalCheckProfile(checkKey) {
-  var profiles = {
-    verify_trip_device_identity: {
-      checkKey: "verify_trip_device_identity",
-      title: "Identificare la protezione che interviene",
-      instruction: "Verificare quale dispositivo scatta esattamente tra differenziale, magnetotermico o generale.",
-      reason: "Serve distinguere il tipo di intervento prima di proporre misure o ipotesi specifiche.",
-      safetyLevel: "safe",
-      requiresPowerOn: false,
-      requiresInstrument: false
-    },
-    verify_trip_condition_context: {
-      checkKey: "verify_trip_condition_context",
-      title: "Chiarire il contesto di scatto",
-      instruction: "Verificare in quale condizione precisa scatta la protezione: all'avvio, sotto carico o su un carico specifico.",
-      reason: "Serve definire il trigger tecnico prima di chiedere misure o controlli piu specifici.",
-      safetyLevel: "safe",
-      requiresPowerOn: false,
-      requiresInstrument: false
-    },
-    verify_device_nameplate: {
-      checkKey: "verify_device_nameplate",
-      title: "Acquisire la targhetta del dispositivo",
-      instruction: "Verificare la targhetta o l'etichetta identificativa del dispositivo coinvolto.",
-      reason: "Serve identificare il dispositivo prima di selezionare verifiche o misure pertinenti.",
-      safetyLevel: "safe",
-      requiresPowerOn: false,
-      requiresInstrument: false
-    },
-    verify_panel_visual_context: {
-      checkKey: "verify_panel_visual_context",
-      title: "Acquisire il contesto visivo del quadro",
-      instruction: "Verificare il quadro o il cablaggio coinvolto con una vista chiara del contesto.",
-      reason: "Serve vedere protezioni, cablaggi e segnali evidenti prima di proporre controlli successivi.",
-      safetyLevel: "safe",
-      requiresPowerOn: false,
-      requiresInstrument: false
-    },
-    verify_voltage_presence: {
-      checkKey: "verify_voltage_presence",
-      title: "Verificare la presenza tensione",
-      instruction: "Verificare la presenza della tensione sul punto coinvolto con misura coerente e in sicurezza.",
-      reason: "Serve confermare alimentazione presente o assente prima di restringere la diagnosi.",
-      safetyLevel: "attention",
-      requiresPowerOn: true,
-      requiresInstrument: true
-    },
-    verify_current_absorption: {
-      checkKey: "verify_current_absorption",
-      title: "Verificare l'assorbimento del carico",
-      instruction: "Verificare la corrente assorbita dal carico coinvolto con misura coerente e in sicurezza.",
-      reason: "Serve distinguere sovraccarico reale da altri guasti sul circuito.",
-      safetyLevel: "attention",
-      requiresPowerOn: true,
-      requiresInstrument: true
-    },
-    verify_load_identification: {
-      checkKey: "verify_load_identification",
-      title: "Identificare il carico coinvolto",
-      instruction: "Verificare quale carico o utenza e realmente coinvolto nel problema segnalato.",
-      reason: "Serve legare il sintomo a un carico specifico prima di chiedere misure dedicate.",
-      safetyLevel: "safe",
-      requiresPowerOn: false,
-      requiresInstrument: false
-    },
-    verify_continuity_open_circuit: {
-      checkKey: "verify_continuity_open_circuit",
-      title: "Verificare la continuita del circuito",
-      instruction: "Verificare la continuita del circuito interessato a impianto disalimentato e in sicurezza.",
-      reason: "Serve confermare un'interruzione reale prima di proporre cause piu specifiche.",
-      safetyLevel: "safe",
-      requiresPowerOn: false,
-      requiresInstrument: true
-    }
-  };
-
-  return profiles[checkKey] ? contracts.safeClone(profiles[checkKey]) : null;
-}
-
-function chooseSafeFallbackCheckKey(caseState, planningFrame) {
-  if (!hasKnownProtectionIdentity(caseState, planningFrame)) return "verify_trip_device_identity";
-  if (!hasKnownTripContext(caseState, planningFrame)) return "verify_trip_condition_context";
-  return "verify_panel_visual_context";
-}
-
-function buildCanonicalSuggestedCheck(options) {
-  var config = options || {};
-  var caseState = config.caseState || {};
-  var selectedAction = config.selectedAction || {};
-  var primaryGap = safeText(config.primaryGap);
-  var planningFrame = config.planningFrame || planner.buildPlanningFrame(caseState);
-  var ambiguityMeta = buildAmbiguityMeta(caseState, planningFrame);
-  var checkKey = null;
-  var profile;
-
-  if (safeText(selectedAction.actionType) !== "suggest_check") {
-    return null;
-  }
-
-  if (primaryGap === "missing_protection_identity") checkKey = "verify_trip_device_identity";
-  else if (primaryGap === "missing_trip_context") checkKey = "verify_trip_condition_context";
-  else if (primaryGap === "missing_visual_panel") checkKey = "verify_panel_visual_context";
-  else if (primaryGap === "missing_visual_device_label") checkKey = "verify_device_nameplate";
-  else if (primaryGap === "missing_measurement_voltage") checkKey = "verify_voltage_presence";
-  else if (primaryGap === "missing_measurement_current") checkKey = "verify_current_absorption";
-  else if (primaryGap === "missing_load_identity") checkKey = "verify_load_identification";
-  else if (primaryGap === "missing_measurement_continuity") checkKey = "verify_continuity_open_circuit";
-  else if (primaryGap === "missing_measurement_insulation") checkKey = chooseSafeFallbackCheckKey(caseState, planningFrame);
-
-  if (!checkKey) {
-    checkKey = chooseSafeFallbackCheckKey(caseState, planningFrame);
-  }
-
-  if ((checkKey === "verify_voltage_presence" || checkKey === "verify_current_absorption") &&
-      (caseState.safety.level === "stop" || caseState.safety.level === "danger")) {
-    checkKey = chooseSafeFallbackCheckKey(caseState, planningFrame);
-  }
-
-  if ((checkKey === "verify_voltage_presence" || checkKey === "verify_current_absorption") &&
-      !hasKnownTripContext(caseState, planningFrame) &&
-      /scatta|salta|interviene|trip/.test(buildSignalText(caseState, planningFrame))) {
-    checkKey = chooseSafeFallbackCheckKey(caseState, planningFrame);
-  }
-
-  if (ambiguityMeta.ambiguousLowContext &&
-      (checkKey === "verify_voltage_presence" ||
-      checkKey === "verify_current_absorption" ||
-      primaryGap === "missing_measurement_insulation")) {
-    checkKey = chooseSafeFallbackCheckKey(caseState, planningFrame);
-  }
-
-  profile = getCanonicalCheckProfile(checkKey);
-  return profile;
-}
-
-function selectNextBestAction(options) {
-  var config = options || {};
-  var caseState = config.caseState || {};
-  var loopState = config.loopState || {};
-  var planningFrame = config.planningFrame || planner.buildPlanningFrame(caseState);
-  var availablePack = config.availableActions || buildAvailableActions(caseState, loopState, planningFrame);
-  var primaryGap = safeText(config.primaryGap || availablePack.primaryGap) || "sufficient_answer";
-  var primaryGapReason = safeText(config.primaryGapReason || availablePack.primaryGapReason) || derivePrimaryGapReason(primaryGap);
-  var ambiguityMeta = config.ambiguityMeta || availablePack.ambiguityMeta || buildAmbiguityMeta(caseState, planningFrame);
-  var actions = Array.isArray(availablePack.actions) ? availablePack.actions.slice(0) : [];
-  var validActions = [];
-  var rejectedActions = [];
-  var allowedTypes = {
-    ask_user: true,
-    request_measurement: true,
-    request_photo: true,
-    suggest_check: true,
-    stop: true
-  };
-
-  actions.forEach(function (action) {
-    var candidate = {
-      actionType: safeText(action && action.actionType),
-      target: safeText(action && action.target) || "unknown",
-      reason: safeText(action && action.reason),
-      priorityScore: 0
-    };
-    var rejectReason = null;
-
-    if (!allowedTypes[candidate.actionType]) {
-      rejectReason = "low_value";
-    } else if (isUnsafeAction(candidate, caseState)) {
-      rejectReason = "unsafe";
-    } else if (hasDuplicateAction(candidate, caseState, loopState)) {
-      rejectReason = "duplicate";
-    } else if (isAlreadySatisfiedAction(candidate, caseState, primaryGap)) {
-      rejectReason = "already_satisfied";
-    } else if (isPrematureAction(candidate, caseState, primaryGap, planningFrame)) {
-      rejectReason = "premature";
-    } else if (isGenericAction(candidate)) {
-      rejectReason = "generic";
-    }
-
-    if (rejectReason) {
-      rejectedActions.push({
-        actionType: candidate.actionType,
-        target: candidate.target,
-        rejectReason: rejectReason
-      });
-      return;
-    }
-
-    candidate.priorityScore = scoreActionPriority(candidate, caseState, primaryGap, ambiguityMeta);
-    validActions.push(candidate);
-  });
-
-  validActions.sort(function (left, right) {
-    return right.priorityScore - left.priorityScore;
-  });
-
-  if (validActions.length > 1) {
-    validActions.slice(1).forEach(function (action) {
-      rejectedActions.push({
-        actionType: action.actionType,
-        target: action.target,
-        rejectReason: "weaker_than_alternative"
-      });
-    });
-  }
-
-  return {
-    selectedAction: validActions.length ? validActions[0] : null,
-    rejectedActions: rejectedActions,
-    primaryGap: primaryGap,
-    primaryGapReason: primaryGapReason,
-    stopReason: validActions.length ? null : (ambiguityMeta.ambiguousLowContext ? "insufficient_safe_context" : "no_viable_action"),
-    ambiguityMeta: ambiguityMeta
-  };
-}
-
-function clampMaxSteps(value) {
-  var parsed = parseInt(value, 10);
-  if (!isFinite(parsed) || parsed <= 0) return 2;
-  if (parsed > 3) return 3;
-  return parsed;
-}
-
-function buildActionSignature(action) {
-  return JSON.stringify({
-    action_type: safeText(action && action.action_type),
-    tool_name: safeText(action && action.tool_name),
-    expected_discriminator: safeText(action && action.expected_discriminator)
+  }).catch(function(err) {
+    runtimeTrace.record(cs, "ai_failed", { error: s(err && err.message) });
   });
 }
 
-function buildDecisionStateSignature(caseState) {
-  return JSON.stringify({
-    facts_confirmed: caseState.facts_confirmed,
-    measurements: caseState.measurements,
-    tool_results: caseState.tool_results.map(function (item) {
-      return {
-        tool_name: item && item.tool_name ? item.tool_name : null,
-        summary: item && item.summary ? item.summary : ""
-      };
-    })
-  });
+// ============================================================
+// H. VERIFICA — la diagnosi è giustificata dai fatti?
+// ============================================================
+
+function verifyConclusion(cs) {
+  var active = cs.hypotheses.filter(function(h) { return h.status === "active"; });
+
+  if (active.length === 0) {
+    cs.final_confidence = "non_verifiable";
+    cs.final_diagnosis = "Dati insufficienti per una diagnosi."
+      + (cs.missing_critical_data.length ? " Serve: " + cs.missing_critical_data.join(", ") + "." : "");
+    return;
+  }
+
+  var confirmed = active.filter(function(h) { return h.confidence === "confirmed"; });
+  if (confirmed.length) {
+    cs.final_confidence = "confirmed";
+    cs.final_diagnosis = confirmed[0].label + ". " + confirmed[0].reason;
+    return;
+  }
+
+  var hasEvidence = active.some(function(h) { return h.supporting_evidence.length > 0; });
+  cs.final_confidence = hasEvidence ? "probable" : "non_verifiable";
+  cs.final_diagnosis = active.length === 1
+    ? "Ipotesi da verificare: " + active[0].label
+    : active.length + " ipotesi possibili. Serve verifica discriminante.";
+
+  // Guardrail: confirmed impossibile senza misure
+  if (cs.final_confidence === "confirmed" && cs.measurements.length === 0) {
+    cs.final_confidence = "probable";
+  }
+  // Guardrail: diagnosi solo da AI non è confirmed
+  if (cs.final_confidence === "confirmed" && active.every(function(h) { return h.source === "external_ai"; })) {
+    cs.final_confidence = "probable";
+  }
 }
 
-function buildProgressSnapshot(caseState) {
-  return {
-    facts_confirmed: contracts.safeClone(caseState.facts_confirmed),
-    measurements: contracts.safeClone(caseState.measurements),
-    tool_results: contracts.safeClone(caseState.tool_results.map(function (item) {
-      return {
-        tool_name: item && item.tool_name ? item.tool_name : null,
-        summary: item && item.summary ? item.summary : ""
-      };
-    })),
-    hypotheses_active: contracts.safeClone(caseState.hypotheses_active),
-    checks_requested: contracts.safeClone(caseState.checks_requested)
-  };
-}
+// ============================================================
+// I. RISPOSTA — formatta il ragionamento di ROCCO
+// ============================================================
+//
+// La risposta mostra il PERCORSO del ragionamento:
+// come ROCCO è arrivato alle sue conclusioni.
 
-function calculateProgress(beforeSnapshot, afterSnapshot) {
-  var before = beforeSnapshot || {};
-  var after = afterSnapshot || {};
-  var progress = {
-    facts_confirmed: JSON.stringify(before.facts_confirmed || []) !== JSON.stringify(after.facts_confirmed || []),
-    measurements: JSON.stringify(before.measurements || []) !== JSON.stringify(after.measurements || []),
-    tool_results: JSON.stringify(before.tool_results || []) !== JSON.stringify(after.tool_results || []),
-    hypotheses_active: JSON.stringify(before.hypotheses_active || []) !== JSON.stringify(after.hypotheses_active || []),
-    checks_requested: JSON.stringify(before.checks_requested || []) !== JSON.stringify(after.checks_requested || [])
-  };
-
-  progress.any = progress.facts_confirmed ||
-    progress.measurements ||
-    progress.hypotheses_active ||
-    progress.checks_requested;
-  return progress;
-}
-
-function applyReasonedState(caseState, reasoned, validationLabel) {
-  var stateValidation;
-
-  runtimeTrace.mergeRuntime(caseState, reasoned.runtime);
-  runtimeTrace.record(caseState, "model_result", {
-    provider_used: caseState.runtime.provider_used,
-    fallback_used: caseState.runtime.fallback_used
-  });
-
-  applyDiagnosis(caseState, reasoned.diagnosis);
-  runtimeTrace.record(caseState, "diagnosis_applied", {
-    confidence: caseState.final_confidence,
-    status: caseState.status
-  });
-
-  stateValidation = verifier.verifyCaseState(caseState);
-  if (!stateValidation.valid) {
-    throw new Error((validationLabel || "case_state_invalid") + ":" + collectVerificationIssues(stateValidation).join(","));
-  }
-  runtimeTrace.record(caseState, "case_state_validated", {
-    phase: validationLabel || "loop",
-    valid: true
-  });
-}
-
-function chooseNextAction(caseState, planningFrame) {
-  var frame = planningFrame || planner.buildPlanningFrame(caseState);
-  var enoughFacts = hasEnoughFacts(caseState);
-  var activeHypothesesCount = caseState.hypotheses_active.length;
-
-  if (frame.safety_level === "stop" || frame.safety_level === "danger") {
-    return {
-      action_type: "finalize",
-      tool_name: null,
-      reason: "safety_lock",
-      expected_discriminator: frame.safety_next_step || ""
-    };
-  }
-
-  if (frame.has_image && !frame.has_vision_tool) {
-    return {
-      action_type: "run_tool",
-      tool_name: "vision_tool",
-      reason: "servono evidenze visive ufficiali",
-      expected_discriminator: "componenti visibili e marcature"
-    };
-  }
-
-  if (!frame.has_recognition_tool) {
-    return {
-      action_type: "run_tool",
-      tool_name: "recognition_tool",
-      reason: "servono componenti e valori riconosciuti in modo uniforme",
-      expected_discriminator: "componenti e misure rilevate"
-    };
-  }
-
-  if (needsCalcTool(caseState) && !frame.has_calc_tool) {
-    return {
-      action_type: "run_tool",
-      tool_name: "calc_tool",
-      reason: "serve conferma numerica ufficiale",
-      expected_discriminator: "valori di calcolo"
-    };
-  }
-
-  if (enoughFacts && !frame.has_knowledge_tool) {
-    return {
-      action_type: "run_tool",
-      tool_name: "knowledge_lookup_tool",
-      reason: "serve contesto tecnico locale coerente",
-      expected_discriminator: "pattern e basi tecniche pertinenti"
-    };
-  }
-
-  if (enoughFacts && !frame.has_closed_cases_tool) {
-    return {
-      action_type: "run_tool",
-      tool_name: "closed_cases_tool",
-      reason: "serve memoria consultiva dei casi chiusi",
-      expected_discriminator: "casi simili validati"
-    };
-  }
-
-  if (frame.missing_critical_data.length > 0 && activeHypothesesCount === 0) {
-    return {
-      action_type: "ask_user",
-      tool_name: null,
-      reason: "dati insufficienti",
-      expected_discriminator: frame.missing_critical_data[0]
-    };
-  }
-
-  return {
-    action_type: "finalize",
-    tool_name: null,
-    reason: "evidenza sufficiente per sintesi tecnica",
-    expected_discriminator: ""
-  };
-}
-
-function buildReasonerPrompt(caseState) {
+function formatResponse(cs, percezione) {
+  var active = cs.hypotheses.filter(function(h) { return h.status === "active"; });
+  var rejected = cs.hypotheses.filter(function(h) { return h.status === "rejected"; });
+  var best = cs.next_action;
   var lines = [];
-  lines.push("Restituisci SOLO JSON valido.");
-  lines.push("Nessun testo fuori JSON. Nessun markdown. Nessun commento.");
-  lines.push("Usa SOLO i campi previsti dal contratto.");
-  lines.push("Non aggiungere campi nuovi.");
-  lines.push("Schema obbligatorio:");
-  lines.push("{\"summary\":\"\",\"active\":[{\"label\":\"\",\"reason\":\"\"}],\"rejected\":[{\"label\":\"\",\"reason\":\"\"}],\"confidence\":\"confirmed|probable|non_verifiable\"}");
+  var certMap = { confirmed: "CONFERMATO", probable: "PROBABILE", non_verifiable: "DA VERIFICARE" };
+
+  // Osservazioni
+  lines.push("OSSERVAZIONI:");
+  if (cs.facts_confirmed.length) {
+    cs.facts_confirmed.slice(0, 6).forEach(function(f) { lines.push("- " + f); });
+  } else {
+    lines.push("- Nessun fatto tecnico confermato.");
+  }
+
+  // Analisi del sistema
+  if (cs.system_model && cs.system_model.discrepancy) {
+    lines.push("");
+    lines.push("ANALISI:");
+    lines.push("- Sistema: " + cs.system_model.type);
+    if (cs.system_model.funzionamento) {
+      lines.push("- Funzionamento atteso: " + cs.system_model.funzionamento);
+    }
+    lines.push("- Anomalia: " + cs.system_model.discrepancy);
+  }
+
+  // Componenti
   lines.push("");
-  lines.push("REGOLE DI PRUDENZA:");
-  lines.push("- Evidenza parziale != diagnosi certa.");
-  lines.push("- Se mancano misure o verifiche decisive, non usare confirmed.");
-  lines.push("- Se ci sono ambiguita o contraddizioni, abbassa confidence.");
-  lines.push("- Usa probable solo per ipotesi plausibili e coerenti.");
-  lines.push("- Usa non_verifiable quando i dati non bastano.");
-  lines.push("- Non trasformare sintomi generici in causa certa.");
-  lines.push("- Mantieni output tecnico, sintetico e stabile.");
+  lines.push("COMPONENTI COINVOLTI:");
+  lines.push(cs.components_detected.length ? "- " + cs.components_detected.join(", ") : "- Non identificati.");
+
+  // Ipotesi con ragionamento
   lines.push("");
-  lines.push("PROBLEMA:");
-  lines.push(caseState.problem_summary);
+  lines.push("IPOTESI:");
+  if (active.length) {
+    active.slice(0, 4).forEach(function(h, idx) {
+      lines.push("- " + h.label);
+      // Mostra la catena di ragionamento (l'intelligenza di ROCCO)
+      if (h.catena && h.catena.length > 0) {
+        h.catena.forEach(function(step) {
+          lines.push("  → " + step);
+        });
+      } else if (h.reason) {
+        lines.push("  Perche: " + h.reason);
+      }
+    });
+  } else {
+    lines.push("- Nessuna ipotesi formulabile con i dati disponibili.");
+  }
+
+  // Ipotesi escluse (mostra il ragionamento per esclusione)
+  if (rejected.length) {
+    lines.push("");
+    lines.push("IPOTESI ESCLUSE:");
+    rejected.slice(0, 3).forEach(function(h) {
+      lines.push("- " + h.label + " → " + (h.rejection_reason || "esclusa"));
+    });
+  }
+
+  // Certezza
   lines.push("");
-  lines.push("SICUREZZA:");
-  lines.push("level=" + caseState.safety.level);
-  lines.push("reasons=" + caseState.safety.reasons.join(" | "));
-  lines.push("blocked_actions=" + caseState.safety.blocked_actions.join(" | "));
-  lines.push("allowed_next_step=" + caseState.safety.allowed_next_step);
+  lines.push("LIVELLO DI CERTEZZA:");
+  lines.push(certMap[cs.final_confidence] || "DA VERIFICARE");
+
+  // Prossimo passo (la domanda più discriminante)
   lines.push("");
-  lines.push("FATTI CERTI:");
-  lines.push(caseState.facts_confirmed.join("\n"));
-  lines.push("");
-  lines.push("FATTI INCERTI O CONTRADDIZIONI:");
-  lines.push(caseState.facts_uncertain.join("\n"));
-  lines.push("");
-  lines.push("MISURE:");
-  lines.push(JSON.stringify(caseState.measurements));
-  lines.push("");
-  lines.push("COMPONENTI:");
-  lines.push(caseState.components_detected.join(", "));
-  lines.push("");
-  lines.push("IPOTESI ATTIVE:");
-  lines.push(JSON.stringify(caseState.hypotheses_active));
-  lines.push("");
-  lines.push("TOOL RESULTS:");
-  lines.push(JSON.stringify(caseState.tool_results.map(function (item) {
-    return { tool_name: item.tool_name, summary: item.summary, warnings: item.warnings };
-  })));
-  lines.push("");
-  lines.push("DATI MANCANTI:");
-  lines.push(caseState.missing_critical_data.join(" | "));
+  lines.push("PROSSIMO PASSO:");
+  if (best && best.action) {
+    lines.push("- " + best.action);
+    if (best.discrimination && best.discrimination.separation > 0) {
+      lines.push("  (questa verifica separa " + best.discrimination.coverage + " ipotesi)");
+    }
+    if (best.alternatives && best.alternatives.length > 0) {
+      lines.push("  In alternativa: " + best.alternatives[0]);
+    }
+  } else {
+    lines.push("- Raccogliere il dato tecnico mancante.");
+  }
+
+  // Rischi
+  if (cs.safety.reasons.length) {
+    lines.push("");
+    lines.push("RISCHI REALI:");
+    cs.safety.reasons.slice(0, 3).forEach(function(r) { lines.push("- " + r); });
+  }
+
   return lines.join("\n");
 }
 
-function extractJson(text) {
-  var source = String(text || "").trim();
-  var start = source.indexOf("{");
-  var end = source.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
-  return source.slice(start, end + 1);
-}
-
-function parseReasonerText(text) {
-  try {
-    return JSON.parse(extractJson(text) || "");
-  } catch (_error) {
-    return null;
-  }
-}
-
-function buildDeterministicDiagnosis(caseState, fallbackReason) {
-  var action = chooseNextAction(caseState);
-  var confidence = caseState.hypotheses_active.length ? "probable" : "non_verifiable";
-  var summary;
-
-  if (caseState.safety.level === "stop" || caseState.safety.level === "danger") {
-    action.action_type = "finalize";
-    summary = caseState.safety.reasons[0] || "Condizione pericolosa rilevata.";
-    confidence = "probable";
-  } else if (caseState.hypotheses_active.length) {
-    summary = "Diagnosi tecnica provvisoria basata su evidenze disponibili.";
-  } else {
-    summary = "Dati insufficienti per una diagnosi tecnica confermata.";
-  }
-
-  return {
-    summary: summary,
-    active: contracts.safeClone(caseState.hypotheses_active),
-    rejected: contracts.safeClone(caseState.hypotheses_rejected),
-    confidence: confidence,
-    action: {
-      action_type: action.action_type,
-      tool_name: action.tool_name,
-      reason: fallbackReason || action.reason,
-      expected_discriminator: action.expected_discriminator
-    }
-  };
-}
-
-function applyDiagnosis(caseState, diagnosisResult) {
-  var active = Array.isArray(diagnosisResult.active) ? diagnosisResult.active : [];
-  var rejected = Array.isArray(diagnosisResult.rejected) ? diagnosisResult.rejected : [];
-  var rejectedKeys = {};
-  var conflictInfo;
-  var scoredHypotheses = [];
-  var topHypothesis;
-  var topCoverageConfidence = "low";
-  var evidenceMeta;
-
-  caseState.hypotheses_rejected = caseStateHelpers.pushUniqueHypotheses(caseState.hypotheses_rejected, rejected);
-  caseState.hypotheses_rejected.forEach(function (item) {
-    rejectedKeys[safeText(item.label).toLowerCase()] = true;
-  });
-
-  conflictInfo = resolveEvidenceConflicts({
-    facts: caseState.facts_confirmed,
-    measurements: caseState.measurements,
-    observations: [caseState.problem_summary].concat(caseState.visual_findings, caseState.facts_uncertain),
-    hypotheses: active
-  });
-  caseState.facts_uncertain = caseStateHelpers.pushUniqueStrings(
-    caseState.facts_uncertain,
-    conflictInfo.contradictions.map(function (item) {
-      return item.note;
-    })
-  );
-
-  caseState.hypotheses_active = [];
-  active.forEach(function (item) {
-    var normalized = normalizeHypothesis(item, "orchestrator");
-    var key = safeText(normalized && normalized.label).toLowerCase();
-    var coverage;
-    if (!normalized || !normalized.label) return;
-    if (rejectedKeys[key]) return;
-    coverage = evaluateHypothesisCoverage(normalized, conflictInfo.evidenceSet, conflictInfo);
-    scoredHypotheses.push({
-      hypothesis: normalized,
-      coverage: coverage,
-      evidenceConfidence: deriveCoverageConfidence(coverage.coverageLevel, coverage)
-    });
-  });
-
-  scoredHypotheses.sort(function (left, right) {
-    var rankDiff = hypothesisCoverageRank(right.coverage.coverageLevel) - hypothesisCoverageRank(left.coverage.coverageLevel);
-    if (rankDiff) return rankDiff;
-    if (right.coverage.supportWeight !== left.coverage.supportWeight) {
-      return right.coverage.supportWeight - left.coverage.supportWeight;
-    }
-    if (left.coverage.contradictionWeight !== right.coverage.contradictionWeight) {
-      return left.coverage.contradictionWeight - right.coverage.contradictionWeight;
-    }
-    return safeText(left.hypothesis.label).localeCompare(safeText(right.hypothesis.label));
-  });
-
-  scoredHypotheses.forEach(function (item) {
-    if (item.coverage.coverageLevel === "conflicted") {
-      caseState.hypotheses_rejected = caseStateHelpers.pushUniqueHypotheses(caseState.hypotheses_rejected, [{
-        label: item.hypothesis.label,
-        reason: item.hypothesis.reason || "ipotesi in conflitto con evidenze piu forti",
-        source: item.hypothesis.source
-      }]);
-      return;
-    }
-    caseState.hypotheses_active.push(item.hypothesis);
-  });
-
-  topHypothesis = scoredHypotheses.length ? scoredHypotheses[0] : null;
-  if (topHypothesis) {
-    topCoverageConfidence = deriveCoverageConfidence(topHypothesis.coverage.coverageLevel, topHypothesis.coverage);
-  }
-
-  if (diagnosisResult.confidence === "confirmed" && (caseState.measurements.length === 0 && caseState.tool_results.length <= 1)) {
-    diagnosisResult.confidence = "probable";
-  }
-  if (!caseState.hypotheses_active.length && diagnosisResult.confidence !== "non_verifiable") {
-    diagnosisResult.confidence = "non_verifiable";
-  }
-
-  evidenceMeta = {
-    strongEvidenceCount: conflictInfo.strongEvidenceCount,
-    weakEvidenceCount: conflictInfo.weakEvidenceCount,
-    conflictCount: conflictInfo.conflictCount,
-    topHypothesisCoverage: topHypothesis ? topHypothesis.coverage.coverageLevel : "none",
-    topHypothesisConfidenceSource: "coverage_based"
-  };
-  caseState.evidenceMeta = contracts.safeClone(evidenceMeta);
-  caseState.strongestHypothesisMeta = topHypothesis ? {
-    supportingEvidenceCount: topHypothesis.coverage.supportingEvidenceCount,
-    contradictingEvidenceCount: topHypothesis.coverage.contradictingEvidenceCount,
-    coverageLevel: topHypothesis.coverage.coverageLevel,
-    reliabilityBand: topHypothesis.coverage.reliabilityBand,
-    confidenceBand: normalizeEvidenceConfidence(topCoverageConfidence)
-  } : {
-    supportingEvidenceCount: 0,
-    contradictingEvidenceCount: 0,
-    coverageLevel: "none",
-    reliabilityBand: "inferred",
-    confidenceBand: "low"
-  };
-
-  caseState.final_diagnosis = safeText(diagnosisResult.summary) || "Dati insufficienti per una diagnosi tecnica confermata.";
-  caseState.final_confidence = normalizeConfidence(mapEvidenceConfidenceToCaseConfidence(topCoverageConfidence));
-  caseState.next_action = contracts.safeClone(diagnosisResult.action);
-  if (diagnosisResult.action && diagnosisResult.action.action_type === "finalize") {
-    caseState.status = "closed";
-  }
-
-  return caseState;
-}
-
-function runModelReasoning(caseState, providerGateway, providerHint) {
-  var prompt = buildReasonerPrompt(caseState);
-  return reasoner.execute(providerGateway, {
-    requested_provider: providerHint,
-    system_prompt: "Sei ROCCO v2 reasoner. Rispondi solo con JSON valido. Usa solo summary, active, rejected, confidence. Confidence ammessa: confirmed, probable, non_verifiable. confirmed solo con evidenza forte e coerente; in dubbio usa probable o non_verifiable.",
-    user_prompt: prompt
-  }).then(function (response) {
-    var parsed = parseReasonerText(response.text);
-    var candidate;
-    var validation;
-    if (!parsed) {
-      return {
-        diagnosis: buildDeterministicDiagnosis(caseState, "invalid_reasoner_json"),
-        runtime: {
-          provider_used: response.provider_used,
-          model_used: response.model_used,
-          fallback_used: true,
-          fallback_reason: "invalid_reasoner_json"
-        }
-      };
-    }
-
-    candidate = {
-      updated_case_state: {},
-      decision: chooseNextAction(caseState),
-      diagnosis: {
-        summary: safeText(parsed.summary),
-        hypotheses_active: Array.isArray(parsed.active) ? parsed.active : [],
-        hypotheses_rejected: Array.isArray(parsed.rejected) ? parsed.rejected : [],
-        confidence: normalizeConfidence(parsed.confidence)
-      }
-    };
-    validation = contracts.validateReasonerOutput(candidate);
-    if (!validation.valid) {
-      return {
-        diagnosis: buildDeterministicDiagnosis(caseState, "invalid_reasoner_output"),
-        runtime: {
-          provider_used: response.provider_used,
-          model_used: response.model_used,
-          fallback_used: true,
-          fallback_reason: "invalid_reasoner_output"
-        }
-      };
-    }
-
-    return {
-      diagnosis: {
-        summary: candidate.diagnosis.summary,
-        active: candidate.diagnosis.hypotheses_active,
-        rejected: candidate.diagnosis.hypotheses_rejected,
-        confidence: candidate.diagnosis.confidence,
-        action: candidate.decision
-      },
-      runtime: {
-        provider_used: response.provider_used,
-        model_used: response.model_used,
-        fallback_used: !!response.fallback_used,
-        fallback_reason: response.fallback_reason
-      }
-    };
-  }).catch(function (error) {
-    return {
-      diagnosis: buildDeterministicDiagnosis(caseState, "provider_unavailable"),
-      runtime: {
-        provider_used: null,
-        model_used: null,
-        fallback_used: true,
-        fallback_reason: String(error && error.message || "provider_unavailable")
-      }
-    };
-  });
-}
-
-function runDiagnosticLoop(caseState, providerGateway, toolRegistry, input, maxSteps) {
-  var loopState = {
-    step_count: 0,
-    max_steps: maxSteps,
-    last_action_signature: null,
-    last_decision_state_signature: null,
-    no_progress_tools: {},
-    diagnosis_applied: false,
-    stop_reason: null
-  };
-
-  runtimeTrace.record(caseState, "loop_start", {
-    max_steps: maxSteps
-  });
-
-  function stopLoop(reason, details) {
-    loopState.stop_reason = reason;
-    runtimeTrace.record(caseState, "loop_stop", {
-      reason: reason,
-      step: loopState.step_count,
-      details: details || {}
-    });
-    return Promise.resolve(loopState);
-  }
-
-  function runStep() {
-    var planningFrame;
-    var nextAction;
-    var actionSignature;
-    var decisionStateSignature;
-    var beforeToolSnapshot;
-    var beforeDiagnosisSnapshot;
-    var progress;
-
-    if (caseState.safety.level === "stop") {
-      return stopLoop("safety_stop", { safety_level: caseState.safety.level });
-    }
-
-    if (loopState.step_count >= loopState.max_steps) {
-      return stopLoop("max_steps_reached", { max_steps: loopState.max_steps });
-    }
-
-    loopState.step_count += 1;
-    planningFrame = planner.buildPlanningFrame(caseState);
-    nextAction = chooseNextAction(caseState, planningFrame);
-    caseStateHelpers.setNextAction(caseState, nextAction);
-    runtimeTrace.record(caseState, "loop_step", {
-      step: loopState.step_count,
-      action_type: nextAction ? nextAction.action_type : null,
-      tool_name: nextAction ? nextAction.tool_name : null
-    });
-
-    if (!nextAction || !nextAction.action_type) {
-      return stopLoop("no_next_action", {});
-    }
-
-    actionSignature = buildActionSignature(nextAction);
-    decisionStateSignature = buildDecisionStateSignature(caseState);
-    if (loopState.last_action_signature === actionSignature &&
-        loopState.last_decision_state_signature === decisionStateSignature) {
-      runtimeTrace.record(caseState, "loop_no_progress", {
-        step: loopState.step_count,
-        reason: "same_next_action_without_state_change"
-      });
-      return stopLoop("same_next_action_without_state_change", {
-        action_type: nextAction.action_type,
-        tool_name: nextAction.tool_name || null
-      });
-    }
-
-    if (nextAction.action_type !== "run_tool") {
-      if (nextAction.action_type === "ask_user" && nextAction.expected_discriminator) {
-        beforeToolSnapshot = buildProgressSnapshot(caseState);
-        caseState.checks_requested = caseStateHelpers.pushUniqueStrings(
-          caseState.checks_requested,
-          nextAction.expected_discriminator
-        );
-        progress = calculateProgress(beforeToolSnapshot, buildProgressSnapshot(caseState));
-        if (progress.any) {
-          runtimeTrace.record(caseState, "loop_progress", {
-            step: loopState.step_count,
-            checks_requested: progress.checks_requested
-          });
-        } else {
-          runtimeTrace.record(caseState, "loop_no_progress", {
-            step: loopState.step_count,
-            reason: "ask_user_without_new_check"
-          });
-        }
-      }
-      return stopLoop("next_action_" + nextAction.action_type, {
-        action_type: nextAction.action_type
-      });
-    }
-
-    if (loopState.no_progress_tools[nextAction.tool_name]) {
-      runtimeTrace.record(caseState, "loop_tool_skipped", {
-        step: loopState.step_count,
-        tool_name: nextAction.tool_name,
-        reason: "tool_already_used_without_progress"
-      });
-      return stopLoop("tool_already_used_without_progress", {
-        tool_name: nextAction.tool_name
-      });
-    }
-
-    runtimeTrace.record(caseState, "loop_tool_selected", {
-      step: loopState.step_count,
-      tool_name: nextAction.tool_name
-    });
-    beforeToolSnapshot = buildProgressSnapshot(caseState);
-
-    return toolRegistry.executeTool(nextAction.tool_name, caseState, {
-      providerGateway: providerGateway,
-      provider_hint: input && input.provider_hint,
-      image_buffer: input && input.image_buffer,
-      image_mime_type: input && input.image_mime_type
-    }).then(function (toolResult) {
-      caseStateHelpers.addToolResult(caseState, toolResult);
-
-      if (toolResult.tool_name === "recognition_tool" && toolResult.raw_ref) {
-        caseState.components_detected = caseStateHelpers.pushUniqueStrings(
-          caseState.components_detected,
-          toolResult.raw_ref.legacy_components || []
-        );
-        caseState.hypotheses_active = caseStateHelpers.pushUniqueHypotheses(
-          caseState.hypotheses_active,
-          mapRecognitionHypotheses(toolResult.raw_ref)
-        );
-      }
-
-      progress = calculateProgress(beforeToolSnapshot, buildProgressSnapshot(caseState));
-      if (!progress.any) {
-        loopState.no_progress_tools[nextAction.tool_name] = true;
-        runtimeTrace.record(caseState, "loop_tool_skipped", {
-          step: loopState.step_count,
-          tool_name: nextAction.tool_name,
-          reason: "tool_result_without_progress"
-        });
-        runtimeTrace.record(caseState, "loop_no_progress", {
-          step: loopState.step_count,
-          reason: "tool_result_without_progress"
-        });
-        return stopLoop("tool_result_without_progress", {
-          tool_name: nextAction.tool_name
-        });
-      }
-
-      runtimeTrace.record(caseState, "loop_tool_result_applied", {
-        step: loopState.step_count,
-        tool_name: toolResult.tool_name,
-        ok: toolResult.ok
-      });
-      runtimeTrace.record(caseState, "loop_progress", {
-        step: loopState.step_count,
-        facts_confirmed: progress.facts_confirmed,
-        measurements: progress.measurements,
-        tool_results: progress.tool_results,
-        hypotheses_active: progress.hypotheses_active
-      });
-
-      runtimeTrace.record(caseState, "loop_reasoner_rerun", {
-        step: loopState.step_count,
-        tool_name: nextAction.tool_name
-      });
-      beforeDiagnosisSnapshot = buildProgressSnapshot(caseState);
-      return runModelReasoning(caseState, providerGateway, input && input.provider_hint).then(function (reasoned) {
-        var diagnosisProgress;
-
-        applyReasonedState(caseState, reasoned, "loop_step_" + loopState.step_count);
-        loopState.diagnosis_applied = true;
-        diagnosisProgress = calculateProgress(beforeDiagnosisSnapshot, buildProgressSnapshot(caseState));
-        if (!diagnosisProgress.any) {
-          runtimeTrace.record(caseState, "loop_no_progress", {
-            step: loopState.step_count,
-            reason: "reasoner_without_progress"
-          });
-          return stopLoop("reasoner_without_progress", {});
-        }
-
-        runtimeTrace.record(caseState, "loop_progress", {
-          step: loopState.step_count,
-          hypotheses_active: diagnosisProgress.hypotheses_active,
-          checks_requested: diagnosisProgress.checks_requested
-        });
-
-        if (caseState.status === "closed" || caseState.safety.level === "stop") {
-          return stopLoop("diagnosis_closed", {
-            status: caseState.status,
-            safety_level: caseState.safety.level
-          });
-        }
-
-        loopState.last_action_signature = actionSignature;
-        loopState.last_decision_state_signature = buildDecisionStateSignature(caseState);
-        return runStep();
-      });
-    }).catch(function (error) {
-      loopState.no_progress_tools[nextAction.tool_name] = true;
-      runtimeTrace.record(caseState, "loop_tool_skipped", {
-        step: loopState.step_count,
-        tool_name: nextAction.tool_name,
-        reason: String(error && error.message || error || "tool_error")
-      });
-      runtimeTrace.record(caseState, "loop_no_progress", {
-        step: loopState.step_count,
-        reason: "tool_error"
-      });
-      return stopLoop("tool_error", {
-        tool_name: nextAction.tool_name
-      });
-    });
-  }
-
-  return runStep();
-}
+// ============================================================
+// J. LOOP COGNITIVO — il cervello di ROCCO
+// ============================================================
+//
+// Flusso adattivo:
+//
+//  PERCEPIRE → SICUREZZA → COMPRENDERE → COSTRUIRE GRAFO →
+//  RAGIONARE → CONTROFATTUALE → DISCRIMINARE (KILL) →
+//  IMMAGINARE → [TOOL?] → [AI?] → VERIFICARE →
+//  DECIDERE → RISPONDERE → [IMPARARE]
+//
+// Il grafo causale e il ragionamento controfattuale permettono
+// a ROCCO di IMMAGINARE: costruire mentalmente possibilità
+// non ancora osservate e verificarne le conseguenze.
 
 function createOrchestrator(options) {
   var settings = options || {};
@@ -1954,176 +1090,308 @@ function createOrchestrator(options) {
   var toolRegistry = settings.toolRegistry || toolRegistryFactory.createRegistry();
 
   function runDiagnosis(input) {
-    var caseState = caseStateHelpers.createCaseState(input);
-    var initialValidation;
-    var loopMaxSteps = clampMaxSteps(input && input.max_steps);
-    var loopResult;
-    var finalReasoned;
-    var nextActionSelection;
-    var nextActionMeta;
-    var nextActionCheck;
-    var preFormatSnapshot;
-    var formatted;
-    var formatterCheck;
-    var runtimeValidation;
-    var ambiguityMeta;
-    var evidenceMeta;
+    var inp = input || {};
 
-    caseState.runtime.has_image = !!(input && input.image_buffer);
-    runtimeTrace.record(caseState, "orchestrator_start", {
-      conversation_id: caseState.conversation_id,
-      has_image: !!caseState.runtime.has_image
+    // ═══ 1. CASE STATE ═══
+    var cs = caseStateHelpers.createCaseState(inp);
+    cs.runtime.has_image = !!inp.image_buffer;
+    cs.hypotheses = [];
+    cs.system_model = null;
+    cs.grafo = null;
+    cs.controfattuale_risultati = [];
+    runtimeTrace.record(cs, "start", { has_image: cs.runtime.has_image });
+
+    // ═══ 2. PERCEPIRE ═══
+    var percezione = percepire(cs);
+    runtimeTrace.record(cs, "percezione", {
+      fenomeno: percezione.fenomeno_principale,
+      novita: percezione.novita,
+      temporale: percezione.condizione_temporale
     });
 
-    initialValidation = verifier.verifyCaseState(caseState);
-    if (!initialValidation.valid) {
-      return Promise.reject(new Error("case_state_invalid:" + collectVerificationIssues(initialValidation).join(",")));
-    }
-
-    return safetyGuard.run(input || {}).then(function (safetyOutput) {
-      caseStateHelpers.mergeSafetySeedOutput(caseState, safetyOutput);
-      caseStateHelpers.addToolResult(caseState, safetyOutput.tool_result);
-      runtimeTrace.record(caseState, "safety_guard", {
-        safety_level: caseState.safety.level,
-        allowed_next_step: caseState.safety.allowed_next_step
-      });
-      return runDiagnosticLoop(caseState, providerGateway, toolRegistry, input, loopMaxSteps);
-    }).then(function (loopOutcome) {
-      loopResult = loopOutcome;
-      if (loopResult && loopResult.diagnosis_applied) {
-        return null;
-      }
-      if (caseState.safety.level === "stop") {
-        finalReasoned = {
-          diagnosis: buildDeterministicDiagnosis(caseState, (loopResult && loopResult.stop_reason) || "safety_stop"),
-          runtime: {}
-        };
-        applyReasonedState(caseState, finalReasoned, "final_deterministic");
-        return null;
-      }
-      return runModelReasoning(caseState, providerGateway, input && input.provider_hint).then(function (reasoned) {
-        finalReasoned = reasoned;
-        applyReasonedState(caseState, reasoned, "final_reasoner");
-        return null;
-      });
-    }).then(function () {
-      nextActionSelection = selectNextBestAction({
-        caseState: caseState,
-        loopState: loopResult || {},
-        planningFrame: planner.buildPlanningFrame(caseState)
-      });
-      ambiguityMeta = contracts.safeClone(nextActionSelection.ambiguityMeta || buildAmbiguityMeta(caseState));
-      nextActionMeta = {
-        selectedActionType: nextActionSelection.selectedAction ? nextActionSelection.selectedAction.actionType : null,
-        selectedTarget: nextActionSelection.selectedAction ? nextActionSelection.selectedAction.target : null,
-        primaryGap: nextActionSelection.primaryGap,
-        primaryGapReason: nextActionSelection.primaryGapReason,
-        rejectedCount: nextActionSelection.rejectedActions.length,
-        canonicalCheckKey: null,
-        stopReason: nextActionSelection.stopReason || (nextActionSelection.selectedAction ? null : "no_viable_action")
-      };
-
-      caseState.next_action = null;
-      caseState.next_action_check = null;
-      caseState.ambiguity_meta = contracts.safeClone(ambiguityMeta);
-      if (nextActionSelection.selectedAction) {
-        caseState.next_action = buildInternalActionFromSelectedAction(nextActionSelection.selectedAction);
-        if (nextActionSelection.selectedAction.actionType === "suggest_check") {
-          nextActionCheck = buildCanonicalSuggestedCheck({
-            caseState: caseState,
-            selectedAction: nextActionSelection.selectedAction,
-            primaryGap: nextActionSelection.primaryGap,
-            planningFrame: planner.buildPlanningFrame(caseState),
-            safetyDecision: caseState.safety
-          });
-          if (nextActionCheck) {
-            caseState.next_action_check = contracts.safeClone(nextActionCheck);
-            nextActionMeta.canonicalCheckKey = nextActionCheck.checkKey;
-          }
+    // ═══ 2b. NEURAL — rilevamento novità ═══
+    try {
+      if (neuralIntegration) {
+        cs.neural_novelty = neuralIntegration.detectNovelty(percezione, cs);
+        if (cs.neural_novelty.novel) {
+          runtimeTrace.record(cs, "neural_novelty", { score: cs.neural_novelty.novelty_score, closest: cs.neural_novelty.closest_known });
         }
       }
-      caseState.next_action_meta = contracts.safeClone(nextActionMeta);
-      runtimeTrace.record(caseState, "orchestrator_decision", {
-        next_action: contracts.safeClone(caseState.next_action),
-        next_action_meta: contracts.safeClone(nextActionMeta),
-        ambiguity_meta: contracts.safeClone(ambiguityMeta)
-      });
+    } catch(e) { /* neural graceful degradation */ }
 
-      preFormatSnapshot = caseStateHelpers.buildDiagnosisSnapshot(caseState);
-      formatted = responseFormatter.format(preFormatSnapshot);
-      formatterCheck = verifier.verifyFormatterNeutrality(preFormatSnapshot, formatted.diagnosis_snapshot);
-      if (!formatterCheck.valid) {
-        throw new Error(collectVerificationIssues(formatterCheck).join(","));
+    // ═══ 3. SICUREZZA ═══
+    return safetyGuard.run(inp).then(function(out) {
+      caseStateHelpers.mergeSafetySeedOutput(cs, out);
+      caseStateHelpers.addToolResult(cs, out.tool_result);
+      runtimeTrace.record(cs, "safety", { level: cs.safety.level });
+
+      if (cs.safety.level === "stop") {
+        cs.final_diagnosis = cs.safety.reasons[0] || "Condizione pericolosa. Fermare immediatamente ogni operazione.";
+        cs.final_confidence = "confirmed";
+        cs.status = "closed";
+        return null;
       }
 
-      runtimeValidation = verifier.verifyRuntimeMetadata(formatted.runtime_metadata);
-      if (!runtimeValidation.valid) {
-        throw new Error("runtime_metadata_invalid:" + collectVerificationIssues(runtimeValidation).join(","));
+      // ═══ 4. COMPRENDERE — modello del sistema ═══
+      cs.system_model = buildSystemModel(cs);
+      runtimeTrace.record(cs, "model", { type: cs.system_model.type, discrepancy: cs.system_model.discrepancy });
+
+      // ═══ 4b. GRAFO CAUSALE — costruire la rappresentazione della realtà ═══
+      cs.grafo = causalModel.costruisciGrafo(cs);
+      var nNodi = Object.keys(cs.grafo.nodi).length;
+      var nArchi = arr(cs.grafo.archi).length;
+      runtimeTrace.record(cs, "grafo", { nodi: nNodi, archi: nArchi, template: cs.system_model.type });
+
+      // ═══ 5. RAGIONARE — generare ipotesi da conoscenza ═══
+      cs.hypotheses = ragiona(cs, percezione);
+      runtimeTrace.record(cs, "ragionamento", {
+        count: cs.hypotheses.length,
+        strategia: percezione.novita,
+        fonti: cs.hypotheses.reduce(function(acc, h) {
+          if (acc.indexOf(h.source) < 0) acc.push(h.source);
+          return acc;
+        }, [])
+      });
+
+      // ═══ 5a. NEURAL — scoring ipotesi ═══
+      try {
+        if (neuralIntegration) {
+          cs.hypotheses = neuralIntegration.scoreHypotheses(cs.hypotheses, cs);
+          var neuralScored = cs.hypotheses.filter(function(h) { return h.neural_score !== undefined; }).length;
+          if (neuralScored > 0) {
+            runtimeTrace.record(cs, "neural_scoring", { scored: neuralScored });
+          }
+        }
+      } catch(e) { /* neural graceful degradation */ }
+
+      // ═══ 5b. CONTROFATTUALE — "se fosse vero, cosa dovrei osservare?" ═══
+      cs.controfattuale_risultati = [];
+      cs.hypotheses.forEach(function(h) {
+        if (h.status !== "active") return;
+        var cf = causalModel.valutaIpotesiConControfattuale(cs.grafo, h, cs);
+        if (!cf) return;
+
+        cs.controfattuale_risultati.push({
+          ipotesi: h.label,
+          plausibilita: cf.valutazione.plausibilita,
+          matching: cf.valutazione.matching,
+          contradicting: cf.valutazione.contradicting
+        });
+
+        // Se il controfattuale contraddice l'ipotesi → abbassa confidenza
+        if (cf.valutazione.contradicting > cf.valutazione.matching && cf.valutazione.contradicting > 0) {
+          h.confidence = "unlikely";
+          h.catena.push("Controfattuale: previsioni contraddicono i fatti (" + cf.valutazione.contradicting + " contraddizioni)");
+        }
+        // Se il controfattuale conferma → alza confidenza
+        else if (cf.valutazione.matching > 0 && cf.valutazione.contradicting === 0) {
+          if (h.confidence === "possible") h.confidence = "probable";
+          h.catena.push("Controfattuale: " + cf.valutazione.matching + " previsioni confermate dai fatti");
+        }
+
+        // Le verifiche suggerite dal controfattuale arricchiscono i test
+        arr(cf.verifiche_suggerite).forEach(function(v) {
+          if (h.confirm_tests.indexOf(v) < 0) h.confirm_tests.push(v);
+        });
+      });
+
+      if (cs.controfattuale_risultati.length > 0) {
+        runtimeTrace.record(cs, "controfattuale", {
+          ipotesi_valutate: cs.controfattuale_risultati.length,
+          risultati: cs.controfattuale_risultati.slice(0, 5)
+        });
       }
 
-      evidenceMeta = contracts.safeClone(caseState.evidenceMeta || {
-        strongEvidenceCount: 0,
-        weakEvidenceCount: 0,
-        conflictCount: 0,
-        topHypothesisCoverage: "none",
-        topHypothesisConfidenceSource: "coverage_based"
+      // ═══ 6. DISCRIMINARE — eliminare l'impossibile ═══
+      killImpossible(cs);
+      // Elimina anche le "unlikely" dal controfattuale
+      cs.hypotheses.forEach(function(h) {
+        if (h.confidence === "unlikely" && h.status === "active") {
+          h.status = "rejected";
+          h.rejection_reason = "Controfattuale: le previsioni non corrispondono ai fatti";
+          runtimeTrace.record(cs, "hypothesis_killed_cf", { label: h.label });
+        }
       });
-      runtimeTrace.record(caseState, "response_formatter", {
-        answer_length: formatted.answer.length
-      });
+      var alive = cs.hypotheses.filter(function(h) { return h.status === "active"; }).length;
+      runtimeTrace.record(cs, "kill", { active: alive, killed: cs.hypotheses.length - alive });
 
-      if (input && input.closed_case_feedback) {
-        return {
-          answer: formatted.answer,
-          diagnosis_snapshot: formatted.diagnosis_snapshot,
-          runtime_metadata: formatted.runtime_metadata,
-          memory_result: memory.saveValidatedClosedCase(caseState, input.closed_case_feedback),
-          next_action_meta: contracts.safeClone(nextActionMeta),
-          ambiguity_meta: contracts.safeClone(ambiguityMeta),
-          evidence_meta: evidenceMeta
+      // ═══ 6b. IMMAGINARE — se poche ipotesi sopravvivono, cercane di nuove ═══
+      if (alive < 2) {
+        var immaginazione = causalModel.immagina(cs.grafo, cs);
+        var nuoveImmaginate = 0;
+        arr(immaginazione).forEach(function(im) {
+          // Non duplicare ipotesi già presenti
+          if (cs.hypotheses.some(function(h) {
+            return normalize(h.label).substring(0, 40) === normalize(im.label).substring(0, 40);
+          })) return;
+
+          cs.hypotheses.push(makeHypothesis(
+            im.label,
+            im.principio,
+            "immaginazione_tecnica",
+            im.conferma, im.esclude,
+            im.catena
+          ));
+          nuoveImmaginate++;
+        });
+
+        if (nuoveImmaginate > 0) {
+          runtimeTrace.record(cs, "immaginazione", {
+            nuove_ipotesi: nuoveImmaginate,
+            candidati_valutati: immaginazione.length
+          });
+        }
+      }
+
+      // ═══ 7. TOOL — solo se il cervello locale non basta ═══
+      var td = decideToolNeeded(cs);
+      if (!td) return null;
+      runtimeTrace.record(cs, "tool", { tool: td.tool, reason: td.reason });
+      return toolRegistry.executeTool(td.tool, cs, {
+        providerGateway: providerGateway, provider_hint: inp.provider_hint,
+        image_buffer: inp.image_buffer, image_mime_type: inp.image_mime_type
+      }).then(function(tr) {
+        caseStateHelpers.addToolResult(cs, tr);
+        if (tr.tool_name === "recognition_tool" && tr.raw_ref) {
+          cs.components_detected = caseStateHelpers.pushUniqueStrings(cs.components_detected, arr(tr.raw_ref.legacy_components));
+        }
+      }).catch(function(e) { runtimeTrace.record(cs, "tool_fail", { error: s(e && e.message) }); });
+    }).then(function() {
+      if (cs.status === "closed") return;
+
+      // ═══ 8. AI — solo se il ragionamento deterministico non basta ═══
+      // Neural hook: il neural può suggerire se l'AI è necessaria
+      var neuralAIHint = null;
+      try {
+        if (neuralIntegration) {
+          neuralAIHint = neuralIntegration.shouldCallAI(cs, cs.hypotheses);
+          if (neuralAIHint && neuralAIHint.needed !== null) {
+            runtimeTrace.record(cs, "neural_ai_hint", { needed: neuralAIHint.needed, reason: neuralAIHint.reason });
+          }
+        }
+      } catch(e) { /* neural graceful degradation */ }
+      if (decideAINeeded(cs)) {
+        runtimeTrace.record(cs, "ai_needed", { reason: "ragionamento deterministico insufficiente" });
+        return callAI(cs, providerGateway, inp.provider_hint);
+      }
+      runtimeTrace.record(cs, "ai_skipped", { reason: "ragionamento deterministico sufficiente" });
+    }).then(function() {
+      if (cs.status !== "closed") {
+        // ═══ 9. VERIFICARE — le conclusioni sono giustificate? ═══
+        verifyConclusion(cs);
+        // ═══ 10. DECIDERE — qual è la prossima azione migliore? ═══
+        cs.next_action = selectBestAction(cs);
+        // Neural hook: arricchisce la discriminazione dell'azione
+        try {
+          if (neuralIntegration && cs.next_action) {
+            cs.next_action = neuralIntegration.scoreActionInformativeness(cs.next_action, cs.hypotheses, cs);
+          }
+        } catch(e) { /* neural graceful degradation */ }
+      }
+
+      // Sincronizza formato legacy
+      cs.hypotheses_active = cs.hypotheses.filter(function(h) { return h.status === "active"; })
+        .map(function(h) { return { label: h.label, reason: h.reason, source: h.source }; });
+      cs.hypotheses_rejected = cs.hypotheses.filter(function(h) { return h.status === "rejected"; })
+        .map(function(h) { return { label: h.label, reason: h.rejection_reason || h.reason, source: h.source }; });
+
+      if (cs.next_action && cs.next_action.action) {
+        cs.next_action = {
+          action_type: cs.next_action.type === "conclude" ? "finalize" : "ask_user",
+          tool_name: null, reason: cs.next_action.reason || "",
+          expected_discriminator: cs.next_action.action || ""
         };
       }
 
+      // ═══ 11. RISPONDERE ═══
+      var answer = formatResponse(cs, percezione);
+      var snapshot = caseStateHelpers.buildDiagnosisSnapshot(cs);
+      var meta = runtimeTrace.buildRuntimeMetadata(cs);
+
+      runtimeTrace.record(cs, "complete", {
+        hypotheses: cs.hypotheses.length,
+        active: cs.hypotheses_active.length,
+        killed: cs.hypotheses_rejected.length,
+        confidence: cs.final_confidence,
+        ai_called: !!cs.runtime.provider_used,
+        strategia: percezione.novita,
+        grafo_nodi: cs.grafo ? Object.keys(cs.grafo.nodi).length : 0,
+        controfattuale: cs.controfattuale_risultati.length,
+        immaginazione: cs.hypotheses.filter(function(h) { return h.source === "immaginazione_tecnica"; }).length
+      });
+
+      // ═══ 12. IMPARARE — solo caso chiuso E validato ═══
+      var mem = null;
+      if (inp.closed_case_feedback) {
+        mem = memory.saveValidatedClosedCase(cs, inp.closed_case_feedback);
+        // Neural: addestra tutti i moduli dal caso chiuso
+        try {
+          if (neuralIntegration) {
+            cs.neural_training = neuralIntegration.trainFromClosedCase(cs, inp.closed_case_feedback);
+            runtimeTrace.record(cs, "neural_training", { trained: cs.neural_training.trained });
+          }
+        } catch(e) { /* neural graceful degradation */ }
+      }
+
       return {
-        answer: formatted.answer,
-        diagnosis_snapshot: formatted.diagnosis_snapshot,
-        runtime_metadata: formatted.runtime_metadata,
-        memory_result: null,
-        next_action_meta: contracts.safeClone(nextActionMeta),
-        ambiguity_meta: contracts.safeClone(ambiguityMeta),
-        evidence_meta: evidenceMeta
-      };
-    }).then(function (result) {
-      return {
-        ok: true,
-        answer: result.answer,
-        case_state: caseState,
-        diagnosis_snapshot: result.diagnosis_snapshot,
-        runtime_metadata: result.runtime_metadata,
-        memory_result: result.memory_result,
-        nextActionMeta: result.next_action_meta,
-        ambiguityMeta: result.ambiguity_meta,
-        evidenceMeta: result.evidence_meta
+        ok: true, answer: answer, case_state: cs,
+        diagnosis_snapshot: snapshot, runtime_metadata: meta,
+        memory_result: mem,
+        nextActionMeta: cs.next_action ? {
+          selectedActionType: cs.next_action.action_type,
+          selectedTarget: cs.next_action.expected_discriminator
+        } : null,
+        ambiguityMeta: null,
+        evidenceMeta: {
+          hypotheses_generated: cs.hypotheses.length,
+          hypotheses_active: cs.hypotheses_active.length,
+          hypotheses_killed: cs.hypotheses_rejected.length,
+          hypotheses_imagined: cs.hypotheses.filter(function(h) { return h.source === "immaginazione_tecnica"; }).length,
+          tools_used: cs.runtime.tools_used.length,
+          ai_called: !!cs.runtime.provider_used,
+          deterministic: !cs.runtime.provider_used,
+          strategia: percezione.novita,
+          grafo_nodi: cs.grafo ? Object.keys(cs.grafo.nodi).length : 0,
+          controfattuale_eseguito: cs.controfattuale_risultati.length > 0,
+          fonti_ragionamento: cs.hypotheses.reduce(function(acc, h) {
+            if (acc.indexOf(h.source) < 0) acc.push(h.source);
+            return acc;
+          }, []),
+          neural_active: !!neuralIntegration,
+          neural_novelty: cs.neural_novelty || null,
+          neural_training: cs.neural_training || null
+        }
       };
     });
   }
 
-  return {
-    runDiagnosis: runDiagnosis
-  };
+  return { runDiagnosis: runDiagnosis };
 }
+
+// ============================================================
+// EXPORTS
+// ============================================================
 
 module.exports = {
   createOrchestrator: createOrchestrator,
-  selectNextBestAction: selectNextBestAction,
-  derivePrimaryGap: derivePrimaryGap,
-  isAmbiguousLowContextCase: isAmbiguousLowContextCase,
-  scoreActionPriority: scoreActionPriority,
-  buildCanonicalSuggestedCheck: buildCanonicalSuggestedCheck,
-  scoreEvidenceWeight: scoreEvidenceWeight,
-  resolveEvidenceConflicts: resolveEvidenceConflicts,
-  evaluateHypothesisCoverage: evaluateHypothesisCoverage,
-  runDiagnosis: function (input, options) {
-    return createOrchestrator(options).runDiagnosis(input);
-  }
+  runDiagnosis: function(input, options) { return createOrchestrator(options).runDiagnosis(input); },
+
+  // Esposti per test comportamentali
+  FENOMENI: FENOMENI,
+  PRIMI_PRINCIPI: PRIMI_PRINCIPI,
+  SISTEMI: SISTEMI,
+  KILL_RULES: KILL_RULES,
+  percepire: percepire,
+  buildSystemModel: buildSystemModel,
+  ragiona: ragiona,
+  ragionaPerConoscenza: ragionaPerConoscenza,
+  ragionaPerPrincipi: ragionaPerPrincipi,
+  ragionaPerAnalogia: ragionaPerAnalogia,
+  killImpossible: killImpossible,
+  selectBestAction: selectBestAction,
+  scoreDiscrimination: scoreDiscrimination,
+  decideToolNeeded: decideToolNeeded,
+  decideAINeeded: decideAINeeded,
+  verifyConclusion: verifyConclusion,
+  makeHypothesis: makeHypothesis
 };
