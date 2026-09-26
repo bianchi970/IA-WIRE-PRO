@@ -21,6 +21,8 @@ var NeuralSimulator = null;
 try { NeuralSimulator = require("./neural_simulator"); } catch(e) { /* opzionale */ }
 var NeuralVision = null;
 try { NeuralVision = require("./neural_vision"); } catch(e) { /* opzionale */ }
+var CasiRealiForum = null;
+try { CasiRealiForum = require("./casi_reali_forum"); } catch(e) { /* opzionale */ }
 
 var DATA_DIR = path.join(__dirname, "..", "..", "data", "neural");
 
@@ -591,6 +593,11 @@ module.exports = {
   interpretaImmagine: NeuralVision ? NeuralVision.interpretaImmagine : null,
   confrontaImmagini: NeuralVision ? NeuralVision.confrontaImmagini : null,
   NeuralVision: NeuralVision,
+
+  // Casi reali forum
+  CasiRealiForum: CasiRealiForum,
+  getForumCases: CasiRealiForum ? CasiRealiForum.getTutti : null,
+  searchForumCases: CasiRealiForum ? CasiRealiForum.cerca : null,
 
   // Sub-modules (esposti per test)
   NeuralLanguage: NeuralLanguage,

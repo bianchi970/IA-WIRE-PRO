@@ -540,14 +540,14 @@ var RICONOSCIMENTO_SINTOMI = [
   { pattern: /caldaia|boiler|riscald/, condizione: /non.*accend|blocco|errore|non.*part/, chiave: "caldaia_non_accende" },
   { pattern: /fotovoltaico|solare|pannell|inverter/, condizione: /non.*produc|zero|bassa|poco|niente/, chiave: "fotovoltaico_non_produce" },
   // Protezioni
-  { pattern: /differenziale|rcd|salvavita|id\b/, condizione: /scatt|salt|trip|intervi/, chiave: "differenziale_scatta" },
-  { pattern: /magnetotermico|mcb|interruttore/, condizione: /scatt.*subito|scatt.*istantan|subito|immediat/, chiave: "magnetotermico_scatta_subito" },
-  { pattern: /magnetotermico|mcb|interruttore/, condizione: /scatt.*dopo|scatt.*tempo|dopo.*minut|dopo.*poco/, chiave: "magnetotermico_scatta_dopo_tempo" },
+  { pattern: /differenziale|rcd|salvavita|id\b|fi.schalter|disjoncteur|diferential/, condizione: /scatt|salt|trip|intervi|fliegt|saute|sare|dispar/, chiave: "differenziale_scatta" },
+  { pattern: /magnetotermico|mcb|interruttor|breaker|sicherung|disyuntor|disjuntor/, condizione: /scatt.*subito|scatt.*istantan|subito|immediat|ricade|instantly|trips|fliegt|dispar|salta/, chiave: "magnetotermico_scatta_subito" },
+  { pattern: /magnetotermico|mcb|interruttor|breaker|sicherung/, condizione: /scatt.*dopo|scatt.*tempo|dopo.*minut|dopo.*poco|after.*minut/, chiave: "magnetotermico_scatta_dopo_tempo" },
   // Surriscaldamento e intermittente prima del generico "niente tensione"
-  { pattern: /cald|scald|surriscald|brucia|fuma|odore/, condizione: /cavo|morsett|quadro|filo|connession/, chiave: "surriscaldamento" },
-  { pattern: /intermit|va.*e.*viene|a.*volte|saltuari|ogni.*tanto/, condizione: null, chiave: "intermittente" },
+  { pattern: /cald|scald|surriscald|brucia|bruciato|fuma|odore|burning|smell|etincelle|funke/, condizione: /cavo|morsett|quadro|filo|connession|socket|prise|plug|stecker/, chiave: "surriscaldamento" },
+  { pattern: /intermit|va.*e.*viene|a.*volte|saltuari|ogni.*tanto|sometimes|parfois/, condizione: null, chiave: "intermittente" },
   // GENERICO — cattura tutto il resto
-  { pattern: /tensione|corrente|non.*funzion|non.*parte|spento|buio|senza/, condizione: /niente|zero|assente|non.*c.*e|manca|senza/, chiave: "niente_tensione" }
+  { pattern: /tensione|corrente|non.*funzion|non.*parte|spento|buio|senza|no.*power|kein.*strom|nicht.*funktionier/, condizione: /niente|zero|assente|non.*c.*e|manca|senza|non.*funzion|no.*power|half|kein/, chiave: "niente_tensione" }
 ];
 
 // ============================================================================
