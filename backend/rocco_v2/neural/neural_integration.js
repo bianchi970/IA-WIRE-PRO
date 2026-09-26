@@ -15,6 +15,8 @@ var NeuralKnowledge = require("./neural_knowledge");
 var NeuralMemory = require("./neural_memory");
 var NeuralEvolution = null;
 try { NeuralEvolution = require("./neural_evolution"); } catch(e) { /* opzionale */ }
+var WorldModel = null;
+try { WorldModel = require("./world_model"); } catch(e) { /* opzionale */ }
 
 var DATA_DIR = path.join(__dirname, "..", "..", "data", "neural");
 
@@ -560,6 +562,12 @@ module.exports = {
   evolve: NeuralEvolution ? NeuralEvolution.cicloEvolutivo.bind(NeuralEvolution) : null,
   getCompetenza: NeuralEvolution ? NeuralEvolution.getCompetenza.bind(NeuralEvolution) : null,
   buildCurriculum: NeuralEvolution ? NeuralEvolution.buildCurriculum.bind(NeuralEvolution) : null,
+
+  // World Model
+  buildWorldModel: WorldModel ? WorldModel.costruisciDaCaseState : null,
+  simulaWorldModel: WorldModel ? WorldModel.simula : null,
+  snapshotWorldModel: WorldModel ? WorldModel.snapshot : null,
+  WorldModel: WorldModel,
 
   // Sub-modules (esposti per test)
   NeuralLanguage: NeuralLanguage,
