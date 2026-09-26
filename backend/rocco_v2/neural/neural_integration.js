@@ -95,6 +95,14 @@ function warmup(options) {
   // 5. Bootstrap patterns (sintetico)
   NeuralPatterns.bootstrapSintetico();
 
+  // 6. Studio curriculum tecnico — inietta conoscenza strutturata
+  try {
+    var StudyEngine = require("./study_engine");
+    StudyEngine.studiaCompleto();
+  } catch(e) {
+    // curriculum/study_engine non disponibile — bootstrap base sufficiente
+  }
+
   warmupDone = true;
   return {
     language: NeuralLanguage.getStats(),
