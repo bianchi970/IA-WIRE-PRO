@@ -17,6 +17,8 @@ var NeuralEvolution = null;
 try { NeuralEvolution = require("./neural_evolution"); } catch(e) { /* opzionale */ }
 var WorldModel = null;
 try { WorldModel = require("./world_model"); } catch(e) { /* opzionale */ }
+var NeuralSimulator = null;
+try { NeuralSimulator = require("./neural_simulator"); } catch(e) { /* opzionale */ }
 
 var DATA_DIR = path.join(__dirname, "..", "..", "data", "neural");
 
@@ -457,6 +459,9 @@ function saveAll(dataDir) {
     if (NeuralEvolution) {
       safeWriteJSON(path.join(dataDir, "evolution_state.json"), NeuralEvolution.salva());
     }
+    if (NeuralSimulator) {
+      safeWriteJSON(path.join(dataDir, "simulator_state.json"), NeuralSimulator.salva());
+    }
 
     return true;
   } catch(e) {
@@ -485,6 +490,10 @@ function loadAll(dataDir) {
       var evoData = safeLoadJSON(path.join(dataDir, "evolution_state.json"));
       if (evoData) { NeuralEvolution.carica(evoData); result.evolution = true; }
     }
+    if (NeuralSimulator) {
+      var simData = safeLoadJSON(path.join(dataDir, "simulator_state.json"));
+      if (simData) { NeuralSimulator.carica(simData); result.simulator = true; }
+    }
   } catch(e) { /* ignore */ }
 
   return result;
@@ -502,7 +511,8 @@ function getStats() {
     patterns: NeuralPatterns.getStats(),
     knowledge: NeuralKnowledge.getStats(),
     memory: NeuralMemory.stats(),
-    evolution: NeuralEvolution ? NeuralEvolution.getStato() : null
+    evolution: NeuralEvolution ? NeuralEvolution.getStato() : null,
+    simulator: NeuralSimulator ? NeuralSimulator.getStats() : null
   };
 }
 
@@ -568,6 +578,11 @@ module.exports = {
   simulaWorldModel: WorldModel ? WorldModel.simula : null,
   snapshotWorldModel: WorldModel ? WorldModel.snapshot : null,
   WorldModel: WorldModel,
+
+  // Simulatore Causale
+  simulaCausale: NeuralSimulator ? NeuralSimulator.simula : null,
+  aggiornaCausale: NeuralSimulator ? NeuralSimulator.aggiorna : null,
+  NeuralSimulator: NeuralSimulator,
 
   // Sub-modules (esposti per test)
   NeuralLanguage: NeuralLanguage,
