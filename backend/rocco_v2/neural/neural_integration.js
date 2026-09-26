@@ -13,6 +13,8 @@ var NeuralLanguage = require("./neural_language");
 var NeuralPatterns = require("./neural_patterns");
 var NeuralKnowledge = require("./neural_knowledge");
 var NeuralMemory = require("./neural_memory");
+var NeuralEvolution = null;
+try { NeuralEvolution = require("./neural_evolution"); } catch(e) { /* opzionale */ }
 
 var DATA_DIR = path.join(__dirname, "..", "..", "data", "neural");
 
@@ -388,7 +390,19 @@ function trainFromClosedCase(caseState, feedback) {
     // 4. Memory: salva episodio
     var memResult = NeuralMemory.store(caseState, feedback);
 
-    // 5. Salva pesi (fire-and-forget, non bloccante)
+    // 5. Auto-evoluzione: ciclo di review se ci sono dati diagnostici
+    var evolutionResult = null;
+    if (NeuralEvolution && feedback.diagnosi) {
+      try {
+        evolutionResult = NeuralEvolution.cicloEvolutivo(
+          caseState,
+          feedback.diagnosi,
+          { causa_reale: feedback.confirmedCause }
+        );
+      } catch(e) { /* evoluzione non critica */ }
+    }
+
+    // 6. Salva pesi (fire-and-forget, non bloccante)
     try { saveAll(); } catch(e) { /* non critico */ }
 
     return {
@@ -396,7 +410,8 @@ function trainFromClosedCase(caseState, feedback) {
       language: { vocabolario: NeuralLanguage.getStats().vocabolarioSize },
       patterns: patResult,
       knowledge: knResult,
-      memory: memResult ? { id: memResult.id } : null
+      memory: memResult ? { id: memResult.id } : null,
+      evolution: evolutionResult ? evolutionResult.stato : null
     };
   } catch(e) {
     return { trained: false, error: e.message || String(e) };
@@ -437,6 +452,10 @@ function saveAll(dataDir) {
     safeWriteJSON(path.join(dataDir, "knowledge_graph.json"), NeuralKnowledge.salva());
     safeWriteJSON(path.join(dataDir, "memory_state.json"), NeuralMemory.salva());
 
+    if (NeuralEvolution) {
+      safeWriteJSON(path.join(dataDir, "evolution_state.json"), NeuralEvolution.salva());
+    }
+
     return true;
   } catch(e) {
     return false;
@@ -459,6 +478,11 @@ function loadAll(dataDir) {
 
     var memData = safeLoadJSON(path.join(dataDir, "memory_state.json"));
     if (memData) result.memory = NeuralMemory.carica(memData);
+
+    if (NeuralEvolution) {
+      var evoData = safeLoadJSON(path.join(dataDir, "evolution_state.json"));
+      if (evoData) { NeuralEvolution.carica(evoData); result.evolution = true; }
+    }
   } catch(e) { /* ignore */ }
 
   return result;
@@ -475,7 +499,8 @@ function getStats() {
     language: NeuralLanguage.getStats(),
     patterns: NeuralPatterns.getStats(),
     knowledge: NeuralKnowledge.getStats(),
-    memory: NeuralMemory.stats()
+    memory: NeuralMemory.stats(),
+    evolution: NeuralEvolution ? NeuralEvolution.getStato() : null
   };
 }
 
@@ -531,10 +556,16 @@ module.exports = {
   // Stats
   getStats: getStats,
 
+  // Evolution
+  evolve: NeuralEvolution ? NeuralEvolution.cicloEvolutivo.bind(NeuralEvolution) : null,
+  getCompetenza: NeuralEvolution ? NeuralEvolution.getCompetenza.bind(NeuralEvolution) : null,
+  buildCurriculum: NeuralEvolution ? NeuralEvolution.buildCurriculum.bind(NeuralEvolution) : null,
+
   // Sub-modules (esposti per test)
   NeuralLanguage: NeuralLanguage,
   NeuralPatterns: NeuralPatterns,
   NeuralKnowledge: NeuralKnowledge,
   NeuralMemory: NeuralMemory,
+  NeuralEvolution: NeuralEvolution,
   NeuralCore: nc
 };
