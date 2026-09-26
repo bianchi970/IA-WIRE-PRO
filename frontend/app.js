@@ -72,7 +72,8 @@ console.log('BRIDGE LIVE');
     "RISCHI REALI": 1, "RISCHI": 1, "RISCHI / SICUREZZA": 1, "SICUREZZA": 1,
     "LIVELLO DI CERTEZZA": 1,
     "NEXT STEP": 1, "PROSSIMO PASSO": 1,
-    "CONCLUSIONE": 1, "CAUSA PROBABILE": 1, "NOTA": 1, "AVVERTENZE": 1
+    "CONCLUSIONE": 1, "CAUSA PROBABILE": 1, "NOTA": 1, "AVVERTENZE": 1,
+    "ATTENZIONE": 1, "ANALISI": 1, "IPOTESI ESCLUSE": 1
   };
 
   function inlineFormat(s) {
@@ -403,8 +404,9 @@ console.log('BRIDGE LIVE');
   }
 
   function candidateChatEndpoints() {
-    if (isProdSameOrigin()) return [location.origin + "/api/chat"];
-    return [location.origin + "/api/chat", "http://localhost:3000/api/chat"];
+    if (isProdSameOrigin()) return [location.origin + "/api/chat/v2", location.origin + "/api/chat"];
+    return [location.origin + "/api/chat/v2", "http://localhost:3000/api/chat/v2",
+            location.origin + "/api/chat", "http://localhost:3000/api/chat"];
   }
 
   function candidateMessagesEndpoints(convId) {
@@ -1115,17 +1117,17 @@ console.log('BRIDGE LIVE');
               fallback_used: !!data.fallback_used
             });
 
-            // ROCCO chip — mostra pattern/ipotesi top rilevati dal Foundation Engine
+            // ROCCO chip — V1 Foundation Engine
             if (data.foundation && !data.foundation.outOfScope && msgResult && msgResult.wrapper) {
               var chipParts = [];
               if (data.foundation.patternId) {
-                chipParts.push("⚡ " + String(data.foundation.patternId).replace(/_/g, " "));
+                chipParts.push(String(data.foundation.patternId).replace(/_/g, " "));
               }
               if (data.foundation.topHypothesis) {
-                chipParts.push("→ " + String(data.foundation.topHypothesis));
+                chipParts.push(String(data.foundation.topHypothesis));
               }
               if (data.foundation.components && data.foundation.components.length) {
-                chipParts.push("🔧 " + data.foundation.components.join(", "));
+                chipParts.push(data.foundation.components.join(", "));
               }
               if (chipParts.length) {
                 var chip = document.createElement("div");
@@ -1134,6 +1136,115 @@ console.log('BRIDGE LIVE');
                 chip.textContent = chipParts.join("  ·  ");
                 msgResult.wrapper.appendChild(chip);
               }
+            }
+
+            // ROCCO V2 — chip cervello neurale
+            if (data.orchestrator_version === "rocco_v2" && msgResult && msgResult.wrapper) {
+              // Chip evidence
+              if (data.evidence_meta) {
+                var em = data.evidence_meta;
+                var v2Parts = ["ROCCO V2"];
+                if (em.hypotheses_active > 0) v2Parts.push(em.hypotheses_active + " ipotesi");
+                if (em.grafo_nodi > 0) v2Parts.push(em.grafo_nodi + " nodi");
+                if (em.neural_active) v2Parts.push("neural ON");
+                if (em.deterministic) v2Parts.push("deterministico");
+                var v2Chip = document.createElement("div");
+                v2Chip.className = "rocco-chip";
+                v2Chip.textContent = v2Parts.join(" · ");
+                msgResult.wrapper.appendChild(v2Chip);
+              }
+
+              // Chip distillatore esperienza
+              if (data.distiller_verifica) {
+                var dChip = document.createElement("div");
+                dChip.className = "rocco-chip distiller-chip";
+                dChip.textContent = "Esperienza: " + String(data.distiller_verifica.verifica || "");
+                msgResult.wrapper.appendChild(dChip);
+              }
+
+              // Chip sequenza causale
+              if (data.sequenza_causale && data.sequenza_causale.catena) {
+                var sChip = document.createElement("div");
+                sChip.className = "rocco-chip seq-chip";
+                sChip.textContent = "Evoluzione: " + data.sequenza_causale.catena.join(" > ");
+                msgResult.wrapper.appendChild(sChip);
+              }
+
+              // Runtime trace toggle
+              if (data.runtime_trace && data.runtime_trace.length > 0) {
+                var traceBtn = document.createElement("button");
+                traceBtn.className = "trace-toggle";
+                traceBtn.textContent = data.runtime_trace.length + " step";
+                var tracePanel = document.createElement("div");
+                tracePanel.className = "trace-panel";
+                var traceLines = [];
+                data.runtime_trace.forEach(function(t) {
+                  traceLines.push((t.step || t.event || "?") + ": " + JSON.stringify(t.data || t).substring(0, 120));
+                });
+                tracePanel.textContent = traceLines.join("\n");
+                traceBtn.onclick = function() {
+                  tracePanel.classList.toggle("open");
+                };
+                msgResult.wrapper.appendChild(traceBtn);
+                msgResult.wrapper.appendChild(tracePanel);
+              }
+
+              // Bottone "Caso risolto"
+              var closeBar = document.createElement("div");
+              closeBar.className = "close-case-bar";
+              var closeBtn = document.createElement("button");
+              closeBtn.className = "close-case-btn";
+              closeBtn.textContent = "Caso risolto";
+              closeBtn.onclick = function() {
+                closeBar.innerHTML = "";
+                var form = document.createElement("div");
+                form.className = "close-case-form";
+                var inCause = document.createElement("input");
+                inCause.placeholder = "Causa confermata";
+                inCause.className = "close-cause";
+                var inHow = document.createElement("input");
+                inHow.placeholder = "Come verificato";
+                inHow.className = "close-how";
+                var sendBtn2 = document.createElement("button");
+                sendBtn2.className = "close-send-btn";
+                sendBtn2.textContent = "Invia";
+                var cancelBtn = document.createElement("button");
+                cancelBtn.className = "close-cancel-btn";
+                cancelBtn.textContent = "Annulla";
+                cancelBtn.onclick = function() {
+                  closeBar.innerHTML = "";
+                  closeBar.appendChild(closeBtn);
+                };
+                sendBtn2.onclick = function() {
+                  var cause = inCause.value.trim();
+                  if (!cause) return;
+                  var url = (isProdSameOrigin() ? location.origin : "http://localhost:3000") + "/api/rocco/close-case";
+                  fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      caseState: { problem_summary: ans.substring(0, 200) },
+                      confirmedCause: cause,
+                      come_verificato: inHow.value.trim()
+                    })
+                  }).then(function(r) { return r.json(); }).then(function(d) {
+                    closeBar.innerHTML = "";
+                    var ok = document.createElement("span");
+                    ok.style.cssText = "font-size:11px;color:#7dc;";
+                    ok.textContent = d.ok ? "ROCCO ha imparato" : "Errore";
+                    closeBar.appendChild(ok);
+                  }).catch(function() {
+                    closeBar.innerHTML = "<span style='font-size:11px;color:#e88;'>Errore rete</span>";
+                  });
+                };
+                form.appendChild(inCause);
+                form.appendChild(inHow);
+                form.appendChild(sendBtn2);
+                form.appendChild(cancelBtn);
+                closeBar.appendChild(form);
+              };
+              closeBar.appendChild(closeBtn);
+              msgResult.wrapper.appendChild(closeBar);
             }
 
             pushHistory("assistant", ans);

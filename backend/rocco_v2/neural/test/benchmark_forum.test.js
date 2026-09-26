@@ -150,22 +150,64 @@ for (var i = 0; i < casi.length; i++) {
   var trovata = false;
   var posizione = -1;
 
+  // Sinonimi cross-lingua per matching
+  var SINONIMI = {
+    "dispersione": ["fuga", "leak", "leakage", "fuite", "ableitstrom", "fuga a terra", "earth fault"],
+    "cortocircuito": ["corto", "short circuit", "court circuit", "kurzschluss"],
+    "sovraccarico": ["overload", "surcharge", "uberlast", "sobrecarga"],
+    "morsetto": ["connessione", "connection", "borne", "klemme", "backstab", "contatto", "giunzione"],
+    "isolamento": ["insulation", "isolation", "isolierung", "aislamiento"],
+    "surriscaldamento": ["hot spot", "overheating", "echauffement", "sobrecalentamiento"],
+    "interruzione": ["open circuit", "coupure", "unterbrechung"],
+    "neutro": ["neutral", "neutre", "nullleiter", "nulo"],
+    "condensatore": ["capacitor", "condensateur", "kondensator"],
+    "avvolgimento": ["winding", "bobinage", "wicklung", "bobina"],
+    "umidita": ["moisture", "humidite", "feuchtigkeit", "humedad"],
+    "calcare": ["limestone", "calcaire", "kalk"],
+    "resistenza": ["resistance", "resistenz", "element", "elemento"],
+    "carico": ["load", "charge", "last", "carga"],
+    "cavo": ["cable", "wire", "conduttore", "leitung", "kabel"],
+    "fase": ["phase", "ligne"]
+  };
+
+  // Espandi parole della causa con sinonimi
+  function expandWithSynonyms(word) {
+    var expanded = [word];
+    for (var key in SINONIMI) {
+      if (key === word || SINONIMI[key].indexOf(word) >= 0) {
+        expanded.push(key);
+        SINONIMI[key].forEach(function(s) { expanded.push(s.replace(/\s+/g, " ")); });
+      }
+    }
+    return expanded;
+  }
+
   for (var h = 0; h < cs.hypotheses.length; h++) {
     var ipNorm = normalize(cs.hypotheses[h].label);
     // Match parziale: almeno 2 parole significative della causa devono essere nell'ipotesi
     var paroleCausa = causaNorm.split(" ").filter(function(w) { return w.length > 3; });
     var matchCount = 0;
     paroleCausa.forEach(function(w) {
-      if (ipNorm.indexOf(w) >= 0) matchCount++;
+      // Cerca la parola e i suoi sinonimi
+      var variants = expandWithSynonyms(w);
+      var found = variants.some(function(v) { return ipNorm.indexOf(v) >= 0; });
+      if (found) matchCount++;
     });
-    // Oppure l'ipotesi contiene una keyword chiave della causa
+    // Oppure l'ipotesi contiene una keyword chiave della causa (con sinonimi)
     var keywordMatch = false;
     var keywords = ["dispersione", "cortocircuito", "sovraccarico", "isolamento", "morsetto",
       "surriscaldamento", "interruzione", "degradat", "calcare", "umidita", "corto",
       "capacitiv", "armonich", "cumulativ", "resistenz", "bobina", "avvolgiment",
-      "neutro", "terra"];
+      "neutro", "terra", "contatto", "connessione", "giunzione", "cavo", "conduttore",
+      "carico", "fase", "allentato", "ossidaz"];
     keywords.forEach(function(kw) {
       if (causaNorm.indexOf(kw) >= 0 && ipNorm.indexOf(kw) >= 0) keywordMatch = true;
+      // Cross-lingua: se la causa ha un sinonimo che matcha l'ipotesi
+      var variants = expandWithSynonyms(kw);
+      variants.forEach(function(v) {
+        if (causaNorm.indexOf(kw) >= 0 && ipNorm.indexOf(v) >= 0) keywordMatch = true;
+        if (causaNorm.indexOf(v) >= 0 && ipNorm.indexOf(kw) >= 0) keywordMatch = true;
+      });
     });
 
     if (matchCount >= 2 || keywordMatch) {

@@ -2270,6 +2270,34 @@ app.post("/api/rocco/close-case", async (req, res) => {
   }
 });
 
+// POST /api/rocco/correct — tecnico corregge: "no, non è quello"
+app.post("/api/rocco/correct", async (req, res) => {
+  try {
+    const { caseState, rejectedCause, reason } = req.body || {};
+    if (!rejectedCause) {
+      return res.status(400).json({ ok: false, error: "rejectedCause obbligatorio" });
+    }
+
+    let neuralResult = null;
+    try {
+      const neuralIntegration = require('./rocco_v2/neural/neural_integration');
+      if (neuralIntegration && neuralIntegration.trainFromClosedCase) {
+        neuralResult = neuralIntegration.trainFromClosedCase(caseState || {}, {
+          confirmedCause: null,
+          rejectedCauses: [{ cause: rejectedCause, reason: reason || "" }],
+          tipo: "correction"
+        });
+      }
+    } catch (e) {
+      neuralResult = { trained: false, error: e.message };
+    }
+
+    res.json({ ok: true, training: neuralResult });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // GET /api/admin/ollama/status — stato Ollama (admin)
 app.get("/api/admin/ollama/status", requireAdmin, async (req, res) => {
   try {
@@ -2325,6 +2353,8 @@ app.post("/api/chat/v2", rlChat, uploadAny, async (req, res) => {
       closed_case_feedback: closedCaseFeedback
     });
 
+    // Estrai dati extra dal case_state per il frontend
+    var cs = result.case_state || {};
     res.json({
       ok: result.ok,
       answer: result.answer,
@@ -2337,7 +2367,17 @@ app.post("/api/chat/v2", rlChat, uploadAny, async (req, res) => {
       next_action_meta: result.nextActionMeta || null,
       ambiguity_meta: result.ambiguityMeta || null,
       evidence_meta: result.evidenceMeta || null,
-      memory_result: result.memory_result || null
+      memory_result: result.memory_result || null,
+      // A3: distillatore esperienza
+      distiller_verifica: cs.distiller_verifica
+        ? { verifica: cs.distiller_verifica.verifica, confidenza: cs.distiller_verifica.confidenza, casi_base: cs.distiller_verifica.casi_base }
+        : null,
+      // A1: catena causale
+      sequenza_causale: cs.sequenza_causale
+        ? { catena: cs.sequenza_causale.catena, avviso: cs.sequenza_causale.avviso || null }
+        : null,
+      // A5: runtime trace (ultimi 10 step)
+      runtime_trace: cs._trace ? cs._trace.slice(-10) : null
     });
   } catch (err) {
     logger.error("/api/chat/v2 error: " + (err && err.message || err));

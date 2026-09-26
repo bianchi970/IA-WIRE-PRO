@@ -930,6 +930,17 @@ function buildAIPrompt(cs) {
   if (rejected.length) {
     parts.push("IPOTESI GIA ESCLUSE: " + rejected.map(function(h) { return h.label + " (" + (h.rejection_reason || "") + ")"; }).join("; "));
   }
+  // M2: arricchimento dal neural
+  if (cs.neural_novelty && cs.neural_novelty.novel) {
+    parts.push("ATTENZIONE: caso NUOVO — nessun precedente simile. Ragiona dai primi principi.");
+  } else if (cs.neural_novelty && cs.neural_novelty.closest_known) {
+    parts.push("CASO SIMILE NOTO: " + cs.neural_novelty.closest_known);
+  }
+  if (cs._distiller_regole && cs._distiller_regole.length > 0) {
+    parts.push("ESPERIENZA PRECEDENTE: " + cs._distiller_regole.slice(0, 2).map(function(r) {
+      return r.allora + " (confidenza " + (r.confidenza || 0).toFixed(2) + ", da " + (r.casi_base || 0) + " casi)";
+    }).join("; "));
+  }
   return parts.join("\n");
 }
 
@@ -1093,6 +1104,23 @@ function formatResponse(cs, percezione) {
     lines.push("");
     lines.push("RISCHI REALI:");
     cs.safety.reasons.slice(0, 3).forEach(function(r) { lines.push("- " + r); });
+  }
+
+  // Sequenza causale — avviso evoluzione guasto
+  if (cs.sequenza_causale && cs.sequenza_causale.catena && cs.sequenza_causale.catena.length > 1) {
+    lines.push("");
+    lines.push("ATTENZIONE:");
+    lines.push("- Questa causa spesso evolve in: " + cs.sequenza_causale.catena.join(" → "));
+    if (cs.sequenza_causale.avviso) {
+      lines.push("- " + cs.sequenza_causale.avviso);
+    }
+  }
+
+  // Verifica suggerita dal distillatore
+  if (cs.distiller_verifica && cs.distiller_verifica.verifica) {
+    lines.push("");
+    lines.push("NOTA:");
+    lines.push("- Esperienza da " + (cs.distiller_verifica.casi_base || 0) + " casi: " + cs.distiller_verifica.verifica);
   }
 
   return lines.join("\n");
@@ -1354,6 +1382,8 @@ function createOrchestrator(options) {
                 }
               });
             });
+            // Salva per buildAIPrompt (M2)
+            cs._distiller_regole = regoleDist.map(function(rd) { return rd.regola; });
             runtimeTrace.record(cs, "distiller_regole", { trovate: regoleDist.length });
           }
         }
@@ -1509,6 +1539,10 @@ function createOrchestrator(options) {
       // Il neural può forzare la decisione AI (novelty alta, incertezza alta)
       if (neuralAIHint && neuralAIHint.needed === true) aiNeeded = true;
       if (neuralAIHint && neuralAIHint.needed === false && !aiNeeded) aiNeeded = false;
+      // M4: caso molto nuovo → forza AI (cervello locale non ha dati)
+      if (cs.neural_novelty && cs.neural_novelty.novel && cs.neural_novelty.novelty_score > 0.8) {
+        aiNeeded = true;
+      }
       if (aiNeeded) {
         runtimeTrace.record(cs, "ai_needed", {
           reason: neuralAIHint && neuralAIHint.needed === true
@@ -1547,6 +1581,24 @@ function createOrchestrator(options) {
             }
           }
         } catch(e) { /* distillatore graceful degradation */ }
+
+        // A1: cerca catena causale nota (evoluzione guasto)
+        try {
+          if (neuralIntegration && neuralIntegration.cercaSequenza) {
+            var attiveSeq = cs.hypotheses.filter(function(h) { return h.status === "active"; });
+            var topCausaSeq = attiveSeq.length > 0 ? attiveSeq[0].label : "";
+            if (topCausaSeq) {
+              var seqResult = neuralIntegration.cercaSequenza(topCausaSeq);
+              if (seqResult && seqResult.catena && seqResult.catena.length > 1) {
+                cs.sequenza_causale = seqResult;
+                runtimeTrace.record(cs, "sequenza_causale", {
+                  catena: seqResult.catena,
+                  confidenza: seqResult.confidenza
+                });
+              }
+            }
+          }
+        } catch(e) { /* graceful degradation */ }
       }
 
       // Ordina le ipotesi attive per neural_score + probability (la migliore in cima)

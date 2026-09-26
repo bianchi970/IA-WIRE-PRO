@@ -507,6 +507,40 @@ button, label, [role="button"], a {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.rocco-chip.distiller-chip { color: rgba(100,200,120,0.70); }
+.rocco-chip.seq-chip { color: rgba(255,200,80,0.70); }
+
+/* Close-case bar */
+.close-case-bar { margin-top: 6px; text-align: right; }
+.close-case-btn {
+  background: rgba(26,58,92,0.6); color: var(--cyan); border: 1px solid rgba(0,217,255,0.15);
+  border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 11px;
+}
+.close-case-btn:hover { background: rgba(26,58,92,0.9); }
+.close-case-form {
+  margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap; align-items: center;
+}
+.close-case-form input {
+  background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  border-radius: 4px; padding: 3px 6px; font-size: 11px; flex: 1; min-width: 100px;
+}
+.close-case-form button {
+  border-radius: 4px; padding: 3px 8px; font-size: 11px; cursor: pointer; border: none;
+}
+.close-send-btn { background: rgba(0,180,120,0.3); color: #7dc; border: 1px solid rgba(0,180,120,0.2) !important; }
+.close-cancel-btn { background: rgba(180,0,0,0.2); color: #e88; border: 1px solid rgba(180,0,0,0.15) !important; }
+
+/* Runtime trace */
+.trace-toggle {
+  background: none; border: 1px solid var(--border); color: var(--muted);
+  border-radius: 4px; padding: 1px 6px; cursor: pointer; font-size: 10px; margin-top: 3px;
+}
+.trace-panel {
+  background: rgba(7,15,26,0.8); border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 8px; margin-top: 4px; font-size: 10px; max-height: 180px;
+  overflow-y: auto; display: none; color: var(--muted); font-family: monospace;
+}
+.trace-panel.open { display: block; }
 
 /* ===== BLOCCO 3: COMPOSER — sempre visibile ===== */
 .composer {
