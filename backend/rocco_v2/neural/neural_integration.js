@@ -442,12 +442,21 @@ function trainFromClosedCase(caseState, feedback) {
     }
 
     // 6. Auto-evoluzione: ciclo di review se ci sono dati diagnostici
+    //    selfReview si aspetta diagnosi = { causa_predetta, ipotesi, confidenza }
     var evolutionResult = null;
-    if (NeuralEvolution && feedback.diagnosi) {
+    if (NeuralEvolution && feedback.confirmedCause) {
       try {
+        // Costruisci oggetto diagnosi nel formato atteso da selfReview
+        var diagnosiObj = {
+          causa_predetta: feedback.diagnosi || feedback.confirmedCause,
+          ipotesi: feedback.ipotesi || (caseState.hypotheses || []).filter(function(h) {
+            return h && h.status === "active";
+          }).map(function(h) { return h.label || h; }),
+          confidenza: feedback.confidenza || 0.5
+        };
         evolutionResult = NeuralEvolution.cicloEvolutivo(
           caseState,
-          feedback.diagnosi,
+          diagnosiObj,
           { causa_reale: feedback.confirmedCause }
         );
       } catch(e) { /* evoluzione non critica */ }

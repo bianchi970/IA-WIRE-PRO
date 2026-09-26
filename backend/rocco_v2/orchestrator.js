@@ -1197,6 +1197,10 @@ function createOrchestrator(options) {
                 ));
               }
             });
+            // Propaga il sintomo riconosciuto per il distillatore (step 5e) e suggerisciVerifica (step 10)
+            if (simResult.sintomo) {
+              cs.anomaly_type = simResult.sintomo;
+            }
             runtimeTrace.record(cs, "simulatore_causale", {
               sintomo: simResult.sintomo,
               ipotesi_generate: (simResult.ipotesi || []).length,
@@ -1392,8 +1396,16 @@ function createOrchestrator(options) {
           }
         }
       } catch(e) { /* neural graceful degradation */ }
-      if (decideAINeeded(cs)) {
-        runtimeTrace.record(cs, "ai_needed", { reason: "ragionamento deterministico insufficiente" });
+      var aiNeeded = decideAINeeded(cs);
+      // Il neural può forzare la decisione AI (novelty alta, incertezza alta)
+      if (neuralAIHint && neuralAIHint.needed === true) aiNeeded = true;
+      if (neuralAIHint && neuralAIHint.needed === false && !aiNeeded) aiNeeded = false;
+      if (aiNeeded) {
+        runtimeTrace.record(cs, "ai_needed", {
+          reason: neuralAIHint && neuralAIHint.needed === true
+            ? "neural: " + (neuralAIHint.reason || "segnale forte")
+            : "ragionamento deterministico insufficiente"
+        });
         return callAI(cs, providerGateway, inp.provider_hint);
       }
       runtimeTrace.record(cs, "ai_skipped", { reason: "ragionamento deterministico sufficiente" });
@@ -1427,6 +1439,14 @@ function createOrchestrator(options) {
           }
         } catch(e) { /* distillatore graceful degradation */ }
       }
+
+      // Ordina le ipotesi attive per neural_score + probability (la migliore in cima)
+      cs.hypotheses.sort(function(a, b) {
+        if (a.status !== b.status) return a.status === "active" ? -1 : 1;
+        var scoreA = (a.neural_score || 0) * 0.4 + (a.probability || 0.5) * 0.6 + (a.distiller_boost || 0) * 0.2;
+        var scoreB = (b.neural_score || 0) * 0.4 + (b.probability || 0.5) * 0.6 + (b.distiller_boost || 0) * 0.2;
+        return scoreB - scoreA;
+      });
 
       // Sincronizza formato legacy
       cs.hypotheses_active = cs.hypotheses.filter(function(h) { return h.status === "active"; })

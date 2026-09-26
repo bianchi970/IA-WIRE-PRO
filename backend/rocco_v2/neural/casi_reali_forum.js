@@ -345,6 +345,251 @@ var CASI_FORUM = [
     componenti: ["carico", "sensore"],
     verifiche: ["verificare che la pompa giri", "controllare la valvola a 3 vie", "sentire se i radiatori si scaldano"],
     lezione: "caldaia che cicla = l'acqua non circola. La caldaia raggiunge la temperatura subito e si spegne perché l'acqua calda resta lì"
+  },
+
+  // =========================================================================
+  // CASI REALI DAL WEB — Settembre 2026 — 20 casi verificati da forum tecnici
+  // Fonti: PLC Forum, Elektrikforum.de, Futura Sciences, Foro Electricidad,
+  //        Forum da Casa, EnergeticAmbiente, Electrician Talk, Mike Holt Forum,
+  //        Electricians Forums UK, tout-electromenager.fr, Nergiza, Eletricidade.net
+  // =========================================================================
+
+  // --- ITALIANO — PLC Forum, EnergeticAmbiente ---
+
+  {
+    id: "FORUM-IT-011",
+    domanda: "Dopo abbondanti piogge, il MTD della mia casa di campagna scatta. Ho aperto tutte le cassette di derivazione della casa e staccando di volta in volta tutti i fili sono riuscito a trovare quello incriminato.",
+    lingua: "it",
+    sintomo_atteso: "differenziale_scatta",
+    causa_reale: "conduttore con isolamento degradato dall'umidità che provoca dispersione verso terra",
+    componenti: ["RCD", "conduttore", "giunzione"],
+    verifiche: ["apertura sistematica cassette derivazione", "scollegamento fili uno per uno", "misura isolamento conduttori"],
+    lezione: "dopo piogge forti il guasto è nel percorso cavi — aprire tutte le cassette e sezionare filo per filo fino a trovare quello con isolamento degradato",
+    fonte: "plcforum.it/f/topic/47540"
+  },
+  {
+    id: "FORUM-IT-012",
+    domanda: "Da febbraio 2021 il differenziale scatta senza motivo apparente, a volte più volte al giorno, a volte per mesi non succede. Il 90% delle interruzioni sono causate dal differenziale. Una presa Schuko si era fusa nel 2015.",
+    lingua: "it",
+    sintomo_atteso: "differenziale_scatta",
+    causa_reale: "dispersione cumulativa da dispositivi in standby con filtri EMI che superava la soglia del differenziale obsoleto",
+    componenti: ["RCD", "carico"],
+    verifiche: ["pinza amperometrica in mA su ogni linea", "sostituzione differenziale con tipo A magnetotermico 6kA"],
+    lezione: "i dispositivi moderni con filtri EMI (TV, microonde, PC) disperdono pochi mA ciascuno — la somma può superare i 30mA di un differenziale vecchio. Soluzione: tipo A superimmunizzato",
+    fonte: "plcforum.it/f/topic/316866"
+  },
+  {
+    id: "FORUM-IT-013",
+    domanda: "Lo scaldabagno elettrico 80L da 10 anni fa saltare il differenziale. Ho scoperto il filo di terra staccato, sembrerebbe mai collegato: arrotolato su se stesso e con nastro all'estremità.",
+    lingua: "it",
+    sintomo_atteso: "differenziale_scatta",
+    causa_reale: "resistenza corazzata con isolamento degradato dopo 10 anni — dispersione verso involucro metallico, tubature acqua come percorso di scarica",
+    componenti: ["RCD", "carico"],
+    verifiche: ["ispezione visiva collegamento terra", "misura isolamento resistenza", "sostituzione resistenza"],
+    lezione: "i resistori corazzati degli scaldabagno perdono isolamento col tempo — se la terra non è collegata la dispersione va nelle tubature. Controllare sempre il collegamento terra",
+    fonte: "plcforum.it/f/topic/274614"
+  },
+  {
+    id: "FORUM-IT-014",
+    domanda: "Interruttore magnetotermico Bticino portato per sostituzione con segni evidenti di bruciatura. Surriscaldamento del morsetto superiore destro con annerimento laterale. Al 99% ha stretto la vite ma il conduttore non era messo bene.",
+    lingua: "it",
+    sintomo_atteso: "surriscaldamento",
+    causa_reale: "conduttore non completamente inserito nel morsetto prima del serraggio — contatto scadente con alta resistenza di giunzione",
+    componenti: ["MCB", "giunzione"],
+    verifiche: ["ispezione visiva morsetti", "sostituzione MCB danneggiato", "inserimento corretto conduttore"],
+    lezione: "il morsetto allentato o mal inserito crea un punto caldo che si autoalimenta — la resistenza aumenta col calore che aumenta la resistenza. Verificare sempre che il conduttore sia a fondo prima di serrare",
+    fonte: "plcforum.it/f/topic/273260"
+  },
+  {
+    id: "FORUM-IT-015",
+    domanda: "Ho un motore 2cv di un compressore ad aria cinese che fa scattare il differenziale. Funziona sul banco prova senza terra. Bulloni dello statore tutti allentati, limatura di ferro all'interno, segni di sfregamento sul rotore.",
+    lingua: "it",
+    sintomo_atteso: "differenziale_scatta",
+    causa_reale: "bulloni statore allentati hanno causato contatto meccanico rotore-statore distruggendo l'isolamento degli avvolgimenti",
+    componenti: ["RCD", "carico"],
+    verifiche: ["misura isolamento fase-terra e neutro-terra", "ispezione visiva interna motore", "controllo bulloni statore"],
+    lezione: "motore che scatta il differenziale ma funziona senza terra = dispersione sugli avvolgimenti. Cercare contatto rotore-statore, limatura, bulloni lenti. Isolamento ~1 MOhm = confine",
+    fonte: "plcforum.it/f/topic/291876"
+  },
+  {
+    id: "FORUM-IT-016",
+    domanda: "Impianto FV 4.05 kW con inverter Aurora Power One senza trasformatore. Il differenziale scatta quando piove, tipicamente tra le 8 e le 9 del mattino quando inizia la produzione.",
+    lingua: "it",
+    sintomo_atteso: "differenziale_scatta",
+    causa_reale: "acqua sui moduli FV aumenta la dispersione capacitiva verso terra — inverter senza trasformatore non blocca la componente DC",
+    componenti: ["RCD", "carico"],
+    verifiche: ["verifica tipo differenziale installato", "misura corrente dispersione con pannelli bagnati vs asciutti"],
+    lezione: "impianto fotovoltaico con inverter senza trasformatore richiede differenziale tipo B — il tipo AC standard non regge le dispersioni capacitive dei pannelli bagnati",
+    fonte: "energeticambiente.it/76343"
+  },
+
+  // --- TEDESCO — Elektrikforum.de ---
+
+  {
+    id: "FORUM-DE-003",
+    domanda: "FI-Schalter und alle Sicherungen im Erdgeschoss fliegen gleichzeitig raus. Problem hört auf wenn Sicherung 66 (Wohnzimmer) draussen bleibt. 48 Stunden Test ohne Backofen — kein Auslösen. Der Fehlerstrom des Backofens muss nicht immer gleich groß gewesen sein.",
+    lingua: "de",
+    sintomo_atteso: "differenziale_scatta",
+    causa_reale: "forno difettoso su circuito 69 con dispersione variabile — cumulata con altri circuiti superava la soglia FI",
+    componenti: ["RCD", "carico"],
+    verifiche: ["sezionamento circuiti sistematico", "test 48 ore con forno scollegato", "sostituzione forno"],
+    lezione: "la dispersione variabile di un elettrodomestico può far scattare il differenziale su un circuito diverso da quello del guasto — la somma delle dispersioni conta, non il singolo circuito",
+    fonte: "elektrikforum.de/threads/45211"
+  },
+  {
+    id: "FORUM-DE-004",
+    domanda: "Seit gestern morgen fliegt bei mir zu Hause ständig der FI Schalter raus. Alle 2 Stunden. Auch wenn kein Gerät angeschlossen ist. FI-Schalter wurde schon ausgetauscht — hilft nicht.",
+    lingua: "de",
+    sintomo_atteso: "differenziale_scatta",
+    causa_reale: "difetto isolamento nella cablatura fissa — contatto tra neutro (N) e conduttore di protezione (PE)",
+    componenti: ["RCD", "conduttore"],
+    verifiche: ["misura resistenza isolamento", "sezionamento circuiti sistematico", "ispezione punti luce e cassette"],
+    lezione: "se il FI scatta anche senza carichi e la sostituzione del FI non risolve, il guasto è nell'impianto fisso — cercare contatti N-PE nei punti luce e nelle cassette",
+    fonte: "elektrikforum.de/threads/14497"
+  },
+  {
+    id: "FORUM-DE-005",
+    domanda: "Umzugskarton fiel gegen eine Unterputzsteckdose in Hohlwand. Lauter Knall, FI und LSS lösten aus. Brandspuren an der Abdeckung. Die rechte Kralle hat die L-Ader durch den mechanischen Schlag durchstoßen.",
+    lingua: "de",
+    sintomo_atteso: "magnetotermico_scatta_subito",
+    causa_reale: "graffette metalliche della presa hanno perforato il conduttore di fase per impatto meccanico — cortocircuito L-PE",
+    componenti: ["MCB", "RCD", "conduttore"],
+    verifiche: ["ispezione visiva presa", "verifica danni al conduttore", "sostituzione presa"],
+    lezione: "le prese con graffette metalliche di fissaggio in pareti vuote possono perforare il cavo per impatto meccanico — verificare sempre dopo urti violenti al muro",
+    fonte: "elektrikforum.de/threads/45213"
+  },
+  {
+    id: "FORUM-DE-006",
+    domanda: "Warmwasserboiler löst den Haupt-FI der gesamten Wohnung aus, aber nicht immer. Abends fliegt der FI, morgens geht alles wieder. Boiler ca. 5 Jahre alt.",
+    lingua: "de",
+    sintomo_atteso: "differenziale_scatta",
+    causa_reale: "difetto isolamento nel resistore del boiler — dispersione intermittente verso involucro metallico che supera 30mA",
+    componenti: ["RCD", "carico"],
+    verifiche: ["misura isolamento resistore boiler", "sostituzione resistore"],
+    lezione: "boiler che fa scattare il FI la sera ma non la mattina = degradazione isolamento del resistore che peggiora con il riscaldamento. Il resistore va sostituito",
+    fonte: "elektrikforum.de/threads/22979"
+  },
+
+  // --- FRANCESE — Futura Sciences, tout-electromenager.fr ---
+
+  {
+    id: "FORUM-FR-003",
+    domanda: "L'interrupteur différentiel saute sans raison apparente, surtout sur le circuit chaudière. Même avec tous les disjoncteurs individuels désactivés, le différentiel continue de sauter. Départ clandestin découvert depuis le disjoncteur PC Parents alimentant la rangée supérieure.",
+    lingua: "fr",
+    sintomo_atteso: "differenziale_scatta",
+    causa_reale: "collegamento clandestino non documentato nel quadro — un circuito alimentava la fila superiore creando dispersione intermittente con umidità",
+    componenti: ["RCD", "conduttore"],
+    verifiche: ["tracciamento completo dei circuiti nel quadro", "verifica collegamenti tra file del quadro"],
+    lezione: "se il differenziale scatta anche con tutti i magnetotermici disattivati, cercare collegamenti nascosti o derivazioni non documentate nel quadro",
+    fonte: "futura-sciences.com/839883"
+  },
+  {
+    id: "FORUM-FR-004",
+    domanda: "Lave-linge Listo: le cycle de lavage commence correctement mais le différentiel saute lors de la mise en température. En débranchant la résistance, la machine fonctionne correctement. Résistance mesure 25 ohms mais présente un défaut de fuite.",
+    lingua: "fr",
+    sintomo_atteso: "differenziale_scatta",
+    causa_reale: "resistenza lavatrice con valore ohmico corretto ma isolamento compromesso — dispersione a terra quando riscaldata, aggravata da acqua del tappo tamburo",
+    componenti: ["RCD", "carico"],
+    verifiche: ["scollegamento resistenza e test ciclo", "misura isolamento resistenza a caldo", "verifica tappo tamburo"],
+    lezione: "una resistenza può misurare 25 ohm corretti ma avere isolamento compromesso — il difetto si manifesta solo a caldo. Il test di isolamento va fatto a temperatura di esercizio",
+    fonte: "tout-electromenager.fr/183959"
+  },
+
+  // --- SPAGNOLO — Foro Electricidad, Nergiza ---
+
+  {
+    id: "FORUM-ES-003",
+    domanda: "En mi piso desde hace 20 años el diferencial salta ocasionalmente sin patrón claro. De días sin problema a 10 veces en 24 horas. Ocurre incluso a las 4-7 AM sin electrodomésticos. Afecta a 5 de 18 viviendas en la misma fase. Ruido electrónico que viene por la red.",
+    lingua: "es",
+    sintomo_atteso: "differenziale_scatta",
+    causa_reale: "armoniche e rumore elettronico dalla fase condivisa del palazzo combinati con dispersione interna cumulativa",
+    componenti: ["RCD"],
+    verifiche: ["verifica se il problema interessa altri appartamenti sulla stessa fase", "installazione differenziale superimmunizzato tipo A con filtro armoniche"],
+    lezione: "se il differenziale scatta a orari impossibili (4 AM senza carichi) e il problema interessa più appartamenti, il disturbo viene dalla rete — servono differenziali superimmunizzati",
+    fonte: "foroelectricidad.net/threads/3272"
+  },
+  {
+    id: "FORUM-ES-004",
+    domanda: "El diferencial salta aproximadamente cada semana sin tener nada encendido. El problema comenzó después de aumentar la potencia contratada. Solo se pueden poner 5 PIAs por cada diferencial.",
+    lingua: "es",
+    sintomo_atteso: "differenziale_scatta",
+    causa_reale: "troppi circuiti (PIA) su un unico differenziale — dispersione cumulativa supera la soglia",
+    componenti: ["RCD", "MCB"],
+    verifiche: ["contare i circuiti per differenziale", "installare secondo differenziale per dividere i circuiti"],
+    lezione: "regola pratica: massimo 5-6 circuiti per differenziale. Troppi circuiti = la somma delle dispersioni normali supera i 30mA",
+    fonte: "nergiza.com/foro/threads/16082"
+  },
+
+  // --- PORTOGHESE — Forum da Casa, Eletricidade.net ---
+
+  {
+    id: "FORUM-PT-002",
+    domanda: "O diferencial vai dispara quando se liga o forno. Apartamento novo com equipamento novo. Era o disjuntor do diferencial que estava regulado para uma potência mais fraca — regulado para potência de obra.",
+    lingua: "pt",
+    sintomo_atteso: "differenziale_scatta",
+    causa_reale: "differenziale regolato per potenza di cantiere (illuminazione provvisoria) non per uso residenziale",
+    componenti: ["RCD"],
+    verifiche: ["verifica taratura differenziale", "regolazione alla potenza corretta"],
+    lezione: "in un appartamento nuovo che scatta col forno, prima di cercare guasti verificare la taratura del differenziale — potrebbe essere ancora regolato per il cantiere",
+    fonte: "forumdacasa.com/discussion/90922"
+  },
+  {
+    id: "FORUM-PT-003",
+    domanda: "Disparos persistentes do diferencial em apartamento em Lisboa. Forno causou disparo simultâneo do disjuntor principal + diferencial + interruptor. Com multímetro em ohms: passagem entre fase e carcaça do forno. Múltiplas fases partilhavam um único neutro.",
+    lingua: "pt",
+    sintomo_atteso: "differenziale_scatta",
+    causa_reale: "doppio guasto: distribuzione neutro scorretta (più fasi su un solo neutro) + difetto isolamento forno con dispersione verso carcassa",
+    componenti: ["RCD", "MCB", "conduttore", "carico"],
+    verifiche: ["misura con multimetro in ohm tra fase e carcassa", "tracciamento neutri nel quadro", "megaohmetro su ogni circuito"],
+    lezione: "quando il differenziale scatta insieme al magnetotermico e al generale, il guasto è grave — cercare sia problemi di cablaggio (neutri condivisi) sia guasti componenti",
+    fonte: "eletricidade.net/viewtopic.php?t=20282"
+  },
+
+  // --- INGLESE — Electrician Talk, Electricians Forums, Mike Holt ---
+
+  {
+    id: "FORUM-EN-005",
+    domanda: "Intermittent AFCI breaker tripping after LED bulb retrofit. Not reproducible on demand. Some cheaper LED transformers induce interference into the electrical line, triggering AFCI even on adjacent circuits.",
+    lingua: "en",
+    sintomo_atteso: "magnetotermico_scatta_subito",
+    causa_reale: "driver LED economici che generano interferenze elettromagnetiche ad alta frequenza attivano la rilevazione arco dell'AFCI anche su circuiti adiacenti",
+    componenti: ["MCB", "carico"],
+    verifiche: ["rimozione lampadine LED una alla volta", "sostituzione con LED compatibili AFCI"],
+    lezione: "se un AFCI scatta dopo retrofit LED e il problema scompare rimuovendo le lampadine, il driver LED è incompatibile — la EMI ad alta frequenza simula un arco elettrico",
+    fonte: "electriciantalk.com/threads/276664"
+  },
+  {
+    id: "FORUM-EN-006",
+    domanda: "New distribution board for milking robots showing 150-170mA earth leakage. Leakage remained even with main isolator off. 95mA from new installation, 75mA from old installation. 0mA when disconnecting original installation earth.",
+    lingua: "en",
+    sintomo_atteso: "differenziale_scatta",
+    causa_reale: "cablaggio di terra vecchio degradato contribuisce la maggior parte della dispersione — combinata con dispersione motori nuovi supera soglia RCD",
+    componenti: ["RCD", "carico", "conduttore"],
+    verifiche: ["pinza amperometrica su terra vecchia e nuova separatamente", "misura dispersione con e senza terra vecchia"],
+    lezione: "quando si aggiunge un nuovo quadro a un impianto esistente, misurare la dispersione separatamente — il vecchio impianto può contribuire una dispersione nascosta che si somma",
+    fonte: "electricianforum.co.uk/threads/56607"
+  },
+  {
+    id: "FORUM-EN-007",
+    domanda: "RCD trips intermittently with no clear pattern. All standard insulation tests pass when dry. Cable in motorised valve touching down as valve opened. Condensation moisture on plumbing lowered insulation resistance.",
+    lingua: "en",
+    sintomo_atteso: "intermittente",
+    causa_reale: "cavo della valvola motorizzata che tocca la superficie messa a terra quando la valvola apre — condensa sulle tubature abbassa la resistenza di isolamento",
+    componenti: ["RCD", "carico", "conduttore"],
+    verifiche: ["test isolamento con impianto riscaldamento in funzione", "ispezione visiva valvole motorizzate", "reindirizzamento cavo"],
+    lezione: "guasto intermittente che supera tutti i test a secco = cercare contatti meccanici che si creano solo durante il funzionamento (valvole, motori, parti mobili) + condensa",
+    fonte: "electriciansforums.net/threads/200076"
+  },
+  {
+    id: "FORUM-EN-008",
+    domanda: "Cooper receptacle and plug from radiant space heater found melted. Burn centered on neutral plug blade contact area. Backstabbed wire on burnt side was loose. The backstab with its small contact area and poor contact pressure becomes the proximate cause.",
+    lingua: "en",
+    sintomo_atteso: "surriscaldamento",
+    causa_reale: "connessione backstab con area di contatto insufficiente — alta resistenza sotto carico elevato (stufetta) crea ciclo termico crescente",
+    componenti: ["carico", "giunzione"],
+    verifiche: ["ispezione visiva prese sotto carico pesante", "sostituzione prese backstab con morsetti a vite"],
+    lezione: "le connessioni backstab (a molla) sono il punto debole — sotto carichi pesanti la piccola area di contatto si surriscalda, la molla perde tensione, il contatto peggiora. Usare sempre morsetti a vite per carichi importanti",
+    fonte: "forums.mikeholt.com/threads/148738"
   }
 ];
 
