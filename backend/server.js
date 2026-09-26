@@ -2341,23 +2341,85 @@ app.post("/api/chat/v2", rlChat, uploadAny, async (req, res) => {
       ? parseOptionalJsonField(body.closedCaseFeedback)
       : null;
 
+    // G1: Gestione conversation_id — crea o riusa
+    let convId = body.conversation_id ? parseInt(body.conversation_id, 10) : null;
+    if (!convId || isNaN(convId)) {
+      convId = await convCreate({ title: message.slice(0, 80), user_id: user_id });
+    }
+
+    // G4: Carica contesto conversazione precedente per multi-turn
+    let priorContext = "";
+    if (convId && pool) {
+      try {
+        const prevMsgs = await pool.query(
+          `SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 6`,
+          [convId]
+        );
+        if (prevMsgs.rows.length > 0) {
+          priorContext = prevMsgs.rows.reverse().map(function(r) {
+            return (r.role === "user" ? "UTENTE" : "ROCCO") + ": " + String(r.content || "").slice(0, 300);
+          }).join("\n");
+        }
+      } catch(e) { /* DB non disponibile — procedi senza contesto */ }
+    }
+
+    // G1: Salva messaggio utente in DB
+    await msgInsert({ conversation_id: convId, role: "user", content: message });
+
     const result = await roccoV2.runDiagnosis({
       message: message,
-      conversation_id: body.conversation_id || null,
+      conversation_id: convId,
       user_id: user_id,
       has_image: !!imageBuffer,
       image_buffer: imageBuffer,
       image_mime_type: imageMimeType,
       provider_hint: body.provider || null,
       max_steps: 5,
-      closed_case_feedback: closedCaseFeedback
+      closed_case_feedback: closedCaseFeedback,
+      prior_context: priorContext || null
     });
+
+    // G1: Salva risposta assistant in DB
+    const certezza = extractCertainty(result.answer) || "MEDIA";
+    await msgInsert({
+      conversation_id: convId,
+      role: "assistant",
+      content: result.answer,
+      provider: result.runtime_metadata ? result.runtime_metadata.provider_used : "rocco_v2",
+      model: result.runtime_metadata ? result.runtime_metadata.model_used : "rocco_v2_local",
+      certainty: certezza,
+      meta_json: result.evidenceMeta || null
+    });
+
+    // G1: Salva diagnosi in rocco_diagnosi (fire-and-forget)
+    if (pool) {
+      try {
+        const snap = result.diagnosis_snapshot || {};
+        const componentiJson = JSON.stringify(
+          (result.case_state && result.case_state.components_detected) || []
+        );
+        await pool.query(
+          `INSERT INTO rocco_diagnosi
+             (user_id, conversation_id, descrizione_problema, componenti_json,
+              causa_trovata, certezza, dominio, risolto)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE)`,
+          [user_id || null, convId || null,
+           message.slice(0, 1000), componentiJson,
+           (snap.final_diagnosis || "").slice(0, 500),
+           certezza, "elettrico"]
+        );
+      } catch(e) { /* silent — non bloccare risposta */ }
+    }
+
+    // Touch conversation
+    convTouch(convId);
 
     // Estrai dati extra dal case_state per il frontend
     var cs = result.case_state || {};
     res.json({
       ok: result.ok,
       answer: result.answer,
+      conversation_id: convId,
       provider: result.runtime_metadata ? result.runtime_metadata.provider_used : null,
       model: result.runtime_metadata ? result.runtime_metadata.model_used : null,
       fallback_used: result.runtime_metadata ? result.runtime_metadata.fallback_used : false,

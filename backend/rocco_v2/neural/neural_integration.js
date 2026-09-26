@@ -420,7 +420,9 @@ function shouldCallAI(caseState, hypotheses) {
 // ============================================================================
 
 function trainFromClosedCase(caseState, feedback) {
-  if (!initialized || !feedback || !feedback.confirmedCause) return { trained: false };
+  if (!initialized || !feedback) return { trained: false };
+  // Accetta sia casi chiusi (confirmedCause) che correzioni (rejectedCauses)
+  if (!feedback.confirmedCause && !(feedback.rejectedCauses && feedback.rejectedCauses.length > 0)) return { trained: false };
 
   try {
     // 1. Language: impara dall'interazione
@@ -467,7 +469,15 @@ function trainFromClosedCase(caseState, feedback) {
       } catch(e) { /* evoluzione non critica */ }
     }
 
-    // 7. Salva pesi (fire-and-forget, non bloccante)
+    // 7. G3: Consolida regole distillatore (pruning regole deboli, merge simili)
+    var consolidaResult = null;
+    if (ExperienceDistiller && ExperienceDistiller.consolidaRegole) {
+      try {
+        consolidaResult = ExperienceDistiller.consolidaRegole();
+      } catch(e) { /* non critico */ }
+    }
+
+    // 8. Salva pesi (fire-and-forget, non bloccante)
     try { saveAll(); } catch(e) { /* non critico */ }
 
     return {
@@ -477,7 +487,8 @@ function trainFromClosedCase(caseState, feedback) {
       knowledge: knResult,
       memory: memResult ? { id: memResult.id } : null,
       distiller: distillerResult ? { distillato: distillerResult.distillato } : null,
-      evolution: evolutionResult ? evolutionResult.stato : null
+      evolution: evolutionResult ? evolutionResult.stato : null,
+      consolidamento: consolidaResult || null
     };
   } catch(e) {
     return { trained: false, error: e.message || String(e) };

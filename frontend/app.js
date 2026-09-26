@@ -1138,6 +1138,10 @@ console.log('BRIDGE LIVE');
               }
             }
 
+            // Salva snapshot per close-case (G2)
+            var lastDiagSnapshot = data.diagnosis_snapshot || null;
+            var lastEvidenceMeta = data.evidence_meta || null;
+
             // ROCCO V2 — chip cervello neurale
             if (data.orchestrator_version === "rocco_v2" && msgResult && msgResult.wrapper) {
               // Chip evidence
@@ -1223,9 +1227,17 @@ console.log('BRIDGE LIVE');
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                      caseState: { problem_summary: ans.substring(0, 200) },
+                      caseState: {
+                        problem_summary: ans.substring(0, 500),
+                        hypotheses: (lastDiagSnapshot && lastDiagSnapshot.hypotheses_active) || [],
+                        components_detected: (lastEvidenceMeta && lastEvidenceMeta.fonti_ragionamento) || [],
+                        facts_confirmed: [],
+                        anomaly_type: (lastDiagSnapshot && lastDiagSnapshot.anomaly_type) || "",
+                        final_confidence: (lastDiagSnapshot && lastDiagSnapshot.final_confidence) || "non_verifiable"
+                      },
                       confirmedCause: cause,
-                      come_verificato: inHow.value.trim()
+                      come_verificato: inHow.value.trim(),
+                      diagnosi: cause
                     })
                   }).then(function(r) { return r.json(); }).then(function(d) {
                     closeBar.innerHTML = "";

@@ -1156,7 +1156,15 @@ function createOrchestrator(options) {
     cs.system_model = null;
     cs.grafo = null;
     cs.controfattuale_risultati = [];
-    runtimeTrace.record(cs, "start", { has_image: cs.runtime.has_image });
+
+    // G4: Multi-turn — integra contesto conversazione precedente
+    if (inp.prior_context) {
+      cs.prior_context = inp.prior_context;
+      // Arricchisci il problem_summary con il contesto
+      cs.problem_summary = cs.problem_summary + "\n\n[CONTESTO PRECEDENTE]\n" + inp.prior_context;
+    }
+
+    runtimeTrace.record(cs, "start", { has_image: cs.runtime.has_image, multi_turn: !!inp.prior_context });
 
     // ═══ 2. PERCEPIRE ═══
     var percezione = percepire(cs);
