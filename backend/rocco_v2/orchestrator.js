@@ -633,6 +633,27 @@ function ragionaPerAnalogia(cs) {
 }
 
 // D4. Ragionamento da knowledge base locale
+// Sinonimi italiani per matching KB — portati da diagnosticEngine.SYNONYM_MAP
+var KB_SINONIMI = {
+  "salvavita": "differenziale", "differenziali": "differenziale",
+  "magnetotermica": "magnetotermico", "magneto": "magnetotermico",
+  "interruttore": "magnetotermico", "interruttori": "magnetotermico",
+  "corto": "cortocircuito", "curtocircuito": "cortocircuito",
+  "motori": "motore", "elettromotore": "motore",
+  "conduttore": "cavo", "conduttori": "cavo", "cavi": "cavo", "linea": "cavo",
+  "pannello": "quadro", "armadio": "quadro",
+  "voltaggio": "tensione", "alimentazione": "tensione",
+  "sovraccarichi": "sovraccarico",
+  "boiler": "scaldabagno", "caldaie": "caldaia",
+  "fotovoltaico": "fotovoltaico", "solare": "fotovoltaico",
+  "fusibili": "fusibile",
+  "avvolgimento": "avvolgimenti", "bobine": "bobina"
+};
+
+function applicaSinonimo(word) {
+  return KB_SINONIMI[word] || word;
+}
+
 function ragionaDaKnowledge(cs) {
   var hyps = [];
   try {
@@ -641,11 +662,19 @@ function ragionaDaKnowledge(cs) {
     var words = normalize(cs.problem_summary).split(" ").filter(function(w) { return w.length > 3; });
     if (!words.length) return hyps;
 
+    // Espandi con sinonimi
+    var expandedWords = [];
+    for (var w = 0; w < words.length; w++) {
+      expandedWords.push(words[w]);
+      var syn = applicaSinonimo(words[w]);
+      if (syn !== words[w]) expandedWords.push(syn);
+    }
+
     arr(kb.failurePatterns).forEach(function(p) {
       if (!p || !p.symptom) return;
       var sym = normalize(p.symptom);
       var hits = 0;
-      words.forEach(function(w) { if (sym.indexOf(w) >= 0) hits++; });
+      expandedWords.forEach(function(w) { if (sym.indexOf(w) >= 0) hits++; });
       if (hits < 2) return;
       arr(p.likely_causes).slice(0, 2).forEach(function(cause) {
         hyps.push(makeHypothesis(
@@ -1155,6 +1184,31 @@ function createOrchestrator(options) {
         }
       } catch(e) { /* world model graceful degradation */ }
 
+      // ═══ 4d. WORLD MODEL ANALISI — localizza guasto e confronta atteso vs reale ═══
+      try {
+        if (cs.world_model && neuralIntegration && neuralIntegration.WorldModel) {
+          var WM = neuralIntegration.WorldModel;
+          // Localizza nodi sospetti
+          var wmCandidati = WM.localizzaGuasto(cs.world_model);
+          if (wmCandidati && wmCandidati.length > 0) {
+            cs.world_model_candidati = wmCandidati;
+            runtimeTrace.record(cs, "world_model_localizza", {
+              candidati: wmCandidati.length,
+              primo: wmCandidati[0].nodo_nome
+            });
+          }
+          // Confronta atteso vs reale
+          var wmDiscrepanze = WM.confrontaAttesoReale(cs.world_model);
+          if (wmDiscrepanze && wmDiscrepanze.length > 0) {
+            cs.world_model_discrepanze = wmDiscrepanze;
+            runtimeTrace.record(cs, "world_model_discrepanze", {
+              discrepanze: wmDiscrepanze.length,
+              prima: wmDiscrepanze[0].tipo
+            });
+          }
+        }
+      } catch(e) { /* world model analisi graceful degradation */ }
+
       // ═══ 5. RAGIONARE — generare ipotesi da conoscenza ═══
       cs.hypotheses = ragiona(cs, percezione);
       runtimeTrace.record(cs, "ragionamento", {
@@ -1165,6 +1219,44 @@ function createOrchestrator(options) {
           return acc;
         }, [])
       });
+
+      // ═══ 5+ World Model → ipotesi da nodi sospetti e discrepanze ═══
+      try {
+        if (cs.world_model_candidati) {
+          cs.world_model_candidati.forEach(function(cand) {
+            if (!cand || !cand.ragione) return;
+            var duplicata = cs.hypotheses.some(function(h) {
+              return normalize(h.label).indexOf(normalize(cand.nodo_nome)) >= 0;
+            });
+            if (!duplicata) {
+              cs.hypotheses.push(makeHypothesis(
+                "Guasto in " + cand.nodo_nome + " (" + cand.tipo_nodo + ")",
+                cand.ragione,
+                "world_model",
+                cand.verifiche || [], [], ["Localizzato dal modello fisico dell'impianto"]
+              ));
+            }
+          });
+        }
+        if (cs.world_model_discrepanze) {
+          cs.world_model_discrepanze.forEach(function(disc) {
+            if (!disc || !disc.possibili_cause) return;
+            disc.possibili_cause.slice(0, 2).forEach(function(causa) {
+              var duplicata = cs.hypotheses.some(function(h) {
+                return normalize(h.label).indexOf(normalize(causa).substring(0, 30)) >= 0;
+              });
+              if (!duplicata) {
+                cs.hypotheses.push(makeHypothesis(
+                  causa,
+                  disc.tipo + " su " + disc.nodo_nome + " (atteso " + disc.atteso + ", misurato " + disc.misurato + ")",
+                  "world_model_discrepanza",
+                  [], [], ["Discrepanza atteso/reale dal modello fisico"]
+                ));
+              }
+            });
+          });
+        }
+      } catch(e) { /* world model ipotesi graceful degradation */ }
 
       // ═══ 5a. NEURAL — scoring ipotesi ═══
       try {
@@ -1378,6 +1470,23 @@ function createOrchestrator(options) {
                 anomalie: (cs.neural_vision || {}).anomalie_rilevate || 0,
                 gravita: (cs.neural_vision || {}).gravita_massima || "nessuna"
               });
+              // Propaga anomalie visive in ipotesi
+              if (cs.neural_vision && cs.neural_vision.anomalie && cs.neural_vision.anomalie.length > 0) {
+                cs.neural_vision.anomalie.forEach(function(an) {
+                  if (!an || !an.tipo) return;
+                  var duplicata = cs.hypotheses.some(function(h) {
+                    return normalize(h.label).indexOf(normalize(an.tipo)) >= 0;
+                  });
+                  if (!duplicata) {
+                    cs.hypotheses.push(makeHypothesis(
+                      an.tipo + (an.componente ? " su " + an.componente : ""),
+                      "Rilevato visivamente: " + (an.descrizione || an.tipo),
+                      "neural_vision",
+                      [], [], ["Anomalia identificata dall'analisi visiva"]
+                    ));
+                  }
+                });
+              }
             }
           } catch(e) { /* neural vision graceful degradation */ }
         }

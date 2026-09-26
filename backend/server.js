@@ -2230,6 +2230,46 @@ app.patch("/api/rocco/diagnosi/:id", async (req, res) => {
   }
 });
 
+// POST /api/rocco/close-case — chiudi un caso e attiva il training neurale
+// Il tecnico conferma la causa reale → ROCCO impara dall'esperienza
+app.post("/api/rocco/close-case", async (req, res) => {
+  try {
+    const { caseState, confirmedCause, componenti, come_verificato, diagnosi } = req.body || {};
+    if (!confirmedCause) {
+      return res.status(400).json({ ok: false, error: "confirmedCause obbligatorio" });
+    }
+
+    // Costruisci il feedback
+    const feedback = {
+      confirmedCause: confirmedCause,
+      diagnosi: diagnosi || confirmedCause,
+      componenti: componenti || [],
+      come_verificato: come_verificato || ""
+    };
+
+    // Cerca il modulo neurale
+    let neuralResult = null;
+    try {
+      const neuralIntegration = require('./rocco_v2/neural/neural_integration');
+      if (neuralIntegration && neuralIntegration.trainFromClosedCase) {
+        neuralResult = neuralIntegration.trainFromClosedCase(caseState || {}, feedback);
+      }
+    } catch (e) {
+      neuralResult = { trained: false, error: e.message };
+    }
+
+    res.json({
+      ok: true,
+      training: neuralResult,
+      message: neuralResult && neuralResult.trained
+        ? "ROCCO ha imparato dal caso chiuso"
+        : "Training non riuscito"
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // GET /api/admin/ollama/status — stato Ollama (admin)
 app.get("/api/admin/ollama/status", requireAdmin, async (req, res) => {
   try {

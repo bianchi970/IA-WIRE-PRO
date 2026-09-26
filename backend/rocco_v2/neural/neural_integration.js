@@ -142,6 +142,10 @@ function warmup(options) {
         NeuralMemory.store(fcs, ffb);
         // Patterns
         NeuralPatterns.trainDaCasoChiuso(fcs, ffb);
+        // Distillatore — bootstrap regole dall'esperienza forum
+        if (ExperienceDistiller) {
+          try { ExperienceDistiller.distilla(fcs, ffb); } catch(e2) { /* skip */ }
+        }
         forumTrained++;
       } catch(e) { /* skip caso problematico */ }
     }
@@ -153,6 +157,7 @@ function warmup(options) {
     patterns: NeuralPatterns.getStats(),
     knowledge: NeuralKnowledge.getStats(),
     memory: NeuralMemory.stats(),
+    distiller: ExperienceDistiller ? ExperienceDistiller.getStats() : null,
     forum_trained: forumTrained
   };
 }

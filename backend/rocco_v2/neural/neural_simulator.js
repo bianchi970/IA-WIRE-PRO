@@ -883,11 +883,12 @@ function simula(caseState) {
   // 7. Trova la migliore misura discriminante
   var prossima = miglioreMisura(ipotesi);
 
-  // 8. Simula in avanti per ogni ipotesi attiva (catene causali)
+  // 8. Simula in avanti per ogni ipotesi attiva (catene causali + world model)
   var simulazioni = {};
+  var wm = caseState.world_model || null;
   var attive = ipotesi.filter(function(ip) { return ip.stato === "attiva"; });
   for (var s = 0; s < Math.min(attive.length, 3); s++) {
-    var sim = simulaInAvanti(attive[s].causa, null);
+    var sim = simulaInAvanti(attive[s].causa, wm);
     if (sim.length > 0) {
       simulazioni[attive[s].causa] = sim;
     }
