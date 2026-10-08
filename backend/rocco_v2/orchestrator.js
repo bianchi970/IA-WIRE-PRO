@@ -734,11 +734,66 @@ function ragiona(cs, percezione) {
 // l'ipotesi viene eliminata con certezza. Una misura vale più
 // di qualsiasi opinione.
 
+// ── Esclusioni dichiarate dall'utente ──────────────────────────────────
+//
+// Le kill rules non possono leggere tutto il racconto dell'utente: una
+// descrizione nominale ("impianto 230V") non è una misura, e usarla come
+// prova escluderebbe ipotesi ancora valide. Qui si estraggono SOLO le
+// frasi in cui l'utente dichiara di aver verificato o escluso qualcosa.
+var USER_EXCLUSION_PATTERNS = [
+  // "anche con tutte le prese staccate", "anche a vuoto", "anche senza carico"
+  /anche (?:con|senza|a|se)\b[^.;!?]{0,80}/g,
+  // "ho staccato / scollegato / provato / sostituito / misurato / verificato ..."
+  /(?:ho|abbiamo|hanno)\s+(?:gia\s+)?(?:staccat\w*|scollegat\w*|provat\w*|sostituit\w*|misurat\w*|verificat\w*|controllat\w*|cambiat\w*|testat\w*|serrat\w*)\b[^.;!?]{0,90}/g,
+  // "con tutto staccato", "con tutte le prese staccate", "senza niente collegato"
+  /(?:con|senza)\s+(?:tutt\w*|niente|nessun\w*)\b[^.;!?]{0,60}/g,
+  /\ba vuoto\b[^.;!?]{0,40}/g,
+  // "il differenziale non scatta mai", "non succede con ..."
+  // Si cattura anche il soggetto che precede: senza di esso la frase
+  // perde il riferimento ("non scatta mai" non dice COSA non scatta).
+  /[^.;!?]{0,45}\bnon\s+(?:scatta|salta|interviene|succede|si verifica)\b[^.;!?]{0,70}/g,
+  // "solo quando accendo...", "solo di sera", "solo in bagno": qualunque
+  // clausola con "solo" è una condizione discriminante, ed è sempre utile.
+  /\bsolo\b[^.;!?]{0,70}/g
+];
+
+function extractUserExclusions(text) {
+  var src = s(text);
+  var found = [];
+  USER_EXCLUSION_PATTERNS.forEach(function(re) {
+    var rx = new RegExp(re.source, "gi");
+    var m;
+    while ((m = rx.exec(src)) !== null) {
+      found.push(m[0]);
+      if (m.index === rx.lastIndex) rx.lastIndex += 1;
+    }
+  });
+  return found.join(" . ");
+}
+
+// Sinonimi italiani di "tutto scollegato": l'utente lo dice in dieci modi.
+var NO_LOAD_PATTERN = /a vuoto|tutto staccat|tutti staccat|tutto scollegat|niente (?:attaccat|collegat|inserit)|nessun carico|senza carico|senza niente|carich\w* (?:staccat|scollegat)|(?:prese|utenze|carichi|utilizzatori) (?:staccat|scollegat|disinserit)|scolleg\w* (?:tutt|i carich|le utenze|le prese)|staccat\w* (?:tutt|i carich|le utenze|le prese)/;
+
 var KILL_RULES = [
-  { id: "KR-01", signal: /isolamento.*>.*1\s*m|isolamento.*ok|isolamento.*buon/,
-    kills: /dispersione|terra|isolament/, reason: "Isolamento > 1 MOhm esclude dispersione (CEI 64-8)" },
-  { id: "KR-02", signal: /tensione.*230|tensione.*present|alimentazione.*ok/,
-    kills: /assenza.*alimentazione|manca.*tensione|manca.*corrente/, reason: "Tensione presente esclude assenza alimentazione" },
+  // Misura strumentale: si legge il VALORE, non la forma della frase.
+  // L'isolamento sano a 1 MOhm è la soglia CEI 64-8 per i circuiti BT.
+  { id: "KR-01",
+    when: function(ctx) {
+      var iso = ctx.measure("isolamento");
+      return iso !== null ? iso >= 1 : ctx.facts.isolation_high === true;
+    },
+    kills: /dispersione|verso terra|isolament/,
+    reason: "Isolamento misurato >= 1 MOhm: esclude la dispersione verso terra (CEI 64-8)" },
+
+  // Tensione PRESENTE va dedotta da una verifica, non dal valore nominale
+  // dell'impianto: "impianto 230V" non dice nulla sul punto guasto.
+  { id: "KR-02",
+    // La negazione annulla la prova: "non arriva tensione" non è una
+    // verifica di tensione presente, è il sintomo.
+    when: function(ctx) { return !/non arriva|non c'e|non ce|manca|assente/.test(ctx.text); },
+    signals: [/ho (?:misurat|verificat|controllat)\w*|tensione (?:present|c'e|regolare|ok)|arriva (?:la )?tensione|alimentazione ok/, /230|400|tensione|alimentazione/],
+    kills: /assenza.*alimentazione|manca.*tensione|manca.*corrente|non arriva.*tensione/,
+    reason: "Tensione verificata presente: esclude l'assenza di alimentazione" },
   { id: "KR-03", signal: /continuita.*ok|continuita.*present/,
     kills: /interruzione|circuito.*aperto|conduttore.*interrotto/, reason: "Continuita presente esclude interruzione" },
   { id: "KR-04", signal: /corrente.*sotto|corrente.*inferiore|corrente.*ok|corrente.*<.*in/,
@@ -753,18 +808,154 @@ var KILL_RULES = [
     kills: /dispersione|terra/, reason: "Solo magnetotermico = sovracorrente, non dispersione" },
   { id: "KR-09", signal: /morsetti.*serrat|morsetti.*ok|morsetti.*verificat/,
     kills: /morsetto.*allentato|contatto.*resistiv|contatto.*instabile/, reason: "Morsetti verificati escludono contatto allentato" },
-  { id: "KR-10", signal: /senza.*carico.*scatta|vuoto.*scatta|carico.*scollegat.*scatta/,
-    kills: /guasto.*carico|carico.*difettoso|elettrodomestico/, reason: "Scatta senza carico = guasto non nel carico" }
+  // Scatta anche a vuoto: il guasto non può stare in un carico, perché i
+  // carichi non ci sono. Prima la regola pretendeva l'ordine
+  // "carico scollegato ... scatta": in italiano la frase arriva in
+  // entrambi gli ordini ("scatta anche con tutte le prese staccate"),
+  // e così non scattava mai.
+  { id: "KR-10",
+    context: [/scatt|salt|intervi|sgancia/],
+    signals: [NO_LOAD_PATTERN],
+    kills: /guasto.*carico|carico.*difettoso|elettrodomestico|guasto interno a un carico|^dispersione su carico$|carichi in standby/,
+    reason: "Interviene anche con i carichi scollegati: il guasto non è in un carico" },
+
+  // Impianto civile monofase: le ipotesi da quadro industriale non si
+  // applicano. Il guardia si basa sul TESTO dell'utente, non sui componenti
+  // riconosciuti, che su frasi brevi danno falsi positivi.
+  { id: "KR-11",
+    when: function(ctx) {
+      // Applicabilità strutturale: si legge il racconto, non le prove.
+      // Un'ipotesi da quadro industriale su un impianto civile non è
+      // "non verificata", è fuori contesto.
+      if (!/230|civil|appartament|abitazion|\bcasa\b|monofas/.test(ctx.story)) return false;
+      return !/trifas|400\s*v|motore|salvamotore|contattore|inverter|pompa|compressor|macchina|quadro industrial/.test(ctx.story);
+    },
+    kills: /trifas|perdita di fase|squilibr\w* (?:di )?fase|bimetallico|salvamotore|rele termico|avviament\w* ravvicinat|soft starter|inverter|vfd/,
+    reason: "Impianto civile monofase: esclude guasti di quadro industriale e azionamenti motore" },
+
+  // Intervento del solo magnetotermico con differenziale fermo: sovracorrente,
+  // non dispersione. Versione indipendente dall'ordine delle parole.
+  { id: "KR-12",
+    context: [/magnetoterm|mcb|automatico/],
+    signals: [/differenziale (?:non|mai) (?:scatta|salta|interviene)|non (?:scatta|salta|interviene) il differenziale|senza che (?:scatti|salti) il differenziale/],
+    kills: /dispersione|verso terra|isolament/,
+    reason: "Scatta solo il magnetotermico, il differenziale no: sovracorrente, non dispersione" },
+
+  // Componente appena sostituito e problema invariato: quel componente è sano.
+  { id: "KR-13",
+    signals: [/ho (?:sostituit|cambiat)\w*|appena (?:sostituit|cambiat|install)\w*|nuovo di fabbrica/, /(?:ma|e) (?:il problema|lo stesso|uguale|non cambia|continua|persiste|scatta ancora|sempre)/],
+    kills: /difettoso|a fine vita|guasto interno al dispositivo|dispositivo guasto/,
+    reason: "Componente sostituito e sintomo invariato: il dispositivo non era la causa" }
 ];
 
-function killImpossible(cs) {
-  var evidence = normalize([
-    cs.facts_confirmed.join(" "),
-    cs.measurements.map(function(m) { return typeof m === "string" ? m : JSON.stringify(m); }).join(" "),
-    cs.facts_uncertain.join(" "),
-    cs.visual_findings.join(" ")
+// Conversione a MOhm: l'utente può scrivere kOhm, Ohm o MOhm.
+var RESISTANCE_TO_MOHM = { "mω": 1, "mohm": 1, "kω": 0.001, "kohm": 0.001, "ω": 0.000001, "ohm": 0.000001 };
+
+/**
+ * Evidenze in forma STRUTTURATA, non una stringa appiattita.
+ *
+ * Una regola come "isolamento sano esclude la dispersione" deve leggere il
+ * VALORE misurato (50 MOhm), non sperare che il testo contenga il simbolo
+ * ">". Prima era un regex sul testo e la misura dell'utente veniva ignorata.
+ *
+ * Due campi testuali, con ruoli diversi e non interscambiabili:
+ *
+ *  text  → PROVE: evidenze del motore + le sole frasi in cui l'utente
+ *          dichiara di aver verificato o escluso qualcosa. Solo questo
+ *          campo può innescare un'esclusione.
+ *  story → CONTESTO: tutto il racconto. Dice che impianto è e qual è il
+ *          sintomo, e serve a restringere il campo di applicazione di una
+ *          regola. Non è una prova: "impianto 230V" non dimostra che la
+ *          tensione sia presente al punto guasto.
+ *
+ *  facts     → chiavi di evidenza derivate dal motore (isolation_high, ...)
+ *  measure() → valore numerico per grandezza, normalizzato (isolamento in MOhm)
+ */
+function buildEvidenceContext(cs) {
+  var facts = {};
+  var measures = {};
+
+  arr(cs.facts_confirmed).forEach(function(f) {
+    var t = s(f);
+    if (lexicon.isMachineToken(t)) facts[t.toLowerCase()] = true;
+  });
+
+  arr(cs.measurements).forEach(function(m) {
+    if (!m || typeof m !== "object") return;
+    var type = normalize(m.type || m.key);
+    var value = typeof m.value === "number" ? m.value : parseFloat(m.value);
+    if (!type || isNaN(value)) return;
+    var unit = s(m.unit).toLowerCase();
+    if (type === "isolamento" || type === "resistenza") {
+      var factor = RESISTANCE_TO_MOHM[unit];
+      if (factor !== undefined) value = value * factor;
+    }
+    // Sul guasto conta il valore peggiore misurato
+    if (measures[type] === undefined || value < measures[type]) measures[type] = value;
+  });
+
+  var text = normalize([
+    arr(cs.facts_confirmed).join(" "),
+    arr(cs.facts_uncertain).join(" "),
+    arr(cs.visual_findings).join(" "),
+    arr(cs.measurements).map(function(m) {
+      return typeof m === "string" ? m : (s(m && m.raw) || s(m && m.value) + s(m && m.unit));
+    }).join(" "),
+    extractUserExclusions(cs.problem_summary)
   ].join(" "));
-  if (!evidence) return;
+
+  var story = normalize([
+    s(cs.problem_summary),
+    arr(cs.facts_confirmed).join(" "),
+    arr(cs.visual_findings).join(" ")
+  ].join(" "));
+
+  return {
+    text: text,
+    story: story,
+    facts: facts,
+    measures: measures,
+    measure: function(type) {
+      var v = measures[normalize(type)];
+      return v === undefined ? null : v;
+    }
+  };
+}
+
+/**
+ * La regola è innescata dalle evidenze?
+ *
+ *  context  → tutti i regex devono trovarsi nel RACCONTO (ambito di validità)
+ *  signals  → tutti i regex devono trovarsi nelle PROVE, in ordine libero
+ *  fact     → chiave di evidenza derivata dal motore
+ *  when     → predicato sulle misure numeriche
+ *
+ * `context` da solo non basta mai: senza una prova (signals/fact/when) la
+ * regola non scatta. Unica eccezione per costruzione: le regole di sola
+ * applicabilità strutturale, che usano `when` leggendo ctx.story.
+ */
+function ruleTriggered(rule, ctx) {
+  if (arr(rule.context).length) {
+    if (!rule.context.every(function(re) { return re.test(ctx.story); })) return false;
+  }
+  if (typeof rule.when === "function") {
+    try { if (!rule.when(ctx)) return false; } catch (e) { return false; }
+  }
+  if (rule.fact && !ctx.facts[rule.fact]) return false;
+  if (rule.signal && !rule.signal.test(ctx.text)) return false;
+  if (arr(rule.signals).length) {
+    if (!rule.signals.every(function(re) { return re.test(ctx.text); })) return false;
+  }
+  return !!(rule.when || rule.fact || rule.signal || arr(rule.signals).length);
+}
+
+function killImpossible(cs) {
+  var ctx = buildEvidenceContext(cs);
+  if (!ctx.text) return;
+
+  function activeCount() {
+    return cs.hypotheses.filter(function(h) { return h.status === "active"; }).length;
+  }
 
   cs.hypotheses.forEach(function(h) {
     if (h.status === "rejected") return;
@@ -773,12 +964,23 @@ function killImpossible(cs) {
     // Kill rules fisiche
     KILL_RULES.forEach(function(rule) {
       if (h.status === "rejected") return;
-      if (rule.signal.test(evidence) && rule.kills.test(lab)) {
-        h.status = "rejected";
-        h.confidence = "rejected";
-        h.rejection_reason = rule.id + ": " + rule.reason;
-        runtimeTrace.record(cs, "hypothesis_killed", { label: h.label, rule: rule.id, reason: rule.reason });
+      if (!rule.kills.test(lab)) return;
+      if (!ruleTriggered(rule, ctx)) return;
+
+      // Valvola di sicurezza: meglio un'ipotesi debole che nessuna.
+      // Restare senza ipotesi attive porterebbe ROCCO a dire "dati
+      // insufficienti" proprio quando l'utente ha fornito più dati.
+      if (activeCount() <= 1) {
+        runtimeTrace.record(cs, "kill_skipped", {
+          label: h.label, rule: rule.id, reason: "ultima ipotesi attiva"
+        });
+        return;
       }
+
+      h.status = "rejected";
+      h.confidence = "rejected";
+      h.rejection_reason = rule.id + ": " + rule.reason;
+      runtimeTrace.record(cs, "hypothesis_killed", { label: h.label, rule: rule.id, reason: rule.reason });
     });
 
     // Deny tests soddisfatti
@@ -787,8 +989,12 @@ function killImpossible(cs) {
         if (h.status === "rejected") return;
         var tw = normalize(test).split(" ").filter(function(w) { return w.length > 4; });
         var hits = 0;
-        tw.forEach(function(w) { if (evidence.indexOf(w) >= 0) hits++; });
+        tw.forEach(function(w) { if (ctx.text.indexOf(w) >= 0) hits++; });
         if (tw.length > 0 && hits >= Math.ceil(tw.length * 0.6)) {
+          if (activeCount() <= 1) {
+            runtimeTrace.record(cs, "kill_skipped", { label: h.label, reason: "ultima ipotesi attiva" });
+            return;
+          }
           h.status = "rejected";
           h.confidence = "rejected";
           h.rejection_reason = "Test escludente soddisfatto: " + test;
@@ -833,8 +1039,38 @@ function inferActionType(text) {
   return "ask_user";
 }
 
+// ── Verifiche che l'utente ha già eseguito ─────────────────────────────
+//
+// Non basta escludere l'ipotesi: se l'utente ha già staccato tutti i
+// carichi, ordinargli di staccare i carichi lo fa sentire inascoltato ed
+// è la riga più visibile della risposta. Qui si accoppia la prova
+// dichiarata dall'utente con le verifiche che quella prova rende inutili.
+var ALREADY_DONE = [
+  { done: NO_LOAD_PATTERN,
+    makes_useless: /scolleg\w*|stacc\w*|disinseri\w*|a vuoto|senza carico/ },
+  { done: /ho (?:misurat|verificat|controllat)\w*[^.;!?]{0,40}isolament|megger|megaohmetro|isolamento (?:misurat|risultat)/,
+    makes_useless: /isolament|megger|megaohmetro/ },
+  { done: /ho (?:sostituit|cambiat)\w*/,
+    makes_useless: /sostitu\w*|cambia\w* il (?:dispositivo|componente)/ },
+  { done: /ho (?:serrat|controllat)\w*[^.;!?]{0,30}morsett|morsetti (?:serrat|verificat|controllat)/,
+    makes_useless: /morsett\w*|serragg\w*|coppia di serragg/ },
+  { done: /ho misurat\w*[^.;!?]{0,30}(?:tension|volt)|tensione (?:misurat|verificat)/,
+    makes_useless: /misur\w*[^.;!?]{0,20}tension|tester[^.;!?]{0,20}tension/ },
+  { done: /ho (?:provat|testat)\w*[^.;!?]{0,30}(?:tasto )?test|tasto test (?:premut|provat)/,
+    makes_useless: /tasto test|premere test/ }
+];
+
+/** Le verifiche che le dichiarazioni dell'utente hanno già reso inutili. */
+function buildAlreadyDoneMatchers(ctx) {
+  return ALREADY_DONE.filter(function(entry) {
+    return entry.done.test(ctx.text);
+  }).map(function(entry) { return entry.makes_useless; });
+}
+
 function selectBestAction(cs) {
   var active = cs.hypotheses.filter(function(h) { return h.status === "active"; });
+  var ctx = buildEvidenceContext(cs);
+  var alreadyDone = buildAlreadyDoneMatchers(ctx);
 
   if (active.length === 0) {
     return { type: "insufficient", action: "Servono piu informazioni: descrivi il tipo di impianto, cosa succede, e quando.", reason: "nessuna ipotesi attiva",
@@ -866,7 +1102,14 @@ function selectBestAction(cs) {
     var dup = cs.checks_requested.some(function(cr) {
       return normalize(cr).substring(0, 40) === normalize(c.action).substring(0, 40);
     }) ? -50 : 0;
-    c.totalScore = c.discrimination.score + safety + simple + dup;
+    // Penalità, non esclusione, per due motivi: se TUTTI i candidati
+    // risultassero già fatti ROCCO deve comunque proporre il migliore; e a
+    // volte la stessa misura va ripetuta in condizioni diverse (isolamento
+    // a caldo dopo una misura a freddo). Un test molto discriminante può
+    // quindi ancora vincere.
+    var azNorm = normalize(c.action);
+    c.alreadyDone = alreadyDone.some(function(re) { return re.test(azNorm); });
+    c.totalScore = c.discrimination.score + safety + simple + dup + (c.alreadyDone ? -40 : 0);
   });
 
   cands.sort(function(a, b) { return b.totalScore - a.totalScore; });
@@ -1770,6 +2013,10 @@ module.exports = {
   PRIMI_PRINCIPI: PRIMI_PRINCIPI,
   SISTEMI: SISTEMI,
   KILL_RULES: KILL_RULES,
+  buildEvidenceContext: buildEvidenceContext,
+  buildAlreadyDoneMatchers: buildAlreadyDoneMatchers,
+  ruleTriggered: ruleTriggered,
+  extractUserExclusions: extractUserExclusions,
   percepire: percepire,
   buildSystemModel: buildSystemModel,
   ragiona: ragiona,

@@ -104,6 +104,52 @@ Se tutti i provider LLM falliscono per errore di rete (`isNetworkError()` detect
 ### /api/engine/test endpoint
 `GET /api/engine/test` esegue `analyzeTechnicalRequest` sul caso di test hardcoded (`TEST_CASE` in diagnosticEngine.js) usando i dati reali dei JSON. Utile per verificare il pattern matching senza avviare una conversazione. Risposta include `diagnostic`, `formatted_engine_context`, `formatted_knowledge_context`, `counts`.
 
+### ROCCO V2 — kill rules (esclusione per impossibilità fisica)
+`killImpossible()` leggeva una stringa appiattita di `facts_confirmed` +
+`measurements`: le parole dell'utente non arrivavano mai, e le regole erano
+regex sensibili all'ordine. Conseguenze reali: `{isolamento: 50 MΩ}` veniva
+parsato correttamente ma KR-01 cercava il simbolo `>` nel testo, quindi la
+misura dell'utente era **ignorata** e "dispersione" restava prima ipotesi;
+KR-10 pretendeva "carico scollegato … scatta" e non scattava mai.
+
+**Evidenze strutturate** — `buildEvidenceContext(cs)` espone:
+- `text` → **prove**: evidenze del motore + le sole frasi in cui l'utente
+  dichiara di aver verificato o escluso qualcosa (`extractUserExclusions()`,
+  7 pattern). Solo questo campo può innescare un'esclusione.
+- `story` → **contesto**: tutto il racconto. Dice che impianto è, serve a
+  restringere l'ambito di una regola. Non è una prova: "impianto 230V" non
+  dimostra che la tensione sia presente al punto guasto — per questo
+  `problem_summary` non entra mai intero nelle prove.
+- `facts` → chiavi derivate (`isolation_high`, …)
+- `measure(tipo)` → valore numerico, isolamento normalizzato in MΩ (kOhm/Ohm
+  convertiti): le regole di soglia leggono il valore, non la frase.
+
+**Forme di innesco** (`ruleTriggered`): `when` (misure), `fact` (chiave),
+`signal`/`signals` (tutti presenti, **ordine libero**, sulle prove),
+`context` (ambito, sul racconto). `context` da solo non scatta mai.
+
+**13 regole** (era 10). Nuove: KR-11 impianto civile monofase esclude le
+ipotesi da quadro industriale (motore/trifase/salvamotore) — applicabilità
+strutturale, non misura; KR-12 scatta solo il magnetotermico → sovracorrente,
+non dispersione; KR-13 componente sostituito e sintomo invariato → quel
+dispositivo non era la causa.
+
+**Valvola di sicurezza**: nessuna regola può azzerare le ipotesi attive.
+Con una sola ipotesi viva l'esclusione viene saltata e tracciata come
+`kill_skipped` — meglio un'ipotesi debole che "dati insufficienti" proprio
+quando l'utente ha fornito più dati.
+
+**Verifiche già fatte** — `selectBestAction()` penalizza (−40, non esclude)
+le verifiche che le dichiarazioni dell'utente hanno reso inutili
+(`ALREADY_DONE`, 6 accoppiamenti prova→verifica). Escludere l'ipotesi non
+bastava: ROCCO continuava a ordinare "scollegare tutti i carichi" a chi
+aveva già staccato tutto. Penalità e non esclusione perché a volte la stessa
+misura va ripetuta in condizioni diverse (isolamento a caldo dopo una a freddo).
+
+Test: `backend/rocco_v2/neural/test/kill_rules.test.js` — 71 asserzioni, per
+ogni regola un caso che deve scattare e uno che non deve, più i falsi
+positivi: 6 casi a causa nota verificano che la causa vera resti viva.
+
 ### ROCCO V2 — narratore (la "bocca")
 Il motore v2 ragiona in modo deterministico e non chiamava quasi mai l'LLM
 (`decideAINeeded()` ritorna false con 1–5 ipotesi attive, cioè quasi sempre):
