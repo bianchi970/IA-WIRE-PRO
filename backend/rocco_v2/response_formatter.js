@@ -1,6 +1,7 @@
 "use strict";
 
 var contracts = require("./contracts");
+var lexicon = require("./lexicon");
 var runtimeTrace = require("./runtime_trace");
 
 function buildHypothesisLine(item) {
@@ -20,8 +21,9 @@ function format(diagnosisSnapshot) {
   var runtimeMetadata = runtimeTrace.buildRuntimeMetadata({ runtime: snapshot.runtime, safety: snapshot.safety });
 
   lines.push("OSSERVAZIONI:");
-  if (facts.length) {
-    facts.slice(0, 6).forEach(function (item) {
+  var readableFacts = lexicon.cleanFacts(facts, 6);
+  if (readableFacts.length) {
+    readableFacts.forEach(function (item) {
       lines.push("- " + item);
     });
   } else {
@@ -30,7 +32,8 @@ function format(diagnosisSnapshot) {
 
   lines.push("");
   lines.push("COMPONENTI COINVOLTI:");
-  lines.push(components.length ? "- " + components.join(", ") : "- Non identificati con certezza.");
+  var readableComponents = lexicon.humanizeComponents(components);
+  lines.push(readableComponents.length ? "- " + readableComponents.join(", ") : "- Non identificati con certezza.");
 
   lines.push("");
   lines.push("IPOTESI:");
@@ -44,7 +47,7 @@ function format(diagnosisSnapshot) {
 
   lines.push("");
   lines.push("LIVELLO DI CERTEZZA:");
-  lines.push(String(snapshot.final_confidence || "non_verifiable"));
+  lines.push(lexicon.certaintyLabel(snapshot.final_confidence));
 
   lines.push("");
   lines.push("VERIFICHE OPERATIVE:");

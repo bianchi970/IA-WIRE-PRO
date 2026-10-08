@@ -104,6 +104,37 @@ Se tutti i provider LLM falliscono per errore di rete (`isNetworkError()` detect
 ### /api/engine/test endpoint
 `GET /api/engine/test` esegue `analyzeTechnicalRequest` sul caso di test hardcoded (`TEST_CASE` in diagnosticEngine.js) usando i dati reali dei JSON. Utile per verificare il pattern matching senza avviare una conversazione. Risposta include `diagnostic`, `formatted_engine_context`, `formatted_knowledge_context`, `counts`.
 
+### ROCCO V2 — narratore (la "bocca")
+Il motore v2 ragiona in modo deterministico e non chiamava quasi mai l'LLM
+(`decideAINeeded()` ritorna false con 1–5 ipotesi attive, cioè quasi sempre):
+all'utente arrivavano slug interni (`rcd_trip`, `voltage_nominal`, `rcd-ac-2p`).
+Separazione attuale: **il motore ragiona, il narratore redige.**
+
+- `backend/rocco_v2/lexicon.js` — slug → italiano tecnico: 50 id componente,
+  25 stati osservati, 15 fatti di evidenza, grandezze, certezza, sicurezza.
+  `cleanFacts()` dà priorità alle frasi leggibili sugli slug (il vecchio
+  `slice(0,6)` pescava solo gli slug, che il motore accoda per primi).
+- `backend/rocco_v2/narrator.js` — `narrate(cs, draft, gateway, opts)` chiama
+  l'LLM in **sola redazione** sul `case_state` già concluso.
+  Può riformulare, riordinare per pertinenza e scartare ipotesi non pertinenti.
+  Non può: aggiungere ipotesi, inventare misure, alterare il livello di certezza.
+  `validate()` controlla 5 cose e in caso di violazione **torna alla bozza
+  deterministica**: sezioni presenti, certezza invariata, nessuno slug
+  snake_case, ogni causa riconducibile a un'ipotesi del motore (confronto sulla
+  parte prima di " — ", ≥50% token in comune), nessun numero **con unità** fuori
+  dai dati del caso (+ `NORMATIVE_NUMBERS`, le costanti di mestiere).
+  Risolve sempre: timeout 25s, provider giù o narratore off → bozza.
+- `ROCCO_NARRATOR=0` disattiva la redazione (resta la bozza deterministica).
+- `evidence_meta.narrated` / `narration_reason` dicono se la redazione è passata
+  e, se no, perché. `ai_called` resta riferito al **ragionamento**, non alla
+  redazione: le due cose sono tracciate separatamente.
+- `formatResponse()` (bozza) ora emette tutte le 7 sezioni TECH_REPORT_V1:
+  mancava VERIFICHE OPERATIVE e la verifica discriminante non arrivava mai
+  all'utente perché `next_action` veniva letto solo nel formato interno
+  (`action`) dopo la conversione a quello legacy (`expected_discriminator`).
+- Test: `backend/rocco_v2/neural/test/narrator.test.js` — 48 asserzioni,
+  gateway finto, nessuna chiamata di rete.
+
 ### Formato risposta (RISOLTO)
 `rocco/index.js` produce `TECH_REPORT_V1` con sezioni: OSSERVAZIONI, COMPONENTI COINVOLTI, IPOTESI, LIVELLO DI CERTEZZA, VERIFICHE OPERATIVE, RISCHI REALI, PROSSIMO PASSO.
 `server.js` chiama `rocco.postcheck(answer)` dopo la risposta AI per garantire che tutte le sezioni siano presenti.

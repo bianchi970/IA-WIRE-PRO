@@ -29,6 +29,8 @@ var safetyGuard = require("./safety_guard");
 var toolRegistryFactory = require("./tool_registry");
 var providerGatewayFactory = require("./provider_gateway");
 var responseFormatter = require("./response_formatter");
+var lexicon = require("./lexicon");
+var narrator = require("./narrator");
 var runtimeTrace = require("./runtime_trace");
 var memory = require("./memory");
 var contracts = require("./contracts");
@@ -1025,12 +1027,15 @@ function formatResponse(cs, percezione) {
   var rejected = cs.hypotheses.filter(function(h) { return h.status === "rejected"; });
   var best = cs.next_action;
   var lines = [];
-  var certMap = { confirmed: "CONFERMATO", probable: "PROBABILE", non_verifiable: "DA VERIFICARE" };
+  // La verifica discriminante: next_action può essere già convertito al
+  // formato legacy (expected_discriminator) o ancora in quello interno (action).
+  var verifica = best ? s(best.expected_discriminator || best.action) : "";
+  var facts = lexicon.cleanFacts(cs.facts_confirmed, 6);
 
   // Osservazioni
   lines.push("OSSERVAZIONI:");
-  if (cs.facts_confirmed.length) {
-    cs.facts_confirmed.slice(0, 6).forEach(function(f) { lines.push("- " + f); });
+  if (facts.length) {
+    facts.forEach(function(f) { lines.push("- " + f); });
   } else {
     lines.push("- Nessun fatto tecnico confermato.");
   }
@@ -1049,7 +1054,8 @@ function formatResponse(cs, percezione) {
   // Componenti
   lines.push("");
   lines.push("COMPONENTI COINVOLTI:");
-  lines.push(cs.components_detected.length ? "- " + cs.components_detected.join(", ") : "- Non identificati.");
+  var comps = lexicon.humanizeComponents(cs.components_detected);
+  lines.push(comps.length ? "- " + comps.join(", ") : "- Non identificati.");
 
   // Ipotesi con ragionamento
   lines.push("");
@@ -1082,29 +1088,44 @@ function formatResponse(cs, percezione) {
   // Certezza
   lines.push("");
   lines.push("LIVELLO DI CERTEZZA:");
-  lines.push(certMap[cs.final_confidence] || "DA VERIFICARE");
+  lines.push(lexicon.certaintyLabel(cs.final_confidence));
 
-  // Prossimo passo (la domanda più discriminante)
+  // Verifiche operative — la misura discriminante e le alternative
   lines.push("");
-  lines.push("PROSSIMO PASSO:");
-  if (best && best.action) {
-    lines.push("- " + best.action);
-    if (best.discrimination && best.discrimination.separation > 0) {
+  lines.push("VERIFICHE OPERATIVE:");
+  if (verifica) {
+    lines.push("- " + verifica);
+    if (best && best.discrimination && best.discrimination.separation > 0) {
       lines.push("  (questa verifica separa " + best.discrimination.coverage + " ipotesi)");
     }
-    if (best.alternatives && best.alternatives.length > 0) {
-      lines.push("  In alternativa: " + best.alternatives[0]);
-    }
+    arr(best && best.alternatives).slice(0, 2).forEach(function(a) {
+      lines.push("- In alternativa: " + a);
+    });
+  } else if (cs.safety.allowed_next_step) {
+    lines.push("- " + cs.safety.allowed_next_step);
   } else {
     lines.push("- Raccogliere il dato tecnico mancante.");
   }
+  if (cs.missing_critical_data && cs.missing_critical_data.length) {
+    lines.push("- Dati ancora da raccogliere: " + cs.missing_critical_data.slice(0, 3).join(", ") + ".");
+  }
 
   // Rischi
-  if (cs.safety.reasons.length) {
-    lines.push("");
-    lines.push("RISCHI REALI:");
+  lines.push("");
+  lines.push("RISCHI REALI:");
+  if (cs.safety.reasons.length || cs.safety.blocked_actions.length) {
     cs.safety.reasons.slice(0, 3).forEach(function(r) { lines.push("- " + r); });
+    cs.safety.blocked_actions.slice(0, 2).forEach(function(b) {
+      lines.push("- Vietato finché non verificato: " + b);
+    });
+  } else {
+    lines.push("- Nessun rischio oltre alla prudenza operativa standard.");
   }
+
+  // Prossimo passo (la singola azione che restringe di più il campo)
+  lines.push("");
+  lines.push("PROSSIMO PASSO:");
+  lines.push("- " + (verifica || cs.safety.allowed_next_step || "Raccogliere il dato tecnico mancante."));
 
   // Sequenza causale — avviso evoluzione guasto
   if (cs.sequenza_causale && cs.sequenza_causale.catena && cs.sequenza_causale.catena.length > 1) {
@@ -1631,8 +1652,46 @@ function createOrchestrator(options) {
         };
       }
 
-      // ═══ 11. RISPONDERE ═══
-      var answer = formatResponse(cs, percezione);
+      // ═══ 11. RISPONDERE — bozza deterministica, poi redazione in italiano ═══
+      var draft = formatResponse(cs, percezione);
+
+      // Il narratore riscrive la bozza in italiano tecnico. Non ragiona, non
+      // aggiunge nulla: se viola il mandato o il provider non risponde, resta
+      // la bozza. Vedi rocco_v2/narrator.js.
+      return narrator.narrate(cs, draft, providerGateway, {
+        provider_hint: inp.provider_hint,
+        prior_context: inp.prior_context
+      }).then(function(nar) {
+        return buildResult(cs, percezione, draft, nar, inp);
+      });
+    });
+  }
+
+  function buildResult(cs, percezione, draft, nar, inp) {
+      var answer = nar && nar.narrated ? nar.answer : draft;
+      // Catturato PRIMA del merge: dice se l'LLM ha partecipato al RAGIONAMENTO,
+      // non alla redazione. Le due cose restano distinte.
+      var reasoningProvider = cs.runtime.provider_used || null;
+
+      if (nar) {
+        runtimeTrace.record(cs, nar.narrated ? "narrated" : "narration_skipped", {
+          provider: nar.provider_used, reason: nar.reason
+        });
+        // Il provider della redazione è il provider della risposta
+        if (nar.provider_used) {
+          runtimeTrace.mergeRuntime(cs, {
+            provider_used: nar.provider_used,
+            model_used: nar.model_used,
+            fallback_used: !!nar.fallback_used
+          });
+        }
+        cs.narration = {
+          narrated: !!nar.narrated,
+          reason: nar.reason || null,
+          deterministic_draft: nar.narrated ? draft : null
+        };
+      }
+
       var snapshot = caseStateHelpers.buildDiagnosisSnapshot(cs);
       var meta = runtimeTrace.buildRuntimeMetadata(cs);
 
@@ -1641,7 +1700,8 @@ function createOrchestrator(options) {
         active: cs.hypotheses_active.length,
         killed: cs.hypotheses_rejected.length,
         confidence: cs.final_confidence,
-        ai_called: !!cs.runtime.provider_used,
+        ai_called: !!reasoningProvider,
+        narrated: !!(nar && nar.narrated),
         strategia: percezione.novita,
         grafo_nodi: cs.grafo ? Object.keys(cs.grafo.nodi).length : 0,
         controfattuale: cs.controfattuale_risultati.length,
@@ -1676,8 +1736,10 @@ function createOrchestrator(options) {
           hypotheses_killed: cs.hypotheses_rejected.length,
           hypotheses_imagined: cs.hypotheses.filter(function(h) { return h.source === "immaginazione_tecnica"; }).length,
           tools_used: cs.runtime.tools_used.length,
-          ai_called: !!cs.runtime.provider_used,
-          deterministic: !cs.runtime.provider_used,
+          ai_called: !!reasoningProvider,
+          deterministic: !reasoningProvider,
+          narrated: !!(nar && nar.narrated),
+          narration_reason: nar && nar.reason ? nar.reason : null,
           strategia: percezione.novita,
           grafo_nodi: cs.grafo ? Object.keys(cs.grafo.nodi).length : 0,
           controfattuale_eseguito: cs.controfattuale_risultati.length > 0,
@@ -1690,7 +1752,6 @@ function createOrchestrator(options) {
           neural_training: cs.neural_training || null
         }
       };
-    });
   }
 
   return { runDiagnosis: runDiagnosis };
