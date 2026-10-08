@@ -104,6 +104,34 @@ Se tutti i provider LLM falliscono per errore di rete (`isNetworkError()` detect
 ### /api/engine/test endpoint
 `GET /api/engine/test` esegue `analyzeTechnicalRequest` sul caso di test hardcoded (`TEST_CASE` in diagnosticEngine.js) usando i dati reali dei JSON. Utile per verificare il pattern matching senza avviare una conversazione. Risposta include `diagnostic`, `formatted_engine_context`, `formatted_knowledge_context`, `counts`.
 
+### ROCCO V2 — testi delle verifiche (previsione ≠ istruzione)
+`backend/rocco_v2/check_phrasing.js`. Il modello causale **prevede**
+("se X fosse in cortocircuito osserverei R prossima a 0 su X"): serve a
+confrontare l'ipotesi coi fatti. Quelle previsioni finivano però in
+`confirm_tests` e da lì `selectBestAction()` le dava all'utente come
+prossimo passo — un elettricista leggeva `"R prossima a 0 su Circuito luci"`.
+Errore di categoria: *previsione* (cosa vedrei se fosse vero) ≠ *istruzione*
+(cosa fare, con quale strumento, cosa leggere).
+
+`toInstruction()` traduce con 22 schemi in due famiglie: **misure**
+(strumento + grandezza + stato dell'impianto + soglia) e **osservazioni**
+(cosa guardare o provare). Ogni misura di resistenza/isolamento/continuità
+prescrive esplicitamente "a impianto fuori tensione" — verificato dai test.
+Quel che non rientra in uno schema **viene scartato, non inventato**: meglio
+una verifica in meno che un'istruzione sbagliata su un impianto in tensione.
+
+**Scelta del nodo nel controfattuale** (`causal_model.js`): si pesano solo le
+parole **distintive** del grafo. `"circuito"` compare in Circuito
+luci/prese/cucina/bagno: contandola, un'ipotesi come "cortocircuito
+fase-neutro" faceva pari merito su tutti e vinceva il **primo dichiarato** —
+in risposta usciva sempre "Circuito luci" anche parlando di prese in cucina.
+Ora contano le parole che identificano meno di `GENERIC_WORD_SPREAD`=3 nodi,
+più `nodo_problema` (+6) e `menzionato` (+4) che il grafo già calcolava e
+nessuno leggeva. Stesso difetto corretto in `costruisciGrafo()`, che
+confrontava solo la **prima** parola del nome.
+
+Test: `check_phrasing.test.js` — 35 asserzioni.
+
 ### ROCCO V2 — kill rules (esclusione per impossibilità fisica)
 `killImpossible()` leggeva una stringa appiattita di `facts_confirmed` +
 `measurements`: le parole dell'utente non arrivavano mai, e le regole erano
@@ -146,9 +174,20 @@ bastava: ROCCO continuava a ordinare "scollegare tutti i carichi" a chi
 aveva già staccato tutto. Penalità e non esclusione perché a volte la stessa
 misura va ripetuta in condizioni diverse (isolamento a caldo dopo una a freddo).
 
-Test: `backend/rocco_v2/neural/test/kill_rules.test.js` — 71 asserzioni, per
+**Le regex vanno tarate sul corpus reale, non su frasi di comodo.** È il
+punto più fragile di questo lavoro. La prima versione di KR-13 pretendeva
+*"ho sostituito X ma il problema persiste"*: una frase che nessun cliente
+scrive. Nel corpus reale la forma è *"Lampadina nuova, interruttore nuovo,
+continua uguale"* — la regola non scattava mai. Misurato sulle 21 domande
+italiane di `rocco_v2/neural/casi_reali_forum.js`, il riconoscimento delle
+esclusioni è passato da **4/21 a 15/21** riscrivendo i pattern a partire
+dalle frasi vere. Chi tocca `USER_EXCLUSION_PATTERNS` o una regola **rimisuri
+su quel corpus**: `kill_rules.test.js` §11 lo fa, e verifica che su quei casi
+nessuna regola uccida la `causa_reale`.
+
+Test: `backend/rocco_v2/neural/test/kill_rules.test.js` — 80 asserzioni, per
 ogni regola un caso che deve scattare e uno che non deve, più i falsi
-positivi: 6 casi a causa nota verificano che la causa vera resti viva.
+positivi: 6 casi sintetici e i 21 reali verificano che la causa vera resti viva.
 
 ### ROCCO V2 — narratore (la "bocca")
 Il motore v2 ragiona in modo deterministico e non chiamava quasi mai l'LLM

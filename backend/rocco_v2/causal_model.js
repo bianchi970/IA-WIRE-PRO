@@ -261,14 +261,24 @@ function costruisciGrafo(cs) {
     }
   });
 
-  // Cerca di identificare il nodo problema dal testo
+  // Cerca di identificare il nodo problema dal testo.
+  //
+  // Prima si confrontava solo la PRIMA parola del nome: per "Circuito luci",
+  // "Circuito prese", "Circuito cucina" e "Circuito bagno" era sempre
+  // "circuito", quindi bastava che l'utente dicesse "circuito" perché tutti
+  // combaciassero e vincesse l'ultimo del ciclo. Ora si usano le parole
+  // distintive, e vince il nodo con più riscontri nel testo.
+  var distintive = distinctiveWords(grafo);
   var problemaId = null;
+  var problemaScore = 0;
   Object.keys(grafo.nodi).forEach(function(id) {
     var nodo = grafo.nodi[id];
-    var nomeNorm = normalize(nodo.nome);
-    if (text.indexOf(nomeNorm.split(" ")[0]) >= 0 && nodo.tipo === "carico") {
-      problemaId = id;
-    }
+    if (nodo.tipo !== "carico") return;
+    var hits = 0;
+    nodeWords(nodo).forEach(function(w) {
+      if (distintive[w] && text.indexOf(w) >= 0) hits += 1;
+    });
+    if (hits > problemaScore) { problemaScore = hits; problemaId = id; }
   });
 
   // Segna stato dai fatti noti
@@ -711,26 +721,78 @@ function immagina(grafo, cs) {
 // il controfattuale aggiunge profondità: prevede cosa DOVREMMO
 // osservare se l'ipotesi fosse vera, e verifica.
 
+/** Parole significative del nome di un nodo. */
+function nodeWords(nodo) {
+  return normalize(nodo && nodo.nome).split(" ").filter(function(w) { return w.length > 3; });
+}
+
+// Oltre questo numero di nodi, una parola non distingue più niente:
+// "circuito" sta in Circuito luci/prese/cucina/bagno. Sotto la soglia sì:
+// "prese" sta in "Circuito prese" e "MCB prese 16A", cioè nella linea
+// prese e nella sua protezione — ed è esattamente la linea che indica.
+var GENERIC_WORD_SPREAD = 3;
+
+/**
+ * Parole del grafo che identificano una linea o un componente preciso.
+ */
+function distinctiveWords(grafo) {
+  var count = {};
+  Object.keys(grafo.nodi).forEach(function(id) {
+    var seen = {};
+    nodeWords(grafo.nodi[id]).forEach(function(w) {
+      if (seen[w]) return;
+      seen[w] = true;
+      count[w] = (count[w] || 0) + 1;
+    });
+  });
+  var distintive = {};
+  Object.keys(count).forEach(function(w) {
+    if (count[w] < GENERIC_WORD_SPREAD) distintive[w] = true;
+  });
+  return distintive;
+}
+
 function valutaIpotesiConControfattuale(grafo, ipotesi, cs) {
   // Mappa l'ipotesi a un nodo e uno stato del grafo
   var nodoTarget = null;
   var statoTarget = null;
   var lab = normalize(ipotesi.label);
 
-  // Cerca il nodo più rilevante — controlla sia ID sia TUTTE le parole del nome
+  // Cerca il nodo più rilevante.
+  //
+  // Si pesano solo le parole DISTINTIVE del nome. Nel template civile,
+  // "circuito" compare in Circuito luci/prese/cucina/bagno: contandola,
+  // un'ipotesi come "cortocircuito fase-neutro" faceva pari merito su tutti
+  // e vinceva il primo dichiarato — il nodo usciva per ordine di
+  // dichiarazione, non per pertinenza, e in risposta finiva sempre
+  // "Circuito luci" anche parlando di prese in cucina.
+  var distintive = distinctiveWords(grafo);
+  var testoCaso = normalize(s(cs && cs.problem_summary));
   var bestNodoScore = 0;
+
   Object.keys(grafo.nodi).forEach(function(id) {
     var nodo = grafo.nodi[id];
     var score = 0;
-    // Controlla ID del nodo nell'ipotesi
+
+    // Il grafo ha già individuato il nodo del problema e quelli citati
+    if (grafo.nodo_problema === id) score += 6;
+    if (nodo.menzionato) score += 4;
+
+    // ID del nodo nell'ipotesi
     if (id.length > 2 && lab.indexOf(normalize(id)) >= 0) score += 3;
-    // Controlla ogni parola del nome del nodo
-    var nomeWords = normalize(nodo.nome).split(" ").filter(function(w) { return w.length > 3; });
-    nomeWords.forEach(function(w) { if (lab.indexOf(w) >= 0) score += 2; });
-    // Controlla componenti mappati
+
+    // Parole distintive del nome: nell'ipotesi e nel racconto dell'utente
+    nodeWords(nodo).forEach(function(w) {
+      if (!distintive[w]) return;
+      if (lab.indexOf(w) >= 0) score += 2;
+      if (testoCaso && testoCaso.indexOf(w) >= 0) score += 3;
+    });
+
+    // Componenti mappati
     Object.keys(MAPPA_COMPONENTI).forEach(function(key) {
       if (MAPPA_COMPONENTI[key] === id && lab.indexOf(normalize(key)) >= 0) score += 3;
     });
+
     if (score > bestNodoScore) { bestNodoScore = score; nodoTarget = id; }
   });
 
@@ -780,6 +842,8 @@ module.exports = {
   creaArco: creaArco,
   creaGrafo: creaGrafo,
   costruisciGrafo: costruisciGrafo,
+  distinctiveWords: distinctiveWords,
+  nodeWords: nodeWords,
 
   // Template
   templateCivileMonofase: templateCivileMonofase,

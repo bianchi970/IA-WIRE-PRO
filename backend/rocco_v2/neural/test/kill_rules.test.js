@@ -232,6 +232,85 @@ csAz.safety = { level: "attention", reasons: [], blocked_actions: [], allowed_ne
 var azione = orch.selectBestAction(csAz);
 ok(!!(azione && azione.action), "anche se l'unica verifica è già stata fatta, ROCCO propone qualcosa");
 
+section("11. Corpus reale — le frasi vere, non quelle di comodo");
+
+// Le regex sulle frasi italiane sono il punto più fragile di tutto questo
+// lavoro: è facile tararle su frasi inventate a tavolino e credere che
+// funzionino. Qui si misurano sulle 21 domande italiane reali raccolte in
+// casi_reali_forum.js, dove la causa vera è nota.
+//
+// La prima versione di KR-13 pretendeva "ho sostituito X ma il problema
+// persiste". Nel corpus reale la forma è "Lampadina nuova, interruttore
+// nuovo, continua uguale": la regola non scattava mai.
+var corpus = require("../casi_reali_forum");
+var casiIt = corpus.CASI_FORUM.filter(function (c) { return c.lingua === "it"; });
+
+ok(casiIt.length >= 20, "corpus italiano disponibile (" + casiIt.length + " casi)");
+
+var conEsclusioni = casiIt.filter(function (c) {
+  return !!orch.extractUserExclusions(c.domanda);
+});
+// Soglia volutamente sotto il valore attuale: è una rete di sicurezza
+// contro le regressioni, non un bersaglio da rincorrere.
+ok(conEsclusioni.length >= 12,
+  "esclusioni riconosciute in almeno 12 casi reali (ora " + conEsclusioni.length + "/" + casiIt.length + ")");
+
+// Le forme reali che la prima versione mancava
+ok(/lampadina nuova|interruttore nuovo/i.test(
+  orch.extractUserExclusions("La luce funziona quando le pare. Lampadina nuova, interruttore nuovo, continua uguale.")),
+  "caso 5: 'lampadina nuova, interruttore nuovo'");
+ok(fires("KR-13", "La luce funziona quando le pare. Lampadina nuova, interruttore nuovo, continua uguale.") === true,
+  "caso 5: KR-13 scatta sulla forma reale, senza il verbo 'ho sostituito'");
+ok(/le altre prese vanno/i.test(
+  orch.extractUserExclusions("Non funziona più la presa del soggiorno. Le altre prese vanno.")),
+  "caso 3: 'le altre prese vanno' — guasto circoscritto");
+ok(/d'inverno non succedeva|non succedeva/i.test(
+  orch.extractUserExclusions("Dopo 10 minuti scatta il magnetotermico. D'inverno non succedeva.")),
+  "caso 6: 'd'inverno non succedeva' — qualcosa è cambiato");
+ok(/quando piove/i.test(
+  orch.extractUserExclusions("Il differenziale scatta quando piove forte. Coincidenza?")),
+  "caso 9: 'quando piove' — condizione che innesca");
+ok(/staccando di volta in volta/i.test(
+  orch.extractUserExclusions("Staccando di volta in volta tutti i fili sono riuscito a trovare quello incriminato.")),
+  "caso 16: prova di sezionamento già eseguita");
+
+// La proprietà che conta più di tutte: su frasi vere non si uccide la causa vera.
+function paroleChiave(t) {
+  return String(t || "").toLowerCase()
+    .replace(/[àáâä]/g, "a").replace(/[èéêë]/g, "e").replace(/[ìíîï]/g, "i")
+    .replace(/[òóôö]/g, "o").replace(/[ùúûü]/g, "u")
+    .replace(/[^a-z0-9\s]/g, " ").split(/\s+/)
+    .filter(function (w) { return w.length > 4; });
+}
+function descriveStessaCausa(label, causaReale) {
+  var pc = paroleChiave(causaReale);
+  var pl = paroleChiave(label);
+  return pc.filter(function (w) { return pl.indexOf(w) >= 0; }).length >= 2;
+}
+
+var uccisioniSbagliate = [];
+casiIt.forEach(function (c) {
+  var cs = caseWith(c.domanda, [c.causa_reale]);
+  // Due ipotesi di contorno, così la valvola di sicurezza non maschera il test
+  cs.hypotheses.push({
+    label: "Ipotesi di contorno A", reason: "", status: "active", confidence: "possible",
+    source: "test", catena: [], confirm_tests: [], deny_tests: [], supporting_evidence: []
+  });
+  cs.hypotheses.push({
+    label: "Ipotesi di contorno B", reason: "", status: "active", confidence: "possible",
+    source: "test", catena: [], confirm_tests: [], deny_tests: [], supporting_evidence: []
+  });
+  orch.killImpossible(cs);
+  var vera = cs.hypotheses[0];
+  if (vera.status === "rejected" && /^KR-/.test(vera.rejection_reason || "") &&
+      descriveStessaCausa(vera.label, c.causa_reale)) {
+    uccisioniSbagliate.push(c.id + ": " + vera.rejection_reason);
+  }
+});
+ok(uccisioniSbagliate.length === 0,
+  "nessuna causa vera uccisa sui casi reali" +
+  (uccisioniSbagliate.length ? " — " + uccisioniSbagliate.join(" | ") : ""));
+
 console.log("\n" + new Array(61).join("="));
 console.log("KILL RULES: " + passed + " passed, " + failed + " failed");
 console.log(new Array(61).join("="));

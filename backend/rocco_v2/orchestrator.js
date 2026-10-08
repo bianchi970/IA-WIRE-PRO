@@ -31,6 +31,7 @@ var providerGatewayFactory = require("./provider_gateway");
 var responseFormatter = require("./response_formatter");
 var lexicon = require("./lexicon");
 var narrator = require("./narrator");
+var checkPhrasing = require("./check_phrasing");
 var runtimeTrace = require("./runtime_trace");
 var memory = require("./memory");
 var contracts = require("./contracts");
@@ -740,6 +741,11 @@ function ragiona(cs, percezione) {
 // descrizione nominale ("impianto 230V") non è una misura, e usarla come
 // prova escluderebbe ipotesi ancora valide. Qui si estraggono SOLO le
 // frasi in cui l'utente dichiara di aver verificato o escluso qualcosa.
+// I pattern sotto sono ricavati dalle 21 domande italiane reali di
+// rocco_v2/neural/casi_reali_forum.js, non da frasi di comodo: un cliente
+// non scrive "ho sostituito il componente ma il problema persiste", scrive
+// "lampadina nuova, interruttore nuovo, continua uguale". Chi modifica
+// questi pattern li rimisuri su quel corpus (vedi kill_rules.test.js §11).
 var USER_EXCLUSION_PATTERNS = [
   // "anche con tutte le prese staccate", "anche a vuoto", "anche senza carico"
   /anche (?:con|senza|a|se)\b[^.;!?]{0,80}/g,
@@ -754,7 +760,36 @@ var USER_EXCLUSION_PATTERNS = [
   /[^.;!?]{0,45}\bnon\s+(?:scatta|salta|interviene|succede|si verifica)\b[^.;!?]{0,70}/g,
   // "solo quando accendo...", "solo di sera", "solo in bagno": qualunque
   // clausola con "solo" è una condizione discriminante, ed è sempre utile.
-  /\bsolo\b[^.;!?]{0,70}/g
+  /\bsolo\b[^.;!?]{0,70}/g,
+
+  // "Lampadina nuova, interruttore nuovo" (caso 5): la sostituzione
+  // dichiarata senza il verbo. È la forma più comune nel corpus reale.
+  /\b(?:lampadin\w*|lampad\w*|interruttor\w*|differenzial\w*|magnetotermic\w*|pres[ae]|cav[oi]|sensor\w*|termostat\w*|sched\w*|motor\w*|pomp\w*|valvol\w*|resistenz\w*|fusibil\w*|rel[eè]|contattor\w*|batteri\w*|alimentator\w*)\s+(?:nuov[oaie]|appena (?:cambiat|sostituit|install|mess)\w*)/gi,
+
+  // "continua uguale", "non cambia niente", "resta lo stesso" (caso 5)
+  /(?:continua|continuano|resta|restano|rimane|rimangono)\s+(?:uguale|identic\w*|lo stesso|come prima|tutto uguale)|non cambia (?:niente|nulla)/gi,
+
+  // "Le altre prese vanno", "Le luci funzionano" (casi 3, 14): il guasto
+  // è circoscritto a una linea, e questo esclude le cause a monte comuni.
+  /\b(?:le|gli|i)\s+altr[aeio]\w*[^.;!?]{0,40}(?:vanno|funzionano|van bene|sono ok|a posto)|\b(?:le luci|le altre prese|gli altri circuiti)\s+(?:funzionano|vanno)/gi,
+
+  // "D'inverno non succedeva", "Ieri sera funzionava" (casi 6, 10):
+  // il guasto è comparso, quindi qualcosa è cambiato.
+  /\b(?:prima|ieri|stamattina|d['\s]inverno|d['\s]estate|l['\s]anno scorso|fino a (?:ieri|poco|qualche))\b[^.;!?]{0,60}/gi,
+
+  // "a volte per mesi non succede" (caso 17), "non succedeva"
+  /non (?:succede|succedeva|capita|capitava|si presenta|si presentava)\b[^.;!?]{0,50}/gi,
+
+  // "scatta quando piove" (casi 9, 21), "quando accendo la lavatrice" (1):
+  // la condizione che innesca il guasto è la prova discriminante migliore.
+  /\bquando\s+(?:piove|fa caldo|fa freddo|c['\s]?[eè] umidit|accendo|accende|uso|usa|parte|si avvia|arriva)\w*[^.;!?]{0,60}/gi,
+
+  // "nessun errore sull'inverter", "i pannelli sembrano ok" (caso 13)
+  /\bnessun\w*\s+(?:errore|allarme|anomalia|segnalazione|codice)\b[^.;!?]{0,40}|\bsembran?o?\s+(?:ok|a posto|buoni|integri|normali)\b/gi,
+
+  // "staccando di volta in volta tutti i fili sono riuscito a trovare
+  // quello incriminato" (caso 16): la prova di sezionamento già eseguita.
+  /\b(?:staccand|scollegand|sezionand|provand|escludend)\w*[^.;!?]{0,70}/gi
 ];
 
 function extractUserExclusions(text) {
@@ -842,8 +877,12 @@ var KILL_RULES = [
     reason: "Scatta solo il magnetotermico, il differenziale no: sovracorrente, non dispersione" },
 
   // Componente appena sostituito e problema invariato: quel componente è sano.
+  // La prima versione pretendeva "ho sostituito X ma il problema persiste":
+  // una frase che nessun cliente scrive. Nel corpus reale la forma è
+  // "Lampadina nuova, interruttore nuovo, continua uguale" (caso 5).
   { id: "KR-13",
-    signals: [/ho (?:sostituit|cambiat)\w*|appena (?:sostituit|cambiat|install)\w*|nuovo di fabbrica/, /(?:ma|e) (?:il problema|lo stesso|uguale|non cambia|continua|persiste|scatta ancora|sempre)/],
+    signals: [/ho (?:sostituit|cambiat)\w*|appena (?:sostituit|cambiat|install|mess)\w*|nuovo di fabbrica|(?:lampadin|lampad|interruttor|differenzial|magnetotermic|pres|cav|sensor|termostat|sched|motor|pomp|valvol|resistenz|fusibil|rel|contattor|batteri|alimentator)\w*\s+nuov[oaie]/,
+              /(?:ma|e)\s+(?:il problema|lo stesso|uguale|non cambia|continua|persiste|scatta ancora|sempre)|continua\s+(?:uguale|identic\w*|lo stesso|come prima)|non cambia (?:niente|nulla)|resta uguale/],
     kills: /difettoso|a fine vita|guasto interno al dispositivo|dispositivo guasto/,
     reason: "Componente sostituito e sintomo invariato: il dispositivo non era la causa" }
 ];
@@ -1039,12 +1078,16 @@ function inferActionType(text) {
   return "ask_user";
 }
 
-// ── Verifiche che l'utente ha già eseguito ─────────────────────────────
+// ── Verifiche a cui l'utente ha già risposto ───────────────────────────
 //
 // Non basta escludere l'ipotesi: se l'utente ha già staccato tutti i
 // carichi, ordinargli di staccare i carichi lo fa sentire inascoltato ed
-// è la riga più visibile della risposta. Qui si accoppia la prova
-// dichiarata dall'utente con le verifiche che quella prova rende inutili.
+// è la riga più visibile della risposta. Qui si accoppia ciò che l'utente
+// ha già detto con le verifiche che quel dato rende inutili.
+//
+// `on: "story"` per i dati che stanno nel racconto e non sono verifiche
+// dichiarate: il tempo di scatto è un'informazione che l'utente dà
+// descrivendo il sintomo, non una prova che ha eseguito.
 var ALREADY_DONE = [
   { done: NO_LOAD_PATTERN,
     makes_useless: /scolleg\w*|stacc\w*|disinseri\w*|a vuoto|senza carico/ },
@@ -1686,8 +1729,11 @@ function createOrchestrator(options) {
           h.catena.push("Controfattuale: " + cf.valutazione.matching + " previsioni confermate dai fatti");
         }
 
-        // Le verifiche suggerite dal controfattuale arricchiscono i test
-        arr(cf.verifiche_suggerite).forEach(function(v) {
+        // Le verifiche suggerite dal controfattuale arricchiscono i test.
+        // Sono PREVISIONI ("R prossima a 0 su X"): vanno tradotte in
+        // istruzioni operative prima di poter finire davanti all'utente.
+        // Ciò che non è traducibile viene scartato, non inventato.
+        checkPhrasing.toInstructions(cf.verifiche_suggerite).forEach(function(v) {
           if (h.confirm_tests.indexOf(v) < 0) h.confirm_tests.push(v);
         });
 
