@@ -1966,12 +1966,17 @@ function createOrchestrator(options) {
         runtimeTrace.record(cs, nar.narrated ? "narrated" : "narration_skipped", {
           provider: nar.provider_used, reason: nar.reason
         });
-        // Il provider della redazione è il provider della risposta
+        // Il provider della redazione è il provider della risposta.
+        //
+        // I flag di fallback si SOMMANO, non si sovrascrivono: se il
+        // ragionamento ha già dovuto ripiegare su un secondo provider,
+        // quel fatto non va perso perché la redazione è andata liscia.
         if (nar.provider_used) {
           runtimeTrace.mergeRuntime(cs, {
             provider_used: nar.provider_used,
             model_used: nar.model_used,
-            fallback_used: !!nar.fallback_used
+            fallback_used: !!cs.runtime.fallback_used || !!nar.fallback_used,
+            fallback_reason: cs.runtime.fallback_reason || nar.fallback_reason || null
           });
         }
         cs.narration = {

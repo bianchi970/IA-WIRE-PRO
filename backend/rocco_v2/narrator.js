@@ -438,7 +438,7 @@ function narrate(cs, draft, gateway, options) {
   var opts = options || {};
   var fallback = {
     answer: s(draft), narrated: false, reason: null,
-    provider_used: null, model_used: null, fallback_used: false
+    provider_used: null, model_used: null, fallback_used: false, fallback_reason: null
   };
 
   if (!isEnabled()) {
@@ -473,7 +473,8 @@ function narrate(cs, draft, gateway, options) {
         answer: fallback.answer, narrated: false, reason: check.reason,
         provider_used: s(r && r.provider_used) || null,
         model_used: s(r && r.model_used) || null,
-        fallback_used: !!(r && r.fallback_used)
+        fallback_used: !!(r && r.fallback_used),
+        fallback_reason: s(r && r.fallback_reason) || null
       };
     }
 
@@ -481,7 +482,8 @@ function narrate(cs, draft, gateway, options) {
       answer: text, narrated: true, reason: null,
       provider_used: s(r.provider_used) || null,
       model_used: s(r.model_used) || null,
-      fallback_used: !!r.fallback_used
+      fallback_used: !!r.fallback_used,
+      fallback_reason: s(r.fallback_reason) || null
     };
   }).catch(function (err) {
     fallback.reason = s(err && err.message) || "errore provider";

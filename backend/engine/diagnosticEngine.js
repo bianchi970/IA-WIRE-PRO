@@ -667,11 +667,30 @@ function applysynonyms(word) {
   return SYNONYM_MAP[word] || word;
 }
 
+/**
+ * Normalizza una parola per il confronto: prima la tabella dei sinonimi
+ * sulla parola INTERA, poi — solo se la tabella non la conosce — lo stem.
+ *
+ * L'ordine inverso (stem e poi sinonimi) fondeva parole senza rapporto:
+ * stem("presenza") toglie "nza" e dà "prese", che la tabella normalizza a
+ * "presa". Così la keyword "presenza" del sensore di movimento diventava
+ * identica alla parola "presa", e "non funziona la presa del soggiorno"
+ * riconosceva un sensore PIR. La tabella ha già la voce giusta
+ * ("presenza" → "rilevatore presenza"): va consultata prima che lo
+ * stemmer distrugga la parola.
+ */
+function canonicalWord(word) {
+  var w = normalize(word).trim();
+  if (!w) return "";
+  if (SYNONYM_MAP[w]) return SYNONYM_MAP[w];
+  return applysynonyms(stem(w));
+}
+
 function tokenize(text) {
   return normalize(text)
     .split(/[\s,;.()\/\-\[\]:"'!?]+/)
     .filter(function (w) { return w.length > 2; })
-    .map(function (w) { return applysynonyms(stem(w)); });
+    .map(function (w) { return canonicalWord(w); });
 }
 
 // tokenize senza stemming/sinonimi — per matching substring su testo grezzo
@@ -718,7 +737,7 @@ function findMatches(text, keywords) {
 
 // Helper: applica sinonimi + stem su stringa normalizzata
 function applysynonyms_stem(word) {
-  return applysynonyms(stem(normalize(word)));
+  return canonicalWord(word);
 }
 
 // ============================================================
@@ -912,11 +931,30 @@ var PAIR_BOOSTS = [
 
 // Matching avanzato: stem+sinonimi + prefix matching bidirezionale
 // textTokens e queryTokens sono già normalizzati/stemmed/sinonimizzati
+// Il prefix matching serve alle forme flesse: singolare/plurale,
+// maschile/femminile, radice stemmata. Quelle differiscono per una o due
+// lettere in coda. Oltre questo scarto non è più flessione ma un'altra
+// parola: "magnetico" → stem "magnet" è prefisso di "magnetotermic", e
+// così il finecorsa (keyword "magnetico") veniva riconosciuto in ogni
+// frase che parlasse di magnetotermici.
+var PREFIX_MAX_GAP = 3;
+
 function tokensMatch(a, b) {
   if (a === b) return true;
   // prefix matching bidirezionale (es. "differenzial" vs "differenziale")
-  if (a.length >= 4 && b.length >= 4) {
+  if (a.length >= 4 && b.length >= 4 && Math.abs(a.length - b.length) <= PREFIX_MAX_GAP) {
     if (a.indexOf(b) === 0 || b.indexOf(a) === 0) return true;
+  }
+  // Plurale femminile italiano: cassetta/cassette, scatola/scatole.
+  // Lo stemmer non tocca la vocale finale, e il prefix matching non aiuta
+  // perché le due forme hanno la stessa lunghezza. Senza questa regola
+  // "ho aperto tutte le cassette di derivazione" non riconosceva la
+  // cassetta — funzionava solo "prese", che ha una voce esplicita fra i
+  // sinonimi.
+  if (a.length >= 6 && a.length === b.length &&
+      a.slice(0, -1) === b.slice(0, -1) &&
+      /[aeio]/.test(a.slice(-1)) && /[aeio]/.test(b.slice(-1))) {
+    return true;
   }
   return false;
 }
@@ -955,8 +993,8 @@ function scorePatternMatch(pattern, queryNorm, queryTokens) {
     var w0 = PAIR_BOOSTS[b][0], w1 = PAIR_BOOSTS[b][1];
     var symNorm = normalize(pattern.symptom || "");
     // boost solo se la coppia è rilevante per il pattern
-    if ((symNorm.indexOf(w0) >= 0 || symNorm.indexOf(w1) >= 0) &&
-        queryNorm.indexOf(w0) >= 0 && queryNorm.indexOf(w1) >= 0) {
+    if ((containsKeyword(symNorm, w0) || containsKeyword(symNorm, w1)) &&
+        containsKeyword(queryNorm, w0) && containsKeyword(queryNorm, w1)) {
       score += 4;
     }
   }
@@ -965,21 +1003,84 @@ function scorePatternMatch(pattern, queryNorm, queryTokens) {
 }
 
 // ============================================================
+// Confronto keyword con confine di parola
+// ============================================================
+//
+// Il matching era per sottostringa (`queryNorm.indexOf(kn) >= 0`). Sulle
+// sigle elettriche di due o tre lettere questo pescava dentro le parole
+// italiane comuni, e ROCCO riconosceva componenti inesistenti:
+//
+//   "DIN" dentro "lampaDINa"   → relè temporizzatore, morsettiera
+//   "NA"  dentro "cuciNA"      → finecorsa
+//   "aM"  dentro "lAMpadina"   → fusibile cilindrico
+//   "gG"  dentro "soGGiorno"   → fusibile cilindrico
+//   "TR"  dentro "lavaTRice"   → relè termico
+//   "TA"  dentro "salTA"       → trasformatore di corrente
+//   "NO"  dentro "NOn"         → pulsante di comando
+//
+// Le sigle vere servono — "ho un TA da 100/5" va riconosciuto — quindi non
+// si eliminano: si pretende che siano parole intere. Le forme flesse
+// ("differenziali") restano coperte dal percorso 2, che fa prefix matching.
+var KEYWORD_BOUNDARY_CACHE = {};
+
+function keywordBoundaryRegex(kn) {
+  if (KEYWORD_BOUNDARY_CACHE[kn]) return KEYWORD_BOUNDARY_CACHE[kn];
+  var escaped = kn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  var re = new RegExp("(^|[^a-z0-9])" + escaped + "([^a-z0-9]|$)", "i");
+  KEYWORD_BOUNDARY_CACHE[kn] = re;
+  return re;
+}
+
+/** La keyword compare nel testo come parola intera? */
+function containsKeyword(queryNorm, keyword) {
+  var kn = normalize(keyword).trim();
+  // Una lettera sola non identifica niente: troppo rumorosa.
+  if (kn.length < 2) return false;
+  return keywordBoundaryRegex(kn).test(queryNorm);
+}
+
+// ============================================================
 // Scoring componenti (C)
 // Confronta le keywords del componente con i token della query
 // ============================================================
+/**
+ * La keyword, confrontata token per token, è presente nella query?
+ *
+ * Una keyword multi-parola richiede TUTTI i suoi token significativi.
+ * Prima si confrontava la keyword intera contro un singolo token della
+ * query, con prefix matching: "interrutt" risultava prefisso di
+ * "interruttore automatico di potenza", quindi la parola "interruttore" —
+ * che in casa è il tasto a muro — riconosceva sette componenti di quadro
+ * (scatolato di potenza, salvamotore, ATS, sezionatore, crepuscolare...).
+ * Ora "interruttore scatolato" pretende anche "scatolato".
+ */
+function keywordTokensPresent(kn, queryTokens) {
+  var kwTokens = normalize(kn)
+    .split(/[\s,;.()\/\-\[\]:"'!?]+/)
+    .filter(function (w) { return w.length > 2; })
+    .map(function (w) { return canonicalWord(w); });
+
+  if (!kwTokens.length) return false;
+
+  for (var i = 0; i < kwTokens.length; i++) {
+    var trovato = false;
+    for (var j = 0; j < queryTokens.length; j++) {
+      if (tokensMatch(queryTokens[j], kwTokens[i])) { trovato = true; break; }
+    }
+    if (!trovato) return false;
+  }
+  return true;
+}
+
 function scoreComponentMatch(component, queryNorm, queryTokens) {
   var keywords = Array.isArray(component.keywords) ? component.keywords : [];
   var score = 0;
   for (var i = 0; i < keywords.length; i++) {
     var kn = normalize(keywords[i]);
-    // 1) substring diretto (sigle, codici brevi)
-    if (queryNorm.indexOf(kn) >= 0) { score += 2; continue; }
-    // 2) stem+sinonimi + prefix matching
-    var ks = applysynonyms_stem(kn);
-    for (var j = 0; j < queryTokens.length; j++) {
-      if (tokensMatch(queryTokens[j], ks)) { score += 2; break; }
-    }
+    // 1) keyword come parola intera (sigle, codici brevi, termini esatti)
+    if (containsKeyword(queryNorm, kn)) { score += 2; continue; }
+    // 2) token per token, con prefix matching sulle forme flesse
+    if (keywordTokensPresent(kn, queryTokens)) { score += 2; }
   }
   return score;
 }
@@ -993,7 +1094,7 @@ function scoreRuleMatch(rule, queryNorm, queryTokens) {
   score += scoreText(rule.when_to_apply || "", queryTokens) * 3;
   var seen = Array.isArray(rule.if_seen_in_photo) ? rule.if_seen_in_photo : [];
   for (var i = 0; i < seen.length; i++) {
-    if (queryNorm.indexOf(normalize(seen[i])) >= 0) score += 2;
+    if (containsKeyword(queryNorm, seen[i])) score += 2;
   }
   score += scoreText(rule.rule || "", queryTokens);
   return score;
@@ -5065,5 +5166,13 @@ module.exports = {
   formatDiagnosticContext: formatDiagnosticContext,
   formatOfflineAnswer:     formatOfflineAnswer,
   validateDiagOutput:      validateDiagOutput,
-  TEST_CASE:               TEST_CASE
+  TEST_CASE:               TEST_CASE,
+
+  // Esposti per i test e per diagnosticare il riconoscimento componenti:
+  // è il punto dove nascono i falsi positivi, e va potuto misurare.
+  containsKeyword:         containsKeyword,
+  scoreComponentMatch:     scoreComponentMatch,
+  tokensMatch:             tokensMatch,
+  tokenize:                tokenize,
+  normalize:               normalize
 };

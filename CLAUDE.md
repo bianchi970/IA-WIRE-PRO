@@ -104,6 +104,45 @@ Se tutti i provider LLM falliscono per errore di rete (`isNetworkError()` detect
 ### /api/engine/test endpoint
 `GET /api/engine/test` esegue `analyzeTechnicalRequest` sul caso di test hardcoded (`TEST_CASE` in diagnosticEngine.js) usando i dati reali dei JSON. Utile per verificare il pattern matching senza avviare una conversazione. Risposta include `diagnostic`, `formatted_engine_context`, `formatted_knowledge_context`, `counts`.
 
+### Riconoscimento componenti (engine/diagnosticEngine.js)
+Quattro difetti distinti producevano componenti inesistenti nelle risposte.
+Sui 21 casi reali italiani, **prima ogni caso restituiva esattamente 3
+componenti**: lo `slice(0, 3)` era sempre saturato dal rumore, il
+riconoscitore non selezionava — restituiva sempre il massimo. Ora 63 → 33.
+
+1. **Sigle come sottostringhe.** `queryNorm.indexOf(keyword)` pescava le
+   sigle di 2-3 lettere dentro le parole italiane: `DIN` in "lampa**din**a",
+   `NA` in "cuci**na**", `aM` in "l**am**padina", `gG` in "so**gg**iorno",
+   `TR` in "lava**tr**ice", `TA` in "sal**ta**", `NO` in "**no**n".
+   Fix: `containsKeyword()` con confini di parola. Le sigle vere restano
+   riconoscibili ("ho un TA da 100/5"), si pretende la parola intera.
+2. **Keyword multi-parola soddisfatte da un token.** `tokensMatch` trovava
+   "interrutt" prefisso di "interruttore automatico di potenza": la parola
+   "interruttore" — in casa il tasto a muro — riconosceva 7 componenti di
+   quadro. Fix: `keywordTokensPresent()` pretende **tutti** i token.
+3. **Sinonimi applicati dopo lo stem.** `stem("presenza")` toglie "nza" e dà
+   "prese", che la tabella normalizza a "presa": la keyword del sensore di
+   movimento diventava identica alla parola "presa". Fix: `canonicalWord()`
+   consulta la tabella sulla parola **intera** prima di stemmare — la voce
+   giusta (`presenza → rilevatore presenza`) c'era già.
+4. **Prefix matching tra parole diverse.** `stem("magnetico")` = "magnet",
+   prefisso di "magnetoterm": il finecorsa compariva in ogni frase sui
+   magnetotermici. Fix: `PREFIX_MAX_GAP = 3` — la flessione cambia una o due
+   lettere in coda, oltre è un'altra parola.
+   Aggiunta: plurale femminile (`cassette`/`cassetta`), che lo stemmer non
+   toccava e il prefix matching non copriva (stessa lunghezza).
+
+Esportati per i test: `containsKeyword`, `scoreComponentMatch`,
+`tokensMatch`, `tokenize`, `normalize`.
+Test: `rocco_v2/neural/test/component_recognition.test.js` — 36 asserzioni.
+
+**Aperto**: la `SYNONYM_MAP` (295 voci) mescola sinonimi veri
+(`salvavita→differenziale`) con **iperonimi schiacciati su un dispositivo**
+(`interruttore→magnetotermico`, `protezione→differenziale`,
+`pannello→quadro`, `riscaldamento→caldaia`). Questi fanno affermare a ROCCO
+componenti che l'utente non ha nominato: è una decisione di dominio, da
+prendere voce per voce con l'elettricista.
+
 ### ROCCO V2 — testi delle verifiche (previsione ≠ istruzione)
 `backend/rocco_v2/check_phrasing.js`. Il modello causale **prevede**
 ("se X fosse in cortocircuito osserverei R prossima a 0 su X"): serve a
