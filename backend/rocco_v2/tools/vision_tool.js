@@ -1,6 +1,7 @@
 "use strict";
 
 var analyzePanel = require("../../vision/analyzePanel").analyzePanel;
+var lexicon = require("../lexicon");
 
 function buildImageDataUrl(imageBuffer, mimeType) {
   if (!Buffer.isBuffer(imageBuffer)) return null;
@@ -43,9 +44,12 @@ function run(caseState, context) {
       });
     }
   }).then(function (result) {
+    // Qui finivano slug e annotazioni nelle OSSERVAZIONI dell'utente
+    // ("rcd-ac-2p conf=0.8"). Il lessico esiste per tradurli; i punteggi
+    // restano in result.components per chi li usa.
     var evidence = (result.components || []).map(function (item) {
-      return item.component_id + " conf=" + item.confidence;
-    });
+      return lexicon.humanizeComponent(item.component_id) || String(item.component_id || "");
+    }).filter(Boolean);
     return {
       tool_name: "vision_tool",
       ok: true,

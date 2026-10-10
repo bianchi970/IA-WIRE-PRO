@@ -197,6 +197,33 @@ function humanizeComponents(list) {
  * semplice slice(0,6) all'utente arrivavano SOLO gli slug. Qui le frasi
  * complete hanno priorità, gli slug tradotti riempiono lo spazio restante.
  */
+// Righe che il motore diagnostico si scrive per sé.
+//
+// `facts_confirmed` riceve anche le `osservazioni` del motore
+// (case_state.js: toolResult.evidence), e cleanFacts dà priorità alle frasi
+// sugli slug: queste righe sono frasi, quindi occupavano tutti i posti di
+// OSSERVAZIONI e spingevano fuori i fatti veri. L'elettricista leggeva
+// "Keyword tecniche rilevate: misura, megohmetro", "SAFETY: safe",
+// "AZIONE IMMEDIATA: procedere con il prossimo passo tecnico".
+//
+// Il criterio: si scarta la contabilità interna e ciò che duplica un'altra
+// sezione del referto (SAFETY → RISCHI REALI, AZIONE IMMEDIATA → PROSSIMO
+// PASSO, IPOTESI → IPOTESI). Resta quel che afferma un fatto sull'impianto,
+// come "Valori misurati rilevati" o "CONTRADDIZIONE".
+var ENGINE_INTERNAL_PREFIXES = [
+  "keyword tecniche rilevate",
+  "caso: domini osservati",
+  "memoria tecnica:",
+  "safety:",
+  "azione immediata:",
+  "ipotesi:"
+];
+
+function isEngineInternal(text) {
+  var t = s(text).toLowerCase();
+  return ENGINE_INTERNAL_PREFIXES.some(function (p) { return t.indexOf(p) === 0; });
+}
+
 function cleanFacts(facts, limit) {
   var max = typeof limit === "number" && limit > 0 ? limit : 6;
   var sentences = [];
@@ -206,6 +233,7 @@ function cleanFacts(facts, limit) {
   (Array.isArray(facts) ? facts : []).forEach(function (item) {
     var t = s(item);
     if (!t) return;
+    if (isEngineInternal(t)) return;
     if (isMachineToken(t)) tokens.push(t);
     else sentences.push(t);
   });
@@ -238,6 +266,8 @@ module.exports = {
   humanizeComponent: humanizeComponent,
   humanizeComponents: humanizeComponents,
   cleanFacts: cleanFacts,
+  isEngineInternal: isEngineInternal,
+  ENGINE_INTERNAL_PREFIXES: ENGINE_INTERNAL_PREFIXES,
   certaintyLabel: certaintyLabel,
   safetyLabel: safetyLabel
 };

@@ -20,8 +20,13 @@ function run(caseState) {
   return Promise.resolve({
     tool_name: "recognition_tool",
     ok: true,
+    // `evidence` finisce in facts_confirmed e da lì nelle OSSERVAZIONI che
+    // legge l'elettricista: ci va il nome del componente, non l'annotazione
+    // del riconoscitore. Usciva "Differenziale conf=0.70". Il punteggio
+    // resta in raw_ref.scored_components, che è dove lo cerca chi lo usa
+    // (orchestrator_legacy): nessuno leggeva "conf=" da qui.
     evidence: legacyComponents.concat(scoredComponents.map(function (item) {
-      return item.component_name + " conf=" + item.confidence.toFixed(2);
+      return item.component_name;
     })),
     measurements: measurementList,
     warnings: warnings,
