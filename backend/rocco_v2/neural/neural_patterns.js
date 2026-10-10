@@ -6,6 +6,7 @@
 // ============================================================================
 
 var nc = require("./neural_core");
+var limiti = require("../../knowledge/limiti");
 
 // --- Feature schema ---
 // Ogni vettore di features rappresenta una situazione elettrica misurata
@@ -398,24 +399,47 @@ function bootstrapSintetico() {
   initAnomalyNet();
   initFaultNet();
 
-  // --- Dati sintetici "normali" per autoencoder ---
+  // --- Che cos'è "normale": lo dicono le norme, non un sorteggio ---
+  //
+  // Qui l'inviluppo del normale era scritto a mano, con numeri che non
+  // coincidevano con quelli che ROCCO dichiara all'utente: la tensione
+  // sana era 220-240 V mentre il motore e la scuola dicono 230 V ±10%, cioè
+  // 207-253; l'isolamento sano partiva da 5 MOhm mentre la soglia normativa
+  // è 1 MOhm. La rete imparava un'idea di "normale" diversa da quella con
+  // cui ROCCO giudica, e nessuno dei due sapeva dell'altro.
+  //
+  // Ora gli estremi vengono da `knowledge/limiti.js`, che li fa risalire al
+  // punto del curriculum che li insegna. Il campionamento dentro
+  // l'inviluppo resta pseudocasuale ma riproducibile (`nc.rnd()`): la
+  // soglia è norma, la posizione dentro l'intervallo no.
+  var vFN = limiti.intervallo("tensione_fase_neutro");          // 207–253 V
+  var vFF = limiti.intervallo("tensione_fase_fase");            // 360–440 V
+  var inMax = limiti.valore("corrente_circuito_domestico");     // 16 A
+  var isoMin = limiti.valore("isolamento_minimo");              // 1 MOhm
+  var isoNuovo = limiti.valore("isolamento_nuovo");             // 100 MOhm
+  var contMax = limiti.valore("continuita_conduttore");         // 1 Ohm
+  var freq = limiti.intervallo("frequenza_nominale");           // 49.5–50.5 Hz
+  var thdMax = limiti.valore("thd_tensione");                   // 8 %
+  var idn = limiti.valore("corrente_differenziale_civile");     // 30 mA
+  var sqMax = limiti.valore("squilibrio_tensioni");             // 2 %
+
   var normali = [];
   for (var n = 0; n < 100; n++) {
     var f = new Array(INPUT_DIM);
-    f[0] = normalizeValue(220 + nc.rnd() * 20, 0, 400);     // tensione_fn ~220-240V
-    f[1] = normalizeValue(380 + nc.rnd() * 20, 0, 700);     // tensione_ff ~380-400V
-    f[2] = normalizeValue(2 + nc.rnd() * 14, 0, 100);       // corrente ~2-16A
-    f[3] = logNormalize(5 + nc.rnd() * 995, 999);           // isolamento >5MOhm
-    f[4] = logNormalize(0.1 + nc.rnd() * 0.9, 999);         // continuità <1ohm
-    f[5] = 0.85 + nc.rnd() * 0.15;                          // cosφ ~0.85-1.0
-    f[6] = normalizeValue(49.5 + nc.rnd(), 45, 65);         // frequenza ~49.5-50.5Hz
-    f[7] = normalizeValue(20 + nc.rnd() * 25, 0, 200);      // temperatura ~20-45°C
-    f[8] = normalizeValue(nc.rnd() * 5, 0, 100);            // THD <5%
-    f[9] = normalizeValue(nc.rnd() * 10, 0, 500);           // dispersione <10mA
-    f[10] = normalizeValue(nc.rnd() * 3, 0, 50);            // squilibrio <3%
+    f[0] = normalizeValue(vFN[0] + nc.rnd() * (vFN[1] - vFN[0]), 0, 400);   // nel range normativo
+    f[1] = normalizeValue(vFF[0] + nc.rnd() * (vFF[1] - vFF[0]), 0, 700);
+    f[2] = normalizeValue(1 + nc.rnd() * (inMax - 1), 0, 100);              // sotto il calibro
+    f[3] = logNormalize(isoMin + nc.rnd() * (isoNuovo * 10 - isoMin), 999); // sopra la soglia
+    f[4] = logNormalize(contMax * 0.1 + nc.rnd() * contMax * 0.9, 999);     // conduttore sano
+    f[5] = 0.85 + nc.rnd() * 0.15;                          // cosφ: L02, carichi resistivi
+    f[6] = normalizeValue(freq[0] + nc.rnd() * (freq[1] - freq[0]), 45, 65);
+    f[7] = normalizeValue(20 + nc.rnd() * 25, 0, 200);      // ambiente: nessuna norma in gioco
+    f[8] = normalizeValue(nc.rnd() * thdMax, 0, 100);       // sotto il limite di qualità
+    f[9] = normalizeValue(nc.rnd() * (idn / 3), 0, 500);    // dispersione ben sotto I_dn
+    f[10] = normalizeValue(nc.rnd() * sqMax, 0, 50);        // squilibrio entro il limite
     f[11] = normalizeValue(nc.rnd() * 2, 0, 100);           // corrente neutro <2A
-    // Sistema random
-    var sys = Math.floor(nc.rnd() * 5);
+    // Tipo di sistema: tutti rappresentati, non sorteggiati
+    var sys = n % 5;
     for (var s = 0; s < 5; s++) f[12 + s] = s === sys ? 1 : 0;
     f[17] = nc.rnd() > 0.3 ? 1 : 0;  // ha diff
     f[18] = 1;                              // ha mcb
@@ -434,8 +458,8 @@ function bootstrapSintetico() {
   // Dispersione: isolamento basso, corrente dispersione alta
   for (var n = 0; n < 20; n++) {
     var f = generaFeatureBase();
-    f[3] = logNormalize(0.01 + nc.rnd() * 0.4, 999); // isolamento <0.5MOhm
-    f[9] = normalizeValue(30 + nc.rnd() * 200, 0, 500); // dispersione >30mA
+    f[3] = logNormalize(0.01 + nc.rnd() * (limiti.valore("isolamento_minimo") * 0.4), 999); // isolamento sotto la soglia
+    f[9] = normalizeValue(limiti.valore("corrente_differenziale_civile") + nc.rnd() * 200, 0, 500); // dispersione oltre I_dn
     f[19] = 1; // protezione scattata
     faultInputs.push(f);
     faultTargets.push(nc.oneHot(0, NUM_FAULTS));
@@ -454,8 +478,8 @@ function bootstrapSintetico() {
   // Sovraccarico: corrente sopra nominale
   for (var n = 0; n < 20; n++) {
     var f = generaFeatureBase();
-    f[2] = normalizeValue(18 + nc.rnd() * 15, 0, 100); // corrente 18-33A
-    f[7] = normalizeValue(50 + nc.rnd() * 40, 0, 200); // temperatura alta
+    f[2] = normalizeValue(limiti.valore("corrente_circuito_domestico") * 1.12 + nc.rnd() * 15, 0, 100); // corrente oltre il calibro
+    f[7] = normalizeValue(limiti.valore("temperatura_connessione") * 0.6 + nc.rnd() * 40, 0, 200); // temperatura in salita
     f[19] = 1;
     faultInputs.push(f);
     faultTargets.push(nc.oneHot(2, NUM_FAULTS));
@@ -535,8 +559,9 @@ function bootstrapSintetico() {
 
 function generaFeatureBase() {
   var f = new Array(INPUT_DIM);
-  f[0] = normalizeValue(225 + nc.rnd() * 10, 0, 400);
-  f[1] = normalizeValue(385 + nc.rnd() * 10, 0, 700);
+  var vfn = limiti.limite("tensione_fase_neutro").valore;
+  f[0] = normalizeValue(vfn - 5 + nc.rnd() * 10, 0, 400);
+  f[1] = normalizeValue(limiti.valore("tensione_fase_fase") - 15 + nc.rnd() * 10, 0, 700);
   f[2] = normalizeValue(5 + nc.rnd() * 10, 0, 100);
   f[3] = logNormalize(10 + nc.rnd() * 500, 999);
   f[4] = logNormalize(0.2 + nc.rnd() * 0.5, 999);

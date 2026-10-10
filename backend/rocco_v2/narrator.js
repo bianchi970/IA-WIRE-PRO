@@ -36,11 +36,12 @@ var MIN_ANSWER_LEN = 200;
  * Costanti normative di mestiere: valori che un elettricista cita per norma,
  * non per invenzione. Ammessi anche se non presenti nei dati del caso.
  */
-var NORMATIVE_NUMBERS = [
-  6, 10, 12, 16, 20, 24, 25, 30, 32, 40, 50, 63,     // In MCB, I_dn mA, V, Hz
-  100, 230, 250, 300, 400, 500, 1000,                 // V, I_dn mA, tensioni di prova megger
-  0.5, 1, 2                                           // MOhm soglie isolamento, moduli
-];
+// I numeri che il narratore può scrivere anche se non sono nei dati del
+// caso: le costanti di mestiere. Erano un elenco a mano, e un elenco a mano
+// qui significa che una soglia poteva comparire in una risposta senza
+// esistere da nessuna altra parte in ROCCO. Ora vengono dai limiti
+// normativi, che a loro volta citano il punto del curriculum che li insegna.
+var NORMATIVE_NUMBERS = require("../knowledge/limiti").numeriNormativi();
 
 function s(v) { return String(v == null ? "" : v).trim(); }
 function arr(v) { return Array.isArray(v) ? v : []; }

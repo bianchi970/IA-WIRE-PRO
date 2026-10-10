@@ -30,6 +30,7 @@ var toolRegistryFactory = require("./tool_registry");
 var providerGatewayFactory = require("./provider_gateway");
 var responseFormatter = require("./response_formatter");
 var lexicon = require("./lexicon");
+var limiti = require("../knowledge/limiti");
 var narrator = require("./narrator");
 var checkPhrasing = require("./check_phrasing");
 var runtimeTrace = require("./runtime_trace");
@@ -93,8 +94,8 @@ var FENOMENI = [
     ipotesi: [
       { causa: "Dispersione verso terra su carico o linea",
         catena: ["RCD misura Delta_I tra fase e neutro", "Delta_I > I_dn (30mA civile) → sgancio", "Corrente fugge per terra: isolamento degradato su un circuito"],
-        conferma: ["sezionare i carichi uno alla volta e richiudere il RCD dopo ogni sezionamento", "misura isolamento con megger: se R < 1 MOhm → circuito trovato"],
-        esclude: ["isolamento > 1 MOhm su tutti i circuiti"] },
+        conferma: ["sezionare i carichi uno alla volta e richiudere il RCD dopo ogni sezionamento", "misura isolamento con megger: se R < " + limiti.etichetta("isolamento_minimo") + " → circuito trovato"],
+        esclude: ["isolamento > " + limiti.etichetta("isolamento_minimo") + " su tutti i circuiti"] },
       { causa: "Umidita o infiltrazione in giunzione/presa",
         catena: ["Acqua è conduttrice", "Acqua in scatola/presa abbassa R_isolamento", "R_isolamento basso → corrente di dispersione → RCD sgancia"],
         conferma: ["ispezione visiva scatole derivazione in zone umide o esterne", "isolamento migliora dopo asciugatura"],
@@ -915,16 +916,16 @@ var CONFIRM_RULES = [
   { id: "CF-01",
     when: function(ctx) {
       var iso = ctx.measure("isolamento");
-      return iso !== null ? iso < 1 : ctx.facts.isolation_low === true;
+      return iso !== null ? iso < limiti.valore("isolamento_minimo") : ctx.facts.isolation_low === true;
     },
     confirms: /dispersione|isolament|verso terra|guasto.*terra/,
-    reason: "Isolamento misurato sotto 1 MOhm: dispersione verso terra accertata" },
+    reason: "Isolamento misurato sotto " + limiti.etichetta("isolamento_minimo") + ": dispersione verso terra accertata" },
 
   // Morsetto caldo = resistenza di contatto: la temperatura è la prova.
   { id: "CF-02",
     when: function(ctx) {
       var t = ctx.measure("temperatura");
-      return t !== null ? t >= 70 : ctx.facts.temperature_high === true;
+      return t !== null ? t >= limiti.valore("temperatura_connessione") : ctx.facts.temperature_high === true;
     },
     confirms: /contatto.*resistiv|morsetto.*allentat|serraggio|surriscald|sovratemperatur/,
     reason: "Temperatura oltre il limite su un punto di connessione: contatto resistivo accertato" },
@@ -937,7 +938,11 @@ var CONFIRM_RULES = [
     when: function(ctx) {
       var r = ctx.measure("resistenza");
       // measure() normalizza in MΩ: 1e-4 MΩ = 100 Ω.
-      return r !== null && r < 0.0001;
+      // Un cortocircuito è continuità dove non dovrebbe essercene: il
+      // numero giusto è quello del conduttore sano (1 Ohm, CEI 64-8/6),
+      // non quello della resistenza di contatto, che è un'altra grandezza.
+      // measure() normalizza in MOhm, il limite è in Ohm.
+      return r !== null && r < limiti.valore("continuita_conduttore") / 1000000;
     },
     confirms: /cortocircuito|corto.*circuito/,
     reason: "Resistenza prossima a zero fra i conduttori: cortocircuito accertato" },
@@ -953,7 +958,7 @@ var CONFIRM_RULES = [
     context: [new RegExp("^(?!.*(?:" + PROTECTION_TRIPPING_PATTERN.source + "))")],
     when: function(ctx) {
       var v = ctx.measure("tensione");
-      return v !== null && v < 50;
+      return v !== null && v < limiti.valore("tensione_contatto_limite");
     },
     confirms: /interruzione|conduttore.*interrott|circuito.*aperto|alimentazione.*assente|mancanza.*alimentazione/,
     reason: "Tensione misurata assente nel punto di prova: interruzione accertata a monte" },
@@ -971,7 +976,7 @@ var KILL_RULES = [
   { id: "KR-01",
     when: function(ctx) {
       var iso = ctx.measure("isolamento");
-      return iso !== null ? iso >= 1 : ctx.facts.isolation_high === true;
+      return iso !== null ? iso >= limiti.valore("isolamento_minimo") : ctx.facts.isolation_high === true;
     },
     kills: /dispersione|verso terra|isolament/,
     reason: "Isolamento misurato >= 1 MOhm: esclude la dispersione verso terra (CEI 64-8)" },

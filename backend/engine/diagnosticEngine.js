@@ -7,6 +7,8 @@ var applyClosedCaseLearningToDiagnosticChecks = require("./roccoLearningStore").
 var appendClosedCaseLearning = require("./roccoLearningStore").appendClosedCaseLearning;
 var roccoCaseClassifier = require("./roccoCaseClassifier");
 var roccoMethodEngine = require("./roccoMethodEngine");
+var limiti = require("../knowledge/limiti");
+
 var LEARNING_HALF_LIFE_DAYS = 120;
 var MIN_LEARNING_FRESHNESS_WEIGHT = 0.25;
 var UNKNOWN_TIMESTAMP_FRESHNESS_WEIGHT = 0.20;
@@ -78,10 +80,18 @@ var MATCH_THRESHOLD = 3;
 // ============================================================
 // Rilevazione anomalia tensione BT (riferimento nominale 230V)
 // ============================================================
-var NOMINAL_VOLTAGE = 230;       // V — rete BT monofase Italia
-var VOLTAGE_TOLERANCE = 0.10;    // ±10% CEI EN 50160
-var VOLTAGE_MIN = NOMINAL_VOLTAGE * (1 - VOLTAGE_TOLERANCE); // 207V
-var VOLTAGE_MAX = NOMINAL_VOLTAGE * (1 + VOLTAGE_TOLERANCE); // 253V
+// I numeri vengono da knowledge/limiti.js, che li fa risalire al punto del
+// curriculum che li insegna — qui: L03, misura "tensione_fase_neutro",
+// "230V ±10%", norma CEI 64-8/1. Qui restano solo i nomi con cui il motore
+// li usa, perché gli stessi numeri scritti in sei posti avevano già
+// cominciato a divergere.
+var NOMINAL_VOLTAGE = limiti.valore("tensione_fase_neutro");
+var VOLTAGE_TOLERANCE = limiti.limite("tensione_fase_neutro").tolleranza;
+var VOLTAGE_MIN = limiti.intervallo("tensione_fase_neutro")[0];
+var VOLTAGE_MAX = limiti.intervallo("tensione_fase_neutro")[1];
+var ISOLAMENTO_MIN = limiti.valore("isolamento_minimo");
+var TEMPERATURA_MAX = limiti.valore("temperatura_connessione");
+var CORRENTE_RIF = limiti.valore("corrente_circuito_domestico");
 
 /**
  * Analizza i valori di tensione estratti dal testo e determina se c'è
@@ -217,8 +227,9 @@ function _collectMeasuredValues(text) {
       var item = { type: pat.type, value: val, unit: pat.unit, raw: m[0].trim() };
 
       // Anomalie rilevate automaticamente
-      if (pat.type === "isolamento" && val < 1) {
-        item.warning = "isolamento " + val + "MΩ SOTTO SOGLIA (min 1MΩ) — guasto isolamento probabile";
+      if (pat.type === "isolamento" && val < ISOLAMENTO_MIN) {
+        item.warning = "isolamento " + val + "MΩ SOTTO SOGLIA (min "
+          + limiti.etichetta("isolamento_minimo") + ") — guasto isolamento probabile";
       }
       if (pat.type === "tensione") {
         var ranges = EXPECTED_RANGES["tensione"];
@@ -2139,7 +2150,7 @@ function buildMeasurementEvidence(normalizedInput, evidenceSet) {
     if (isStrongMeasurement && measurement.confidence >= 0.75) addConfirmedFact(evidenceSet, fact);
     else addProbableFact(evidenceSet, fact);
 
-    if (measurement.key === "isolamento" && typeof measurement.value === "number" && measurement.value < 1) {
+    if (measurement.key === "isolamento" && typeof measurement.value === "number" && measurement.value < ISOLAMENTO_MIN) {
       addConfirmedFact(evidenceSet, createEvidenceFact("isolation_low", "constraint", "isolamento sotto soglia", measurement.value, measurement.unit, "rule", 0.98, support));
       addAnomaly(evidenceSet, {
         key: "isolation_below_threshold",
@@ -2196,7 +2207,7 @@ function buildMeasurementEvidence(normalizedInput, evidenceSet) {
       }
     }
 
-    if (measurement.key === "temperatura" && typeof measurement.value === "number" && measurement.value > 80) {
+    if (measurement.key === "temperatura" && typeof measurement.value === "number" && measurement.value > TEMPERATURA_MAX) {
       addConfirmedFact(evidenceSet, createEvidenceFact("temperature_high", "constraint", "temperatura alta", measurement.value, measurement.unit, "rule", 0.95, support));
       addAnomaly(evidenceSet, {
         key: "temperature_above_safe_limit",
@@ -2215,8 +2226,8 @@ function buildMeasurementEvidence(normalizedInput, evidenceSet) {
       });
     }
 
-    if ((measurement.key === "corrente" && typeof measurement.value === "number" && measurement.value > 16) ||
-        (measurement.key === "corrente_ma" && typeof measurement.value === "number" && measurement.value > 16000)) {
+    if ((measurement.key === "corrente" && typeof measurement.value === "number" && measurement.value > CORRENTE_RIF) ||
+        (measurement.key === "corrente_ma" && typeof measurement.value === "number" && measurement.value > CORRENTE_RIF * 1000)) {
       addConfirmedFact(evidenceSet, createEvidenceFact("high_current", "constraint", "corrente elevata", measurement.value, measurement.unit, "rule", 0.9, support));
       addAnomaly(evidenceSet, {
         key: "current_above_reference_limit",
