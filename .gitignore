@@ -5,7 +5,7 @@ node_modules/
 *.log
 .DS_Store
 Thumbs.db
-tools/
+/tools/
 icon-generator.html
 BACKUP/
 CLEANUP.md
