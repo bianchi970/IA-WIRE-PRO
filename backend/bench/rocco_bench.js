@@ -98,7 +98,7 @@ process.on("exit", ripristinaStato);
 // ── Linee di base misurate (2026-10-10) ───────────────────────────────
 var BASELINE = {
   componenti_fantasma:        { valore: 0,  verso: "min" },   // meno è meglio
-  causa_vera_stampata:        { valore: 15, verso: "max" },   // su 21
+  causa_vera_stampata:        { valore: 16, verso: "max" },   // su 21
   causa_vera_attiva:          { valore: 16, verso: "max" },
   rumore_fuori_contesto:      { valore: 0,  verso: "min" },
   conferme_senza_misura:      { valore: 0,  verso: "min" },   // certezze regalate

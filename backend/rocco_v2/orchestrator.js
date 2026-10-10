@@ -31,6 +31,9 @@ var providerGatewayFactory = require("./provider_gateway");
 var responseFormatter = require("./response_formatter");
 var lexicon = require("./lexicon");
 var limiti = require("../knowledge/limiti");
+var deviceKb = null;
+try { deviceKb = require("../modules/rocco_university/device_kb"); }
+catch (e) { /* banca dispositivi non disponibile */ }
 var narrator = require("./narrator");
 var checkPhrasing = require("./check_phrasing");
 var runtimeTrace = require("./runtime_trace");
@@ -2128,6 +2131,63 @@ function createOrchestrator(options) {
           }
         }
       } catch(e) { /* simulatore causale graceful degradation */ }
+
+      // ═══ 5c-bis. BANCA DISPOSITIVI — i guasti noti dell'apparecchio ═══
+      //
+      // La banca (109 dispositivi, 322 guasti, 39 valori di riferimento)
+      // era collegata soltanto al vecchio `/api/chat`: l'orchestratore —
+      // cioè il percorso che il frontend usa — non la vedeva. Conoscenza
+      // che esisteva e non arrivava a chi risponde.
+      //
+      // Un guasto noto di una famiglia È un'ipotesi, e porta con sé quello
+      // che all'ipotesi serve: la verifica, lo strumento, il valore atteso
+      // e la norma. Entra qui, insieme alle altre, e poi passa per le
+      // stesse regole di tutte: esclusione, conferma per misura,
+      // pertinenza al contesto.
+      try {
+        if (deviceKb && deviceKb.rileveFamigliaInTesto) {
+          var famigliaApp = deviceKb.rileveFamigliaInTesto(cs.problem_summary);
+          if (famigliaApp) {
+            var sintomiApp = deviceKb.rilevaSintomoDalTesto(cs.problem_summary).join(" ");
+            cs.famiglia_dispositivo = famigliaApp;
+            var guastiNoti = deviceKb.cercaGuastiSync(sintomiApp || cs.problem_summary, famigliaApp);
+            var aggiunti = 0;
+            guastiNoti.forEach(function(g) {
+              if (aggiunti >= 3) return;          // non si allaga il campo
+              var etichetta = s(g.causa_probabile).split(";")[0].trim();
+              if (!etichetta) return;
+              var duplicata = cs.hypotheses.some(function(h) {
+                return normalize(h.label).substring(0, 40) === normalize(etichetta).substring(0, 40);
+              });
+              if (duplicata) return;
+
+              var catena = ["Guasto noto della famiglia " + famigliaApp + " (banca dispositivi)"];
+              if (g.riferimento_norma) catena.push("Riferimento: " + g.riferimento_norma);
+              if (g.valore_atteso && !/non specificato/.test(g.valore_atteso)) {
+                catena.push("Valore atteso: " + g.valore_atteso);
+              }
+
+              var verifiche = [];
+              if (g.verifica && !/non specificata/.test(g.verifica)) verifiche.push(g.verifica);
+
+              var hBanca = makeHypothesis(
+                etichetta, s(g.sintomo), "banca_dispositivi", verifiche, [], catena
+              );
+              // La probabilità dichiarata dalla banca entra nella stessa
+              // scala del simulatore, così l'ordinamento le confronta.
+              hBanca.probabilita = g.probabilita === "Alta" ? 0.5
+                : g.probabilita === "Bassa" ? 0.15 : 0.3;
+              cs.hypotheses.push(hBanca);
+              aggiunti++;
+            });
+            if (aggiunti) {
+              runtimeTrace.record(cs, "banca_dispositivi", {
+                famiglia: famigliaApp, ipotesi_aggiunte: aggiunti
+              });
+            }
+          }
+        }
+      } catch(e) { /* banca non disponibile: il resto del motore basta */ }
 
       // ═══ 5d. CASI SIMILI — confronta sempre con l'esperienza passata ═══
       try {
