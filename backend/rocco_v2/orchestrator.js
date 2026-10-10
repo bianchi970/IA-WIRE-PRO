@@ -555,7 +555,12 @@ function makeHypothesis(label, reason, source, confirmTests, denyTests, catena) 
     catena: arr(catena),
     supporting_evidence: [], contradicting_evidence: [],
     confirm_tests: arr(confirmTests), deny_tests: arr(denyTests),
-    confidence: "possible", status: "active", rejection_reason: null
+    confidence: "possible", status: "active", rejection_reason: null,
+    // Probabilità del simulatore causale, quando l'ipotesi viene da lì.
+    // Prima finiva solo nella catena come frase ("probabilità 45%"): non era
+    // leggibile da nessuno. Serve a scegliere quale ipotesi rappresenta una
+    // famiglia confermata, invece di prendere la prima generata.
+    probabilita: null
   };
 }
 
@@ -806,8 +811,98 @@ function extractUserExclusions(text) {
   return found.join(" . ");
 }
 
+// Sinonimi italiani di "la protezione sta scattando".
+//
+// Il cliente non dice "è intervenuto il dispositivo di protezione": dice
+// "uno non resta su, fa TRAC e ricade subito". Tarato sulle 21 domande
+// italiane di casi_reali_forum.js — con le sole parole tecniche
+// (scatta/salta/interviene/sgancia) la prima versione copriva metà dei casi
+// e lasciava passare proprio quello del cortocircuito.
+//
+// Serve a CF-04: a valle di una protezione aperta zero volt è la normalità,
+// non un'interruzione del conduttore.
+var PROTECTION_TRIPPING_PATTERN = /scatt|salt|intervi|sgancia|riarm|non (?:resta|sta|rest|rimane) su|ricade|non tiene|va giu|torna giu|cade subito|trac/;
+
 // Sinonimi italiani di "tutto scollegato": l'utente lo dice in dieci modi.
-var NO_LOAD_PATTERN = /a vuoto|tutto staccat|tutti staccat|tutto scollegat|niente (?:attaccat|collegat|inserit)|nessun carico|senza carico|senza niente|carich\w* (?:staccat|scollegat)|(?:prese|utenze|carichi|utilizzatori) (?:staccat|scollegat|disinserit)|scolleg\w* (?:tutt|i carich|le utenze|le prese)|staccat\w* (?:tutt|i carich|le utenze|le prese)/;
+var NO_LOAD_PATTERN =/a vuoto|tutto staccat|tutti staccat|tutto scollegat|niente (?:attaccat|collegat|inserit)|nessun carico|senza carico|senza niente|carich\w* (?:staccat|scollegat)|(?:prese|utenze|carichi|utilizzatori) (?:staccat|scollegat|disinserit)|scolleg\w* (?:tutt|i carich|le utenze|le prese)|staccat\w* (?:tutt|i carich|le utenze|le prese)/;
+
+// ── Confirm rules: la misura che CONFERMA, non solo quella che esclude ──
+//
+// Il motore sapeva solo escludere. KR-01 legge l'isolamento per uccidere
+// "dispersione" quando è ≥ 1 MΩ, ma nessuno leggeva il caso simmetrico —
+// isolamento SOTTO soglia, cioè dispersione accertata. Risultato misurato
+// sui 21 casi italiani: 18 `non_verifiable` e 3 `confirmed`, e quei 3 erano
+// arresti di sicurezza con zero ipotesi. ROCCO non concludeva mai.
+//
+// Stessa grammatica delle kill rules (`ruleTriggered`), direzione opposta:
+// `confirms` è il regex sull'etichetta dell'ipotesi da confermare.
+//
+// Regola di mestiere, non di comodo: si confermano solo soglie che il
+// motore già calcola come fatti (isolation_low è marcato a 0.98 da
+// diagnosticEngine.js) o un valore numerico letto da `measure()`. Mai una
+// frase: "non arriva tensione" è il sintomo, non una misura — KR-02 lo dice
+// già per l'esclusione e vale identico per la conferma.
+//
+// NON c'è una regola sulla corrente di dispersione in mA, e la sua assenza
+// è deliberata: in italiano "30 mA" è quasi sempre la **taratura** del
+// differenziale ("ho un differenziale da 30 mA"), non una dispersione
+// misurata. Una confirm rule su quel numero confermerebbe la dispersione a
+// chiunque nomini il proprio salvavita. Serve prima un estrattore che
+// distingua taratura da misura.
+var CONFIRM_RULES = [
+  // Soglia CEI 64-8 per i circuiti BT: sotto 1 MΩ l'isolamento è guasto.
+  { id: "CF-01",
+    when: function(ctx) {
+      var iso = ctx.measure("isolamento");
+      return iso !== null ? iso < 1 : ctx.facts.isolation_low === true;
+    },
+    confirms: /dispersione|isolament|verso terra|guasto.*terra/,
+    reason: "Isolamento misurato sotto 1 MOhm: dispersione verso terra accertata" },
+
+  // Morsetto caldo = resistenza di contatto: la temperatura è la prova.
+  { id: "CF-02",
+    when: function(ctx) {
+      var t = ctx.measure("temperatura");
+      return t !== null ? t >= 70 : ctx.facts.temperature_high === true;
+    },
+    confirms: /contatto.*resistiv|morsetto.*allentat|serraggio|surriscald|sovratemperatur/,
+    reason: "Temperatura oltre il limite su un punto di connessione: contatto resistivo accertato" },
+
+  // Resistenza prossima a zero dove non deve esserci continuità.
+  // Il contesto è obbligatorio: la resistenza bassa di un avvolgimento è
+  // normale, non è un cortocircuito.
+  { id: "CF-03",
+    context: [/cortocircuito|corto|fase.*neutro|neutro.*fase/],
+    when: function(ctx) {
+      var r = ctx.measure("resistenza");
+      // measure() normalizza in MΩ: 1e-4 MΩ = 100 Ω.
+      return r !== null && r < 0.0001;
+    },
+    confirms: /cortocircuito|corto.*circuito/,
+    reason: "Resistenza prossima a zero fra i conduttori: cortocircuito accertato" },
+
+  // Tensione MISURATA prossima a zero: non la frase "non arriva corrente".
+  //
+  // Il contesto esclude i casi in cui una protezione è scattata: a valle di
+  // un magnetotermico aperto zero volt è la normalità, non un'interruzione —
+  // confermarla manderebbe l'elettricista a cercare un conduttore tranciato
+  // quando il circuito è semplicemente sezionato. Il lookahead nega
+  // sull'intero racconto, che `ruleTriggered` passa già normalizzato.
+  { id: "CF-04",
+    context: [new RegExp("^(?!.*(?:" + PROTECTION_TRIPPING_PATTERN.source + "))")],
+    when: function(ctx) {
+      var v = ctx.measure("tensione");
+      return v !== null && v < 50;
+    },
+    confirms: /interruzione|conduttore.*interrott|circuito.*aperto|alimentazione.*assente|mancanza.*alimentazione/,
+    reason: "Tensione misurata assente nel punto di prova: interruzione accertata a monte" },
+
+  // Corrente oltre il calibro: sovraccarico, non dispersione.
+  { id: "CF-05",
+    fact: "high_current",
+    confirms: /sovraccarico|carico.*eccessiv|sovracorrente/,
+    reason: "Corrente misurata oltre il riferimento di calibro: sovraccarico accertato" }
+];
 
 var KILL_RULES = [
   // Misura strumentale: si legge il VALORE, non la forma della frase.
@@ -1063,6 +1158,70 @@ function killImpossible(cs) {
   });
 }
 
+/**
+ * Conferma per misura: il simmetrico di killImpossible().
+ *
+ * Scrive `supporting_evidence` — campo che esisteva da sempre, inizializzato
+ * a [] e letto una volta in verifyConclusion, ma che **nessuno popolava**:
+ * per questo la certezza finale non poteva salire sopra `non_verifiable`.
+ *
+ * La prova finisce anche in `h.catena`, che formatResponse stampa: l'utente
+ * deve leggere *perché* ROCCO dice confermato, non solo che lo dice.
+ *
+ * Nota per chi passerà da qui: i `confirm_tests` dell'ipotesi NON vengono
+ * usati come prova, al contrario dei `deny_tests` in killImpossible. Un
+ * deny_test soddisfatto dice che il fatto escludente c'è; un confirm_test
+ * le cui parole compaiono nel racconto dice soltanto che **la misura è
+ * stata eseguita**, non che il risultato confermi l'ipotesi. Dedurre la
+ * conferma dall'aver misurato è lo stesso errore di categoria già corretto
+ * in check_phrasing (previsione ≠ istruzione).
+ */
+/**
+ * La TESI dell'ipotesi: la parte di etichetta che afferma la causa, senza
+ * la spiegazione che segue.
+ *
+ * Serve perché cercare il regex in tutta l'etichetta pesca dentro frasi che
+ * dicono il contrario. Caso reale: "Resistenza di pull-up nel PLC che fa
+ * misurare una tensione anche a **circuito aperto**" veniva confermata da
+ * CF-04 (tensione misurata assente) perché conteneva "circuito aperto" —
+ * mentre quell'ipotesi spiega una lettura falsa, cioè prevede di misurare
+ * tensione, non zero. Stesso difetto delle sigle dentro le parole italiane
+ * (`DIN` in "lampadina"): il match va preteso dove la frase afferma, non
+ * dove la nomina di passaggio.
+ *
+ * Queste etichette mettono la tesi in testa e la spiegazione dopo un
+ * trattino, una virgola, un "che" o un "anche".
+ */
+function hypothesisClaim(label) {
+  // Si taglia sul testo GREZZO e si normalizza dopo: normalize() rimuove la
+  // punteggiatura, quindi tagliando dopo non ci sarebbero più i separatori
+  // su cui tagliare.
+  var head = s(label).split(/\s+[—–-]\s+|,|\bche\b|\banche\b|\bperch[eé]\b|\bpoich[eé]\b|[:(]/)[0];
+  return normalize(head);
+}
+
+function applyConfirmRules(cs) {
+  var ctx = buildEvidenceContext(cs);
+
+  cs.hypotheses.forEach(function(h) {
+    if (h.status !== "active") return;
+    var lab = hypothesisClaim(h.label);
+
+    CONFIRM_RULES.forEach(function(rule) {
+      if (!rule.confirms.test(lab)) return;
+      if (!ruleTriggered(rule, ctx)) return;
+
+      var prova = rule.id + ": " + rule.reason;
+      if (h.supporting_evidence.indexOf(prova) < 0) h.supporting_evidence.push(prova);
+      if (h.catena.indexOf(prova) < 0) h.catena.push(prova);
+      h.confidence = "confirmed";
+      runtimeTrace.record(cs, "hypothesis_confirmed", {
+        label: h.label, rule: rule.id, reason: rule.reason
+      });
+    });
+  });
+}
+
 // ============================================================
 // F. DISCRIMINAZIONE — la verifica che separa più ipotesi
 // ============================================================
@@ -1140,7 +1299,12 @@ function selectBestAction(cs) {
   }
 
   var confirmed = active.filter(function(h) { return h.confidence === "confirmed"; });
-  if (confirmed.length) {
+  // Con l'ipotesi confermata e nient'altro in piedi il caso è chiuso: non si
+  // chiede un'altra misura. Se invece restano alternative, il fenomeno è
+  // accertato ma il punto no: si conclude E si dà il passo che localizza.
+  // Senza questo, `action` finiva in VERIFICHE OPERATIVE come
+  // "- Diagnosi: dispersione…", cioè una diagnosi nel posto di una verifica.
+  if (confirmed.length && active.length === confirmed.length) {
     return { type: "conclude", action: "Diagnosi: " + confirmed[0].label, reason: confirmed[0].reason,
       hypothesis: confirmed[0], discrimination: { separation: 0, coverage: 0, score: 999 } };
   }
@@ -1186,6 +1350,13 @@ function selectBestAction(cs) {
   }
 
   var best = cands[0];
+  // Fenomeno accertato con localizzazione ancora aperta: il tipo resta
+  // "conclude" (il caso ha una diagnosi), ma l'azione è quella che restringe.
+  if (confirmed.length) {
+    best.type = "conclude";
+    best.hypothesis = confirmed[0];
+    best.diagnosis = "Diagnosi: " + confirmed[0].label;
+  }
   runtimeTrace.record(cs, "best_action", {
     action: best.action, score: best.totalScore,
     discrimination: best.discrimination, alternatives: cands.length - 1
@@ -1287,6 +1458,17 @@ function callAI(cs, gateway, hint) {
 // H. VERIFICA — la diagnosi è giustificata dai fatti?
 // ============================================================
 
+// Più prove vince; a pari prove vince la più probabile secondo il
+// simulatore. Un'ipotesi senza probabilità vale 0: non viene promossa
+// davanti a una che il simulatore ha valutato.
+function byEvidenceThenProbability(a, b) {
+  var de = b.supporting_evidence.length - a.supporting_evidence.length;
+  if (de !== 0) return de;
+  var pa = typeof a.probabilita === "number" ? a.probabilita : 0;
+  var pb = typeof b.probabilita === "number" ? b.probabilita : 0;
+  return pb - pa;
+}
+
 function verifyConclusion(cs) {
   var active = cs.hypotheses.filter(function(h) { return h.status === "active"; });
 
@@ -1297,27 +1479,81 @@ function verifyConclusion(cs) {
     return;
   }
 
-  var confirmed = active.filter(function(h) { return h.confidence === "confirmed"; });
-  if (confirmed.length) {
+  // I due guardrail stavano DOPO il return del ramo confirmed: non potevano
+  // girare mai. Qui sono condizioni d'ingresso, dove servono davvero.
+  var hasMeasurement = cs.measurements.length > 0;
+  var aiOnly = active.every(function(h) { return h.source === "external_ai"; });
+
+  // Ordinate per prove e poi per probabilità: `final_diagnosis` deve nominare
+  // l'ipotesi più sostenuta, non la prima capitata nell'ordine di
+  // generazione. Senza lo spareggio sulla probabilità, su una lavatrice in
+  // appartamento usciva "CONFERMATO: dispersione DC verso terra — pannello
+  // con celle rotte, cavo MC4": un'ipotesi fotovoltaica, confermata a pari
+  // prove e prima in ordine di generazione.
+  var confirmed = active.filter(function(h) {
+    return h.confidence === "confirmed" && h.contradicting_evidence.length === 0;
+  }).sort(byEvidenceThenProbability);
+
+  if (confirmed.length && hasMeasurement && !aiOnly) {
     cs.final_confidence = "confirmed";
-    cs.final_diagnosis = confirmed[0].label + ". " + confirmed[0].reason;
+    // Onestà sull'ambiguità residua: una misura può accertare il fenomeno
+    // (dispersione) senza dire ancora su quale componente. Confermare il
+    // fenomeno e tacere sulla localizzazione sarebbe una mezza verità.
+    // Basta più di un'ipotesi in piedi — anche se tutte confermate, come
+    // accade quando la soglia accerta la famiglia (dispersione) senza dire
+    // su quale punto: il fenomeno è certo, la localizzazione no.
+    cs.final_diagnosis = confirmed[0].label + ". " + confirmed[0].reason
+      + (active.length > 1
+          ? " Fenomeno accertato dalla misura; resta da localizzare fra "
+            + active.length + " punti possibili."
+          : "");
     return;
   }
 
-  var hasEvidence = active.some(function(h) { return h.supporting_evidence.length > 0; });
-  cs.final_confidence = hasEvidence ? "probable" : "non_verifiable";
+  // Confermata dalla misura ma senza il resto: non sparisce, scende.
+  if (confirmed.length) {
+    cs.final_confidence = "probable";
+    cs.final_diagnosis = confirmed[0].label + ". "
+      + (aiOnly
+          ? "Ipotesi sostenuta solo dall'IA esterna: serve riscontro strumentale."
+          : "Soglia superata ma senza misura registrata: serve riscontro strumentale.");
+    return;
+  }
+
+  // Prove parziali: controfattuale coerente coi fatti, o convergenza per
+  // esclusione (una sola ipotesi sopravvissuta ai kill, non una sola
+  // generata — in quel caso non c'è stata nessuna eliminazione).
+  // Lo spareggio sulla probabilità rende l'ordine deterministico, ma NON
+  // basta a fare una guida: `guidaUnica` sotto pretende più prove, non più
+  // probabilità. A pari prove le piste restano pari.
+  var sostenute = active.filter(function(h) {
+    return h.supporting_evidence.length > 0 || h.confidence === "probable";
+  }).sort(byEvidenceThenProbability);
+
+  // PROBABILE vuol dire che UNA ipotesi guida. Con quattro ipotesi sostenute
+  // a pari merito e quindici ancora in piedi non è "probabile": è ancora da
+  // verificare, e dirlo probabile sposterebbe l'elettricista su una pista a
+  // caso fra quelle in testa.
+  var guidaUnica = sostenute.length === 1 ||
+    (sostenute.length > 1 &&
+     sostenute[0].supporting_evidence.length > sostenute[1].supporting_evidence.length);
+
+  var convergenzaPerEsclusione = active.length === 1 && cs.hypotheses.length > 1;
+
+  if (guidaUnica || convergenzaPerEsclusione) {
+    cs.final_confidence = "probable";
+    var guida = guidaUnica ? sostenute[0] : active[0];
+    cs.final_diagnosis = guida.label + ". "
+      + (guidaUnica
+          ? "Sostenuta dalle prove disponibili, da confermare con la misura."
+          : "Unica ipotesi sopravvissuta all'esclusione delle alternative.");
+    return;
+  }
+
+  cs.final_confidence = "non_verifiable";
   cs.final_diagnosis = active.length === 1
     ? "Ipotesi da verificare: " + active[0].label
     : active.length + " ipotesi possibili. Serve verifica discriminante.";
-
-  // Guardrail: confirmed impossibile senza misure
-  if (cs.final_confidence === "confirmed" && cs.measurements.length === 0) {
-    cs.final_confidence = "probable";
-  }
-  // Guardrail: diagnosi solo da AI non è confirmed
-  if (cs.final_confidence === "confirmed" && active.every(function(h) { return h.source === "external_ai"; })) {
-    cs.final_confidence = "probable";
-  }
 }
 
 // ============================================================
@@ -1327,8 +1563,27 @@ function verifyConclusion(cs) {
 // La risposta mostra il PERCORSO del ragionamento:
 // come ROCCO è arrivato alle sue conclusioni.
 
+// Peso per l'ordine di esposizione: l'ipotesi accertata dalla misura va
+// letta per prima. La sezione IPOTESI ne stampa 4: se la confermata è
+// quinta, l'utente legge "CONFERMATO" senza vedere cosa è confermato.
+var CONFIDENCE_RANK = { confirmed: 3, probable: 2, possible: 1, unlikely: 0 };
+
 function formatResponse(cs, percezione) {
-  var active = cs.hypotheses.filter(function(h) { return h.status === "active"; });
+  // L'ipotesi che la diagnosi nomina va in testa all'elenco: `final_diagnosis`
+  // e la sezione IPOTESI devono raccontare la stessa cosa, altrimenti l'utente
+  // legge CONFERMATO sopra un'ipotesi diversa da quella accertata.
+  var guidaNorm = normalize(s(cs.final_diagnosis).split(". ")[0]);
+  var active = cs.hypotheses.filter(function(h) { return h.status === "active"; })
+    .slice()
+    .sort(function(a, b) {
+      var ga = guidaNorm && normalize(a.label) === guidaNorm ? 1 : 0;
+      var gb = guidaNorm && normalize(b.label) === guidaNorm ? 1 : 0;
+      if (gb !== ga) return gb - ga;
+      var ra = CONFIDENCE_RANK[a.confidence] === undefined ? 1 : CONFIDENCE_RANK[a.confidence];
+      var rb = CONFIDENCE_RANK[b.confidence] === undefined ? 1 : CONFIDENCE_RANK[b.confidence];
+      if (rb !== ra) return rb - ra;
+      return byEvidenceThenProbability(a, b);
+    });
   var rejected = cs.hypotheses.filter(function(h) { return h.status === "rejected"; });
   var best = cs.next_action;
   var lines = [];
@@ -1648,12 +1903,14 @@ function createOrchestrator(options) {
                 return normalize(h.label).substring(0, 40) === normalize(ip.causa).substring(0, 40);
               });
               if (!duplicata) {
-                cs.hypotheses.push(makeHypothesis(
+                var hSim = makeHypothesis(
                   ip.causa, ip.come_verifico || "",
                   "simulatore_causale",
                   [ip.come_verifico].filter(Boolean), [],
                   ["Simulatore causale: probabilità " + Math.round(ip.probabilita * 100) + "%"]
-                ));
+                );
+                hSim.probabilita = typeof ip.probabilita === "number" ? ip.probabilita : null;
+                cs.hypotheses.push(hSim);
               }
             });
             // Propaga il sintomo riconosciuto per il distillatore (step 5e) e suggerisciVerifica (step 10)
@@ -1745,12 +2002,19 @@ function createOrchestrator(options) {
         // Se il controfattuale contraddice l'ipotesi → abbassa confidenza
         if (cf.valutazione.contradicting > cf.valutazione.matching && cf.valutazione.contradicting > 0) {
           h.confidence = "unlikely";
-          h.catena.push("Controfattuale: previsioni contraddicono i fatti (" + cf.valutazione.contradicting + " contraddizioni)");
+          var contro = "Controfattuale: previsioni contraddicono i fatti (" + cf.valutazione.contradicting + " contraddizioni)";
+          h.catena.push(contro);
+          h.contradicting_evidence.push(contro);
         }
         // Se il controfattuale conferma → alza confidenza
         else if (cf.valutazione.matching > 0 && cf.valutazione.contradicting === 0) {
           if (h.confidence === "possible") h.confidence = "probable";
-          h.catena.push("Controfattuale: " + cf.valutazione.matching + " previsioni confermate dai fatti");
+          // La prova va anche in supporting_evidence: il matching era
+          // calcolato, scritto nella catena e mai letto da verifyConclusion,
+          // che per questo non superava mai `non_verifiable`.
+          var pro = "Controfattuale: " + cf.valutazione.matching + " previsioni confermate dai fatti";
+          h.catena.push(pro);
+          if (h.supporting_evidence.indexOf(pro) < 0) h.supporting_evidence.push(pro);
         }
 
         // Le verifiche suggerite dal controfattuale arricchiscono i test.
@@ -1791,6 +2055,10 @@ function createOrchestrator(options) {
       });
       var alive = cs.hypotheses.filter(function(h) { return h.status === "active"; }).length;
       runtimeTrace.record(cs, "kill", { active: alive, killed: cs.hypotheses.length - alive });
+
+      // ═══ 6a. CONFERMARE — la misura che accerta, non solo quella che esclude ═══
+      // Va dopo il kill: si confermano solo ipotesi ancora in piedi.
+      applyConfirmRules(cs);
 
       // ═══ 6b. IMMAGINARE — se poche ipotesi sopravvivono, cercane di nuove ═══
       if (alive < 2) {
@@ -1897,6 +2165,10 @@ function createOrchestrator(options) {
     }).then(function() {
       if (cs.status !== "closed") {
         // ═══ 9. VERIFICARE — le conclusioni sono giustificate? ═══
+        // Riapplicata qui perché immaginazione, tool e IA possono aver
+        // aggiunto ipotesi dopo il passo 6a: anche quelle vanno misurate
+        // contro le soglie. È idempotente.
+        applyConfirmRules(cs);
         verifyConclusion(cs);
         // ═══ 10. DECIDERE — qual è la prossima azione migliore? ═══
         cs.next_action = selectBestAction(cs);
@@ -2090,6 +2362,12 @@ module.exports = {
   KILL_RULES: KILL_RULES,
   buildEvidenceContext: buildEvidenceContext,
   applyPriorContext: applyPriorContext,
+  // Conferma per misura — esportati per i test
+  CONFIRM_RULES: CONFIRM_RULES,
+  PROTECTION_TRIPPING_PATTERN: PROTECTION_TRIPPING_PATTERN,
+  applyConfirmRules: applyConfirmRules,
+  hypothesisClaim: hypothesisClaim,
+  verifyConclusion: verifyConclusion,
   buildAlreadyDoneMatchers: buildAlreadyDoneMatchers,
   ruleTriggered: ruleTriggered,
   extractUserExclusions: extractUserExclusions,
