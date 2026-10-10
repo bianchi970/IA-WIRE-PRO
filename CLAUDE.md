@@ -367,6 +367,61 @@ Test: `backend/rocco_v2/neural/test/confirm_rules.test.js` — 53 asserzioni.
 fotovoltaiche fra le attive (pertinenza al dominio del caso — vedi
 `SYNONYM_MAP` e iperonimi).
 
+### ROCCO V2 — pertinenza delle ipotesi
+Su una lavatrice in appartamento uscivano "Dispersione DC verso terra:
+pannello con celle rotte, cavo MC4" e "Cavo di terra a valle del relè".
+Misurato sui 21 casi italiani: **42 ipotesi attive su 234** appartenevano a
+una famiglia che il racconto non giustifica, e **5 finivano fra le 4
+stampate**.
+
+| metrica | prima | dopo |
+|---|---|---|
+| ipotesi fuori contesto fra le stampate | 5/69 | **0/72** |
+| causa reale fra le ipotesi stampate | 12/21 | **14/21** |
+| causa reale fra le attive | 15/21 | 15/21 |
+
+`DOMAIN_FAMILIES`: quattro famiglie (fotovoltaico, automazione/PLC,
+commutazione, illuminazione elettronica), ognuna con due regex — `label`
+identifica l'ipotesi, `story` elenca i marcatori che la rendono applicabile.
+Dottrina di KR-11: si legge il **racconto**, l'applicabilità strutturale non
+è una misura.
+
+**Retrocessione, non esclusione.** La famiglia è un'euristica sul linguaggio,
+non una legge fisica: l'ipotesi resta viva e torna su se l'utente nomina ciò
+che manca. I marcatori di `commutazione` sono larghi per una ragione
+misurata: una versione più stretta dichiarava fuori contesto la causa vera di
+FORUM-IT-010 (contattore, su un racconto che dice "motore trifase su
+compressore" senza nominarlo) e di FORUM-SPEC-001 (relè crepuscolare, su "le
+luci si accendono da sole"). Motori, compressori, caldaie contengono organi
+di commutazione anche quando il cliente non li nomina.
+
+**Un solo ordinamento**, `makeHypothesisComparator`, chiavi in quest'ordine:
+1. pertinenza al contesto 2. conferma per misura 3. probabilità del
+simulatore 4. segnale del controfattuale 5. numero di prove 6. punteggi
+appresi. La pertinenza precede la certezza: un'ipotesi inapplicabile non
+guida nemmeno se una soglia l'ha confermata. Se la soglia conferma **solo**
+etichette inapplicabili la certezza non sale.
+
+La probabilità precede il conteggio delle prove perché la prova misurata è
+già espressa dalla chiave `confirmed`, e il resto di `supporting_evidence` è
+in gran parte il controfattuale ("una previsione combacia"). Misurato: 12/21
+col conteggio davanti, 14/21 con la probabilità.
+
+**Due difetti trovati qui**, stessa famiglia di sempre:
+- Una **seconda `sort`** girava dopo `verifyConclusion` e sovrascriveva la
+  graduatoria: il narratore legge le prime 8 di `cs.hypotheses` e ripescava
+  le retrocesse. Ora l'ordine del motore è quello del `case_state`.
+- Quella formula pesava `h.probability` per il 60%: **campo mai esistito**
+  (il campo è `probabilita`). Valeva 0.5 per tutti, una costante.
+
+**Scartata e da non riprovare**: pesare la sovrapposizione lessicale fra
+etichetta e racconto. Premia la tautologia (su IT-007 metteva "inverter in
+errore" sopra "guasto di isolamento lato DC", la causa vera) e cade sugli
+omonimi (su IT-003 premiava le ipotesi sul quadro elettrico perché il cliente
+aveva appeso un **quadro** al muro).
+
+Test: `backend/rocco_v2/neural/test/pertinenza.test.js` — 31 asserzioni.
+
 ### OSSERVAZIONI: niente contabilità interna davanti all'utente
 `facts_confirmed` riceve anche le `osservazioni` del motore
 (`case_state.js`: `toolResult.evidence`), e `cleanFacts` dà priorità alle
