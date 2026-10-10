@@ -259,6 +259,54 @@ Separazione attuale: **il motore ragiona, il narratore redige.**
 - Test: `backend/rocco_v2/neural/test/narrator.test.js` — 48 asserzioni,
   gateway finto, nessuna chiamata di rete.
 
+### ROCCO V2 — continuità multi-turn (store su disco)
+Il motore ragionava bene al primo messaggio e **dimenticava tutto al secondo**.
+Misurato su un caso reale in due battute: turno 1 "salta il differenziale con
+la lavatrice" → 11 ipotesi, 3 uccise; turno 2 "isolamento 0,2 MOhm" → **0
+uccise**, nessuna traccia del differenziale, e come prossimo passo *"ripetere
+la misura di isolamento"* — la verifica appena eseguita dall'utente.
+
+Due difetti in catena:
+
+1. **`conversation_id` non nasceva mai.** `convCreate()` apriva con
+   `if (!pool) return null`: col DB muto `convId` restava null, il blocco che
+   carica `prior_context` non partiva, il `case_state` nasceva vergine.
+   Tutta la continuità poggiava su un `if`.
+2. **Il contesto veniva cancellato un passo dopo.** L'orchestratore accodava
+   `prior_context` a `problem_summary` al passo 1; al passo 3
+   `mergeSafetySeedOutput` (`case_state.js:162`) lo riscriveva col seed del
+   safety guard — solo messaggio corrente. Da `problem_summary` dipendono sia
+   il **racconto** (`story`) sia le **prove** (`text`, via
+   `extractUserExclusions`): perso quello, le esclusioni e le misure dei turni
+   precedenti non entravano nel ragionamento. `applyPriorContext()` è
+   idempotente e viene riapplicata **dopo** il merge.
+
+`backend/store/conversationStore.js` tiene le conversazioni su disco
+(`data/conversations-local.json`, in `.gitignore`): pattern di
+`rocco_v2/memory.js` — ES5, scrittura atomica tmp+rename, nessuna eccezione
+verso la chat (file corrotto → si riparte vuoti). Id interi in un range
+riservato **> 1e9**: `parseInt` continua a funzionare in ogni endpoint e
+nessun id locale si confonde con un serial Postgres. Su disco l'apprendimento
+sopravvive ai restart, cosa che su Render non avviene.
+
+**`pool` è un oggetto anche quando il DB non risponde.** Le guardie
+`if (!pool)` non scattano: il ripiego va agganciato al **fallimento della
+query**, non all'assenza del pool. Vale per l'elenco e la creazione
+conversazioni, che altrimenti rispondono 500 — e al refresh il frontend butta
+via il `conversation_id` dal localStorage, perdendo la continuità comunque.
+`/health` espone `conversationStore: { local, active }` per dire chi tiene la
+continuità in quel momento.
+
+Test: `backend/test/conversation_store.test.js` (55 asserzioni) e
+`backend/rocco_v2/neural/test/multi_turn.test.js` (41 — incluso: sui 21 casi
+italiani di `casi_reali_forum.js` nessuna prova regredisce aggiungendo il
+contesto).
+
+**Aperto**: la certezza non sale mai. Con un isolamento di 0,2 MΩ contro
+1 MΩ atteso la risposta resta `DA VERIFICARE` e richiede ancora la misura:
+il caso non si chiude. Ed è comparsa un'ipotesi fotovoltaica (pannello, cavo
+MC4) su una lavatrice in appartamento — pertinenza delle ipotesi al dominio.
+
 ### Formato risposta (RISOLTO)
 `rocco/index.js` produce `TECH_REPORT_V1` con sezioni: OSSERVAZIONI, COMPONENTI COINVOLTI, IPOTESI, LIVELLO DI CERTEZZA, VERIFICHE OPERATIVE, RISCHI REALI, PROSSIMO PASSO.
 `server.js` chiama `rocco.postcheck(answer)` dopo la risposta AI per garantire che tutte le sezioni siano presenti.
