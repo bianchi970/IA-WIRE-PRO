@@ -359,7 +359,6 @@ var SYNONYM_MAP = {
   // fusibili
   "fusibili":        "fusibile",
   // terra/neutro
-  "messa a terra":   "terra",
   "equipotenziale":  "terra",
   "pe":              "terra",
   "neutri":          "neutro",
@@ -385,7 +384,6 @@ var SYNONYM_MAP = {
   "ns160":           "interruttore scatolato",
   "tmax":            "interruttore scatolato",
   // Fusibili
-  "fusibili":        "fusibile",
   "cartuccia":       "fusibile",
   "nh00":            "fusibile",
   "nh1":             "fusibile",
@@ -429,7 +427,6 @@ var SYNONYM_MAP = {
   "sirena":          "sirena",
   "cicalino":        "sirena",
   "buzzer":          "sirena",
-  "allarme acustico":"sirena",
   // Colonna luminosa
   "colonna":         "colonna luminosa",
   "tower":           "colonna luminosa",
@@ -456,12 +453,11 @@ var SYNONYM_MAP = {
   "powerquality":    "analizzatore rete",
   "powermeter":      "analizzatore rete",
   "cosphi":          "analizzatore rete",
-  "armoniche":       "analizzatore rete",
+  "armoniche":       "armoniche",
   "thd":             "analizzatore rete",
   // Busbar / pettine
   "pettine":         "pettine",
   "busbar":          "pettine",
-  "barra omnibus":   "pettine",
   // LOTO / sezionatori
   "loto":            "sezionatore",
   "lockout":         "sezionatore",
@@ -471,16 +467,12 @@ var SYNONYM_MAP = {
   "presenza":        "rilevatore presenza",
   // Dimmer
   "dimmer":          "dimmer",
-  "regolatore luce": "dimmer",
-  "variatore luce":  "dimmer",
   // Crepuscolare
   "crepuscolare":    "crepuscolare",
   "fotocellula":     "crepuscolare",
   // Relè monitoraggio fasi
-  "mancanza fase":   "mancanza fase",
-  "asimmetria":      "mancanza fase",
-  "sequenza fasi":   "mancanza fase",
-  "fasimetro":       "mancanza fase",
+  "asimmetria":      "asimmetria",
+  "fasimetro":       "fasimetro",
   // PLC / CPU
   "cpu":             "plc",
   "controllore":     "plc",
@@ -492,17 +484,13 @@ var SYNONYM_MAP = {
   "logo":            "plc",
   "watchdog":        "watchdog",
   // Cortocircuito
-  "corto circuito":  "cortocircuito",
   "cc":              "cortocircuito",
-  "guasto franco":   "cortocircuito",
   // Condensatore
   "condensator":     "condensatore",
   "cond":            "condensatore",
   "capacitor":       "condensatore",
   // Soft starter
-  "soft starter":    "soft starter",
   "avviatore":       "soft starter",
-  "avviatore progressivo": "soft starter",
   // Umidità/condensa
   "condensa":        "umidita",
   "umido":           "umidita",
@@ -522,41 +510,27 @@ var SYNONYM_MAP = {
   "wallbox":         "wallbox",
   "colonnina":       "wallbox",
   "ev":              "wallbox",
-  "auto elettrica":  "wallbox",
   "ricarica":        "wallbox",
   // Eccitazione relè/contattore
   "eccitare":        "eccita",
   "eccita":          "eccita",
   "eccitazione":     "eccita",
-  "non scatta":      "eccita",
-  "non chiude":      "eccita",
   // Fusibile (FP-24)
-  "nh00":            "fusibile",
-  "nh1":             "fusibile",
-  "nh2":             "fusibile",
   "nh3":             "fusibile",
   "cilindrico":      "fusibile",
   "gg":              "fusibile",
   "am":              "fusibile",
-  "portafusibile":   "fusibile",
   "fuso":            "fusibile",
   // Relè termico MTR (FP-25)
   "mtr":             "rele termico",
-  "bimetallico":     "rele termico",
-  "overload":        "rele termico",
-  "termico":         "rele termico",
-  "reset termico":   "rele termico",
   // Isolamento/megger (FP-26)
   "megger":          "isolamento",
-  "megohmetro":      "isolamento",
   "rigidita":        "isolamento",
   "dispersione":     "isolamento",
-  "resistenza isolamento": "isolamento",
   // Timer/programmatore (FP-27)
   "orologio":        "timer",
   "programmatore":   "timer",
   "fasce":           "timer",
-  "fascia oraria":   "timer",
   "temporizzatore":  "timer",
   // SPD/scaricatore (FP-28)
   "scaricatore":     "spd",
@@ -565,7 +539,6 @@ var SYNONYM_MAP = {
   "fulmine":         "spd",
   "mov":             "spd",
   "varistori":       "spd",
-  "protezione fulmini": "spd",
   // Trasformatore (FP-29)
   "trafo":           "trasformatore",
   "autotrasformatore": "trasformatore",
@@ -579,27 +552,18 @@ var SYNONYM_MAP = {
   "termistore":      "sensore temperatura",
   "sonda":           "sensore temperatura",
   "off-range":       "sensore temperatura",
-  "open sensor":     "sensore temperatura",
   // FP-31: sovratensione/sottotensione rete (lessico BT realistico)
   "sovratensione":   "sovratensione",
   "sottotensione":   "sottotensione",
-  "sbalzo tensione": "sovratensione",
-  "picco tensione":  "sovratensione",
-  "neutro interrotto": "neutro interrotto",
-  "corrente alta":   "sovratensione",
-  "corrente bassa":  "sottotensione",
-  "rete instabile":  "sovratensione",
   "danneggiato":     "danneggiat",
   "danneggiati":     "danneggiat",
   // FP-32: terra assente/degradata
-  "formicolio":      "terra degradata",
-  "scossa":          "terra degradata",
-  "scosse":          "terra degradata",
-  "dispersore":      "terra degradata",
-  "picchetto":       "terra degradata",
-  "resistenza terra":"terra degradata",
-  "carcassa":        "terra degradata",
-  "terra assente":   "terra degradata",
+  "formicolio":      "scossa",
+  "scossa":          "scossa",
+  "scosse":          "scossa",
+  "dispersore":      "terra",
+  "picchetto":       "terra",
+  "carcassa":        "carcassa",
   // FP-33: LED sfarfalla
   "led":             "lampada led",
   "sfarfalla":       "sfarfallio",
@@ -610,7 +574,6 @@ var SYNONYM_MAP = {
   "faretto":         "lampada led",
   "faretti":         "lampada led",
   "gu10":            "lampada led",
-  "driver led":      "lampada led",
   "reattore":        "lampada led",
   // FP-34: presa/interruttore caldo
   "presa":           "presa",
@@ -624,28 +587,23 @@ var SYNONYM_MAP = {
   "surriscaldato":   "surriscaldamento",
   "surriscalda":     "surriscaldamento",
   "surriscaldamento":"surriscaldamento",
-  "guaina":          "cavo surriscaldato",
-  "guaina morbida":  "cavo surriscaldato",
-  "canalina":        "cavo surriscaldato",
+  "guaina":          "cavo",
+  "canalina":        "cavo",
   // FP-36: UPS
   "ups":             "ups",
-  "gruppo continuita":"ups",
   "batteria":        "ups batteria",
   "batterie":        "ups batteria",
-  "blackout":        "ups",
+  "blackout":        "blackout",
   "autonomia":       "ups batteria",
   // FP-37: squilibrio trifase
   "squilibrio":      "squilibrio fasi",
   "squilibrato":     "squilibrio fasi",
   "sbilanciato":     "squilibrio fasi",
-  "neutro caldo":    "squilibrio fasi",
-  "armoniche":       "squilibrio fasi",
   // FP-38: bus KNX/DALI
   "knx":             "bus domotico",
   "dali":            "bus domotico",
   "bus":             "bus domotico",
   "ets":             "bus domotico",
-  "attuatore knx":   "bus domotico",
   "offline":         "bus domotico",
   // FP-39: citofono/videocitofono
   "citofono":        "citofono",
@@ -656,7 +614,6 @@ var SYNONYM_MAP = {
   "campanello":      "citofono",
   // FP-40: arco elettrico nel quadro
   "arco":            "arco elettrico",
-  "arco elettrico":  "arco elettrico",
   "scintille":       "arco elettrico",
   "buzzing":         "arco elettrico",
   "sfrigolio":       "arco elettrico",
@@ -665,6 +622,67 @@ var SYNONYM_MAP = {
 
 function applysynonyms(word) {
   return SYNONYM_MAP[word] || word;
+}
+
+// ── Sinonimi di FRASE ──────────────────────────────────────────────────
+//
+// `SYNONYM_MAP` viene consultata solo su una parola singola: `canonicalWord`
+// riceve un token e `tokenize` spezza sugli spazi. Misurato: **33 delle 298
+// voci contenevano uno spazio**, quindi non potevano essere consultate mai —
+// dati scritti e mai letti, con l'aspetto di funzionare.
+//
+// Fra quelle voci c'era sia vocabolario corretto che un elettricista usa
+// tutti i giorni ("messa a terra", "corto circuito", "gruppo continuità")
+// sia riscritture sbagliate, che attivandole avrebbero fatto danno
+// ("corrente alta" → sovratensione: corrente e tensione non sono la stessa
+// grandezza; "non scatta" → eccita: una negazione portata al positivo).
+//
+// Qui restano solo quelle del primo tipo, e ora funzionano: la sostituzione
+// avviene sul testo dell'utente prima della tokenizzazione. Le altre sono
+// state rimosse dalla mappa, non attivate.
+var PHRASE_SYNONYMS = [
+  ["messa a terra",        "terra"],
+  ["corto circuito",       "cortocircuito"],
+  ["guasto franco",        "cortocircuito"],
+  ["gruppo continuita",    "ups"],
+  ["avviatore progressivo", "soft starter"],
+  ["allarme acustico",     "sirena"],
+  ["barra omnibus",        "pettine"],
+  ["regolatore luce",      "dimmer"],
+  ["variatore luce",       "dimmer"],
+  ["reset termico",        "rele termico"],
+  ["resistenza isolamento", "isolamento"],
+  ["fascia oraria",        "timer"],
+  ["protezione fulmini",   "spd"],
+  ["open sensor",          "sensore temperatura"],
+  ["sbalzo tensione",      "sovratensione"],
+  ["picco tensione",       "sovratensione"],
+  ["auto elettrica",       "wallbox"],
+  ["driver led",           "lampada led"],
+  ["attuatore knx",        "bus domotico"]
+];
+
+var PHRASE_SYNONYM_REGEX = PHRASE_SYNONYMS.map(function (coppia) {
+  return [new RegExp("(^|[^a-z0-9])" + coppia[0].replace(/\s+/g, "\\s+") + "([^a-z0-9]|$)", "g"), coppia[1]];
+});
+
+/**
+ * Riscrive i sinonimi di più parole nel testo già normalizzato.
+ *
+ * Si applica al testo dell'UTENTE, non alle keyword: una keyword
+ * multi-parola deve restare com'è scritta nel catalogo.
+ */
+function applyPhraseSynonyms(textNorm) {
+  var out = String(textNorm == null ? "" : textNorm);
+  for (var i = 0; i < PHRASE_SYNONYM_REGEX.length; i++) {
+    out = out.replace(PHRASE_SYNONYM_REGEX[i][0], "$1" + PHRASE_SYNONYM_REGEX[i][1] + "$2");
+  }
+  return out;
+}
+
+/** Normalizzazione del testo dell'utente: accenti, punteggiatura, frasi. */
+function normalizeQuery(text) {
+  return applyPhraseSynonyms(normalize(text));
 }
 
 /**
@@ -1660,7 +1678,7 @@ function normalizeMeasurements(rawInput) {
 }
 
 function normalizeObservedStates(rawText) {
-  var lower = normalize(rawText);
+  var lower = normalizeQuery(rawText);
   var states = [];
   var orderedMatchers = [
     { id: "danger_keyword", test: /fumo|fuma|scintill|incendio|fiamma|folgor|scossa/i },
@@ -1709,8 +1727,8 @@ function normalizeObservedStates(rawText) {
 
 function normalizeRecognizedComponents(rawInput, catalog) {
   var rawText = String((rawInput && rawInput.message) || "");
-  var queryNorm = normalize(rawText);
-  var queryTokens = tokenize(rawText);
+  var queryNorm = normalizeQuery(rawText);
+  var queryTokens = tokenize(normalizeQuery(rawText));
   var recognized = [];
 
   (Array.isArray(rawInput && rawInput.recognizedComponents) ? rawInput.recognizedComponents : []).forEach(function (entry) {
@@ -1744,7 +1762,7 @@ function normalizeRecognizedComponents(rawInput, catalog) {
 
 function normalizeEnvironmentContext(parts) {
   var rawText = String((parts && parts.rawText) || "");
-  var lower = normalize(rawText);
+  var lower = normalizeQuery(rawText);
   var technicalKeywords = Array.isArray(parts && parts.technicalKeywords) ? parts.technicalKeywords : [];
   var measurements = Array.isArray(parts && parts.measurements) ? parts.measurements : [];
   var observedStates = Array.isArray(parts && parts.observedStates) ? parts.observedStates : [];
@@ -1807,7 +1825,7 @@ function normalizeEnvironmentContext(parts) {
 }
 
 function normalizeUserClaims(rawText) {
-  var lower = normalize(rawText);
+  var lower = normalizeQuery(rawText);
   var claims = [];
 
   if (/non\s+c['â€™]?\s*e\s+tensione|non\s+ce\s+tensione|nessuna\s+tensione|senza\s+tensione|manca\s+tensione/i.test(lower)) {
@@ -5348,6 +5366,12 @@ module.exports = {
   tokensMatch:             tokensMatch,
   tokenize:                tokenize,
   normalize:               normalize,
+
+  // Sinonimi di frase e vocabolario.
+  normalizeQuery:          normalizeQuery,
+  applyPhraseSynonyms:     applyPhraseSynonyms,
+  PHRASE_SYNONYMS:         PHRASE_SYNONYMS,
+  SYNONYM_MAP:             SYNONYM_MAP,
 
   // Senso delle parole: negazione e omonimi.
   isKeywordNegated:        isKeywordNegated,
