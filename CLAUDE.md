@@ -307,6 +307,107 @@ contesto).
 il caso non si chiude. Ed è comparsa un'ipotesi fotovoltaica (pannello, cavo
 MC4) su una lavatrice in appartamento — pertinenza delle ipotesi al dominio.
 
+### ROCCO V2 — la certezza sale (conferma per misura)
+Il motore sapeva solo **escludere**. KR-01 legge l'isolamento per uccidere
+"dispersione" quando è ≥ 1 MΩ; il caso simmetrico — sotto soglia, cioè
+dispersione accertata — non era letto da nessuno. Risultato misurato sui 21
+casi italiani: **18 `non_verifiable` e 3 `confirmed`**, e quei 3 avevano zero
+ipotesi attive (arresti di sicurezza). ROCCO diceva "confermato" solo quando
+non aveva una diagnosi, e "da verificare" su ogni diagnosi vera: con la
+misura decisiva in mano chiedeva di ripeterla.
+
+Tre difetti, tutti "dato calcolato e mai letto":
+1. `supporting_evidence` inizializzato a `[]`, letto una volta, **scritto
+   mai** → `hasEvidence` sempre falso.
+2. I due guardrail (`confirmed` impossibile senza misure / solo da AI)
+   stavano **dopo il return** del ramo confirmed: codice morto. Ora sono
+   condizioni d'ingresso.
+3. Il simulatore causale calcolava una probabilità e la scriveva solo come
+   frase nella catena (`"probabilità 45%"`), inutilizzabile per ordinare.
+   Ora è anche `h.probabilita`.
+
+**`CONFIRM_RULES`** (5 regole, grammatica delle kill rules via
+`ruleTriggered`, direzione opposta): isolamento < 1 MΩ (CEI 64-8),
+temperatura ≥ 70 °C su una connessione, resistenza ≈ 0 fra i conduttori,
+tensione misurata < 50 V, corrente oltre calibro. Si conferma **solo** su un
+valore letto da `measure()` o su un fatto che il motore deriva da una misura
+(`isolation_low`, marcato 0.98 da `diagnosticEngine.js`) — mai su una frase.
+
+**Nessuna regola sui mA di dispersione, deliberatamente**: in italiano
+"30 mA" è quasi sempre la *taratura* del differenziale, non una misura.
+
+**La scala**: `confirmed` pretende misura + ipotesi confermata + non solo IA
++ nessuna prova contraria. `probable` pretende che **una** ipotesi guidi
+(quattro sostenute a pari merito restano `non_verifiable`: dirle probabili
+sposterebbe l'elettricista su una pista a caso) oppure la convergenza per
+esclusione — una sopravvissuta ai kill, **non** una sola generata. Con più
+ipotesi in piedi la diagnosi dichiara l'ambiguità: *"fenomeno accertato dalla
+misura; resta da localizzare fra N punti"*.
+
+**Due trappole trovate misurando:**
+- `hypothesisClaim()` pretende il match sulla **tesi** dell'ipotesi, non su
+  tutta l'etichetta: CF-04 confermava *"Resistenza di pull-up nel PLC che fa
+  misurare una tensione anche a **circuito aperto**"*, ipotesi che prevede di
+  misurare tensione, non zero. Stesso difetto delle sigle dentro le parole
+  italiane (`DIN` in "lampadina").
+- `PROTECTION_TRIPPING_PATTERN`: a valle di una protezione scattata 0 V è
+  normale. La prima guardia usava parole tecniche (scatta/salta/interviene) e
+  lasciava passare la forma vera del cliente — *"uno non resta su, fa TRAC e
+  ricade"*. Tarato sul corpus: 9 casi di scatto su 9, zero falsi positivi.
+
+**Misurato**: sul solo racconto nessuna ipotesi confermata. Con la misura al
+secondo turno 14 `confirmed`, 10 con conferma a livello di ipotesi e in
+**tutte e 10 la causa reale è fra le confermate — zero conferme sbagliate**.
+È la proprietà che conta: un CONFERMATO sulla causa sbagliata manda
+l'elettricista sul punto sbagliato, ed è peggio di un DA VERIFICARE.
+
+Test: `backend/rocco_v2/neural/test/confirm_rules.test.js` — 53 asserzioni.
+
+**Aperto**: la certezza sale, ma su una lavatrice compaiono ancora ipotesi
+fotovoltaiche fra le attive (pertinenza al dominio del caso — vedi
+`SYNONYM_MAP` e iperonimi).
+
+### OSSERVAZIONI: niente contabilità interna davanti all'utente
+`facts_confirmed` riceve anche le `osservazioni` del motore
+(`case_state.js`: `toolResult.evidence`), e `cleanFacts` dà priorità alle
+frasi sugli slug: quelle righe **sono** frasi, quindi saturavano i 6 posti e
+spingevano fuori i fatti veri. L'utente leggeva `"Keyword tecniche
+rilevate: …"`, `"SAFETY: safe"`, `"AZIONE IMMEDIATA: …"`, `"Differenziale
+conf=0.70"`.
+
+`lexicon.ENGINE_INTERNAL_PREFIXES` + `isEngineInternal()` scartano la
+contabilità interna e ciò che **duplica un'altra sezione** del referto
+(SAFETY → RISCHI REALI, AZIONE IMMEDIATA → PROSSIMO PASSO). Il confronto è
+sull'**inizio** della riga. I tool non scrivono più annotazioni da macchina
+in `evidence` (`conf=`, slug): i punteggi restano in `raw_ref`.
+
+Il ritorno alla bozza del narratore è previsto — respinge le riformulazioni
+che aggiungono ciò che il motore non afferma — quindi **la bozza deve essere
+presentabile**.
+
+Test: `backend/rocco_v2/neural/test/osservazioni_pulite.test.js` — 26.
+
+### I tool di rocco_v2 erano fuori da git (CRITICO, risolto)
+`.gitignore` conteneva `tools/`: senza slash iniziale quel pattern matcha
+**qualsiasi** cartella `tools` a ogni livello, quindi
+`backend/rocco_v2/tools/` (5 file richiesti da `tool_registry.js`) non era
+versionata. Su un deploy da git:
+
+```
+[ROCCO V2] Non disponibile: Cannot find module './tools/calc_tool'
+POST /api/chat/v2 → {"ok":false,"error":"ROCCO v2 non disponibile"}
+```
+
+Il frontend ricade su `/api/chat` e in produzione girava il vecchio percorso
+v4: **tutto ROCCO V2 assente** (kill rules, confirm rules, narratore,
+multi-turn, grafo causale), silenziosamente, perché `server.js` avvolge il
+require in try/catch con un solo warning.
+
+Pattern corretto in `/tools/` (la cartella alla radice resta ignorata).
+**Dopo ogni nuova cartella sotto `backend/`, verificare `git status`**: un
+file non tracciato qui non rompe la macchina di sviluppo, rompe solo la
+produzione.
+
 ### Formato risposta (RISOLTO)
 `rocco/index.js` produce `TECH_REPORT_V1` con sezioni: OSSERVAZIONI, COMPONENTI COINVOLTI, IPOTESI, LIVELLO DI CERTEZZA, VERIFICHE OPERATIVE, RISCHI REALI, PROSSIMO PASSO.
 `server.js` chiama `rocco.postcheck(answer)` dopo la risposta AI per garantire che tutte le sezioni siano presenti.
