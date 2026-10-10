@@ -78,7 +78,7 @@
       "category": "rcbo",
       "brand": null,
       "model": null,
-      "keywords": ["RCBO", "magnetotermico differenziale", "combinato", "1P+N"],
+      "keywords": ["RCBO", "magnetotermico differenziale", "1P+N"],
       "visual_cues": [
         "corpo più largo del MCB standard (2-3 moduli per 1P+N)",
         "tasto TEST presente (come RCD)",
@@ -323,7 +323,7 @@
       "category": "motor",
       "brand": null,
       "model": null,
-      "keywords": ["motore", "trifase", "asincrono", "kW", "RPM", "avvolgimenti", "IE2", "IE3", "statore", "rotore", "condensatore"],
+      "keywords": ["motore", "trifase", "asincrono", "RPM", "avvolgimenti", "IE2", "IE3", "statore", "rotore", "condensatore"],
       "visual_cues": [
         "corpo cilindrico in ghisa o alluminio con alette di raffreddamento",
         "targa dati su lato motore: tensione (es. 230Δ/400Y), corrente nominale, potenza kW, RPM, cos φ",
@@ -395,7 +395,7 @@
       "category": "timer",
       "brand": null,
       "model": null,
-      "keywords": ["temporizzatore", "timer", "ritardo", "on-delay", "off-delay", "ciclico", "DIN", "24V", "230V"],
+      "keywords": ["temporizzatore", "timer", "ritardo", "on-delay", "off-delay"],
       "visual_cues": [
         "modulo DIN piccolo (1-2 moduli) con potenziometro o display per impostare il tempo",
         "LED indicatore stato (alimentazione e contatto)",
@@ -528,7 +528,7 @@
       "category": "pump",
       "brand": null,
       "model": null,
-      "keywords": ["pompa", "circolatore", "circolazione", "idraulica", "prevalenza", "portata", "girante", "cavitazione", "mandata", "ritorno", "pressostato"],
+      "keywords": ["pompa", "circolatore", "circolazione", "idraulica", "prevalenza", "girante", "cavitazione", "mandata", "ritorno", "pressostato"],
       "visual_cues": [
         "corpo in ghisa o bronzo con motore elettrico integrato",
         "morsettiera elettrica laterale con coperchio",
@@ -1087,7 +1087,7 @@
       "category": "pushbutton",
       "brand": null,
       "model": null,
-      "keywords": ["pulsante", "NO", "NC", "pulsante di marcia", "pulsante di stop", "avvio", "start", "stop", "pulsante luminoso", "tasto", "pulsante 22mm"],
+      "keywords": ["pulsante", "NC", "pulsante di marcia", "pulsante di stop", "avvio", "start", "stop", "pulsante luminoso", "tasto", "pulsante 22mm"],
       "visual_cues": [
         "testa sporgente o a raso, colori standard: verde=avvio, rosso=stop, nero=funzione",
         "corpo cilindrico da 22mm o 30mm, montaggio a pannello",
@@ -1527,7 +1527,7 @@
       "category": "dimmer",
       "brand": null,
       "model": null,
-      "keywords": ["dimmer", "regolatore di luminosità", "variatore di luce", "dimmer LED", "dimmer da incasso", "KNX dimmer", "DALI", "0-10V dimmer", "variatore"],
+      "keywords": ["dimmer", "regolatore di luminosità", "variatore di luce", "dimmer LED", "dimmer da incasso", "KNX dimmer", "DALI", "0-10V dimmer"],
       "visual_cues": [
         "corpo da incasso o DIN rail con manopola o pulsante di regolazione",
         "versioni da incasso simili a interruttori standard (503, 506)",

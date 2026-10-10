@@ -1040,6 +1040,148 @@ function containsKeyword(queryNorm, keyword) {
 }
 
 // ============================================================
+// Senso delle parole
+// ============================================================
+//
+// Riconoscere la parola non basta: va riconosciuto il SENSO in cui il
+// cliente l'ha usata. Misurato sulle 21 domande italiane di
+// casi_reali_forum.js, tre meccanismi producevano componenti inesistenti:
+//
+//  - **negazione**: "inverter senza trasformatore" faceva rilevare un
+//    trasformatore 24V. La parola c'è, il componente no.
+//  - **omonimia**: "ho forato il muro per appendere un quadro" faceva
+//    rilevare la custodia di un quadro elettrico; e "inverter" su un
+//    impianto fotovoltaico faceva rilevare un inverter per motori (VFD),
+//    che è un altro dispositivo.
+//  - **un solo token per due posizioni**: la keyword "aria-aria" della
+//    pompa di calore era soddisfatta da una sola occorrenza di "aria".
+//
+// È la stessa disciplina dei confini di parola già applicata alle sigle
+// (`DIN` dentro "lampadina") e del match sulla tesi dell'ipotesi: si pretende
+// la corrispondenza dove la frase **afferma**, non dove sfiora.
+
+// Parole con cui in italiano si dice che una cosa NON c'è.
+//
+// Fra il negatore e il componente il cliente mette l'articolo: "non ha **il**
+// differenziale", "manca **il** contatore". Senza questa tolleranza la
+// negazione si vedeva solo in "senza differenziale".
+var ARTICOLI = "(?:\\s+(?:il|lo|la|i|gli|le|un|uno|una|dei|degli|delle|del|dello|della|l))*";
+var NEGATORS = new RegExp(
+  "(senza|privo di|priva di|privi di|sprovvist\\w+ di|non ha|non hanno|non c e|non ce|" +
+  "manca|mancano|mancante|assente|assenza di|nessun\\w*|niente)" + ARTICOLI + "\\s*$"
+);
+
+// Quante parole prima dell'occorrenza si guarda per trovare la negazione.
+var NEGATION_LOOKBEHIND = 24;
+
+/**
+ * Tutte le occorrenze della keyword sono negate?
+ *
+ * Se il cliente nomina il componente una volta negandolo e un'altra volta
+ * no, vale la volta buona: basta un'occorrenza non negata.
+ */
+function isKeywordNegated(queryNorm, kn) {
+  var escaped = kn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  var re = new RegExp("(^|[^a-z0-9])" + escaped + "([^a-z0-9]|$)", "gi");
+  var trovataUnaLibera = false;
+  var trovataQualcuna = false;
+  var m;
+  while ((m = re.exec(queryNorm)) !== null) {
+    trovataQualcuna = true;
+    var inizio = m.index + m[1].length;
+    var prima = queryNorm.slice(Math.max(0, inizio - NEGATION_LOOKBEHIND), inizio);
+    if (!NEGATORS.test(prima)) trovataUnaLibera = true;
+    if (m.index === re.lastIndex) re.lastIndex += 1;
+  }
+  return trovataQualcuna && !trovataUnaLibera;
+}
+
+/**
+ * Omonimi: la parola giusta nel senso sbagliato.
+ *
+ * `excludedBy` è il contesto che seleziona l'altro senso; `unless` lo
+ * riporta al senso tecnico quando il testo lo qualifica. `component`
+ * limita la regola a un componente, per le parole che hanno due sensi
+ * entrambi elettrici.
+ *
+ * Tarate sulle domande reali, non su frasi di comodo: senza `unless` la
+ * regola su "quadro" avrebbe scartato anche "ho aperto il quadro elettrico
+ * appeso in garage".
+ */
+var SENSE_RULES = [
+  // "quadro" è anche il dipinto che si appende al muro.
+  { keyword: "quadro",
+    excludedBy: /append\w+|appes\w+|cornice|chiodo|tassell\w*|dipint\w*|quadretto da|specchio|stampa\b/,
+    unless: /quadro elettric\w*|quadro general\w*|centralin\w*|sottoquadro|quadro di distribuzione|quadro bt|morsettier\w*|barra din/,
+    reason: "quadro come dipinto, non come quadro elettrico" },
+
+  // "inverter" sono due dispositivi diversi: quello fotovoltaico e il
+  // variatore di frequenza per motori. Il contesto scegli quale.
+  { keyword: "inverter", component: "inverter-vfd",
+    excludedBy: /fotovoltaic\w*|pannell\w*|\bfv\b|stringa|string\w*|modul\w* fv|solare|\bmc4\b|irraggiament\w*/,
+    unless: /motore|\bvfd\b|variatore di frequenza|azionament\w*|rampa|\bhz\b/,
+    reason: "inverter fotovoltaico, non variatore di frequenza per motori" },
+
+  // "interruttore" in casa è il tasto a muro, in quadro è il magnetotermico.
+  // La keyword arriva qui già canonicalizzata da SYNONYM_MAP
+  // (`interruttore` → `magnetotermico`): il lookahead negativo distingue il
+  // caso in cui il cliente ha scritto davvero "magnetotermico" da quello in
+  // cui la parola è comparsa per sinonimo.
+  //
+  // Questa regola NON tocca la voce di SYNONYM_MAP, che resta una decisione
+  // di dominio: dice solo che il senso "magnetotermico" pretende un contesto
+  // da quadro. Misurato: su FORUM-IT-002 ("tirare su tutti gli interruttori
+  // ma uno non resta su") il senso da quadro è quello giusto e viene
+  // mantenuto; su FORUM-IT-005 e FORUM-SPEC-001, dove si parla di luci e di
+  // tasti controllati a mano, il magnetotermico non c'entra.
+  { keyword: "magnetotermico",
+    excludedBy: /(?=[\s\S]*(?:\bluce\b|\bluci\b|lampadin\w*|faretto|faretti|plafonier\w*|abat))(?![\s\S]*magnetoterm)/,
+    unless: /scatt\w*|salt\w*|riarm\w*|non resta su|ricade|intervien\w*|quadro elettric\w*|\bmcb\b/,
+    reason: "interruttore come tasto a muro, non come magnetotermico di quadro" }
+];
+
+// I nomi d'agente italiani: chi/che fa l'azione.
+//
+// Non vanno cercati col matching lasco, perché lo stemmer li collassa sul
+// participio del verbo da cui derivano: "odore di **bruciato**" pescava il
+// **bruciatore** della caldaia, e da lì una caldaia in un caso che parla di
+// un morsetto nero in un quadro. Di queste parole l'utente scrive la forma
+// esatta — "bruciatore", "contattore", "circolatore" — o il plurale.
+var AGENT_NOUN = /(?:tore|trice|sore)$/;
+
+function agentNounForms(kn) {
+  var forme = [kn];
+  if (/tore$/.test(kn)) forme.push(kn.replace(/tore$/, "tori"));
+  else if (/trice$/.test(kn)) forme.push(kn.replace(/trice$/, "trici"));
+  else if (/sore$/.test(kn)) forme.push(kn.replace(/sore$/, "sori"));
+  return forme;
+}
+
+/** La keyword è un nome d'agente di una sola parola? */
+function isAgentNounKeyword(kn) {
+  return kn.indexOf(" ") < 0 && AGENT_NOUN.test(kn);
+}
+
+/**
+ * La keyword, in questo testo e per questo componente, è usata nel senso
+ * che il componente intende?
+ */
+function keywordSenseValid(component, kn, queryNorm) {
+  if (isKeywordNegated(queryNorm, kn)) return false;
+
+  var compId = component && component.id ? String(component.id) : "";
+  for (var i = 0; i < SENSE_RULES.length; i++) {
+    var rule = SENSE_RULES[i];
+    if (normalize(rule.keyword) !== kn) continue;
+    if (rule.component && rule.component !== compId) continue;
+    if (!rule.excludedBy.test(queryNorm)) continue;
+    if (rule.unless && rule.unless.test(queryNorm)) continue;
+    return false;
+  }
+  return true;
+}
+
+// ============================================================
 // Scoring componenti (C)
 // Confronta le keywords del componente con i token della query
 // ============================================================
@@ -1054,7 +1196,7 @@ function containsKeyword(queryNorm, keyword) {
  * (scatolato di potenza, salvamotore, ATS, sezionatore, crepuscolare...).
  * Ora "interruttore scatolato" pretende anche "scatolato".
  */
-function keywordTokensPresent(kn, queryTokens) {
+function keywordTokensPresent(kn, queryTokens, component, queryNorm) {
   var kwTokens = normalize(kn)
     .split(/[\s,;.()\/\-\[\]:"'!?]+/)
     .filter(function (w) { return w.length > 2; })
@@ -1062,10 +1204,26 @@ function keywordTokensPresent(kn, queryTokens) {
 
   if (!kwTokens.length) return false;
 
+  // Il senso va verificato anche sulla parola CANONICA, non solo sulla
+  // keyword grezza: `SYNONYM_MAP` mappa "armadio" → "quadro", quindi la
+  // keyword "armadio" della custodia IP pescava il quadro appeso al muro
+  // scavalcando la regola di senso, che vedeva solo "armadio".
+  if (component && typeof queryNorm === "string") {
+    for (var k = 0; k < kwTokens.length; k++) {
+      if (!keywordSenseValid(component, kwTokens[k], queryNorm)) return false;
+    }
+  }
+
+  // Ogni token della keyword pretende un token DIVERSO della query: la
+  // keyword "aria-aria" della pompa di calore era soddisfatta da una sola
+  // occorrenza di "aria" ("compressore ad aria"), perché ogni token veniva
+  // cercato senza ricordare quali erano già stati consumati.
+  var usati = {};
   for (var i = 0; i < kwTokens.length; i++) {
     var trovato = false;
     for (var j = 0; j < queryTokens.length; j++) {
-      if (tokensMatch(queryTokens[j], kwTokens[i])) { trovato = true; break; }
+      if (usati[j]) continue;
+      if (tokensMatch(queryTokens[j], kwTokens[i])) { usati[j] = true; trovato = true; break; }
     }
     if (!trovato) return false;
   }
@@ -1077,10 +1235,25 @@ function scoreComponentMatch(component, queryNorm, queryTokens) {
   var score = 0;
   for (var i = 0; i < keywords.length; i++) {
     var kn = normalize(keywords[i]);
+    // 0) la parola è usata nel senso che questo componente intende?
+    //    Negata ("senza trasformatore") o in un altro senso ("appendere un
+    //    quadro") non vale: il filtro a valle accetta `score >= 2`, cioè una
+    //    sola keyword, quindi un senso sbagliato basta a inventare un
+    //    componente.
+    if (!keywordSenseValid(component, kn, queryNorm)) continue;
     // 1) keyword come parola intera (sigle, codici brevi, termini esatti)
     if (containsKeyword(queryNorm, kn)) { score += 2; continue; }
+    // 1b) i nomi d'agente si pretendono per esteso, al singolare o al
+    //     plurale: il matching lasco li confonde col participio del verbo.
+    if (isAgentNounKeyword(kn)) {
+      var forme = agentNounForms(kn);
+      for (var f = 0; f < forme.length; f++) {
+        if (containsKeyword(queryNorm, forme[f])) { score += 2; break; }
+      }
+      continue;
+    }
     // 2) token per token, con prefix matching sulle forme flesse
-    if (keywordTokensPresent(kn, queryTokens)) { score += 2; }
+    if (keywordTokensPresent(kn, queryTokens, component, queryNorm)) { score += 2; }
   }
   return score;
 }
@@ -5174,5 +5347,11 @@ module.exports = {
   scoreComponentMatch:     scoreComponentMatch,
   tokensMatch:             tokensMatch,
   tokenize:                tokenize,
-  normalize:               normalize
+  normalize:               normalize,
+
+  // Senso delle parole: negazione e omonimi.
+  isKeywordNegated:        isKeywordNegated,
+  keywordSenseValid:       keywordSenseValid,
+  keywordTokensPresent:    keywordTokensPresent,
+  SENSE_RULES:             SENSE_RULES
 };
