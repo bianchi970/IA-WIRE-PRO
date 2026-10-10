@@ -317,17 +317,37 @@ orchestrator.verifyConclusion(csFamiglia);
 check("a pari prove vince la più probabile", /dispersione su carico/i.test(csFamiglia.final_diagnosis));
 check("non l'ipotesi fotovoltaica", !/pannello|MC4/i.test(csFamiglia.final_diagnosis));
 
-// Più prove batte più probabilità: la prova viene prima della stima.
+// La prova MISURATA batte la stima — ma è la chiave `confirmed` a dirlo,
+// non il conteggio delle righe di prova.
+var csMisuraVsStima = makeCase({
+  hypotheses: [
+    { label: "Confermata dalla misura", confidence: "confirmed", supporting_evidence: ["CF-01: ..."] },
+    { label: "Solo molto probabile", confidence: "probable", supporting_evidence: ["Controfattuale: ..."] }
+  ],
+  measurements: [{ type: "isolamento", value: 0.2, unit: "MΩ" }]
+});
+csMisuraVsStima.hypotheses[1].probabilita = 0.95;
+orchestrator.verifyConclusion(csMisuraVsStima);
+check("la misura batte una stima anche al 95%", /Confermata dalla misura/.test(csMisuraVsStima.final_diagnosis));
+
+// Fra due ipotesi **egualmente** confermate decide la probabilità, non il
+// numero di righe in `supporting_evidence`. Questa asserzione prima diceva
+// il contrario ("le prove contano più della probabilità"): era una mia
+// affermazione di progetto, e la misura l'ha corretta. Quel che resta in
+// `supporting_evidence` oltre alla conferma è in gran parte il
+// controfattuale, che dice solo "una previsione combacia" — un booleano
+// debole, non una seconda misura. Sui 21 casi italiani: causa reale fra le
+// ipotesi stampate 12/21 col conteggio davanti, 14/21 con la probabilità.
 var csProve = makeCase({
   hypotheses: [
-    { label: "Con due prove", confidence: "confirmed", supporting_evidence: ["CF-01: ...", "Controfattuale: ..."] },
-    { label: "Con una prova", confidence: "confirmed", supporting_evidence: ["CF-01: ..."] }
+    { label: "Due righe di prova", confidence: "confirmed", supporting_evidence: ["CF-01: ...", "Controfattuale: ..."] },
+    { label: "Una prova ma più probabile", confidence: "confirmed", supporting_evidence: ["CF-01: ..."] }
   ],
   measurements: [{ type: "isolamento", value: 0.2, unit: "MΩ" }]
 });
 csProve.hypotheses[1].probabilita = 0.9;
 orchestrator.verifyConclusion(csProve);
-check("le prove contano più della probabilità", /Con due prove/.test(csProve.final_diagnosis));
+check("fra due confermate decide la probabilità", /più probabile/.test(csProve.final_diagnosis));
 
 // ─── §7 Idempotenza ───────────────────────────────────────────────────
 console.log("\n§7 — idempotenza");

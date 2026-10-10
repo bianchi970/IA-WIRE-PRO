@@ -826,6 +826,67 @@ var PROTECTION_TRIPPING_PATTERN = /scatt|salt|intervi|sgancia|riarm|non (?:resta
 // Sinonimi italiani di "tutto scollegato": l'utente lo dice in dieci modi.
 var NO_LOAD_PATTERN =/a vuoto|tutto staccat|tutti staccat|tutto scollegat|niente (?:attaccat|collegat|inserit)|nessun carico|senza carico|senza niente|carich\w* (?:staccat|scollegat)|(?:prese|utenze|carichi|utilizzatori) (?:staccat|scollegat|disinserit)|scolleg\w* (?:tutt|i carich|le utenze|le prese)|staccat\w* (?:tutt|i carich|le utenze|le prese)/;
 
+// ── Pertinenza: famiglie di ipotesi e impianti a cui si applicano ──────
+//
+// Su una lavatrice in appartamento ROCCO esponeva "Dispersione DC verso
+// terra: pannello con celle rotte, bypass diode guasto, cavo MC4" e "Cavo di
+// terra con perdita di isolamento a valle del relè". Misurato sui 21 casi
+// italiani: 42 ipotesi attive su 234 appartenevano a una famiglia che il
+// racconto non giustifica, e 5 di esse finivano fra le 4 **stampate**.
+//
+// Ogni famiglia ha due regex: `label` la identifica, `story` elenca i
+// marcatori che la rendono applicabile. Se l'etichetta è della famiglia e il
+// racconto non ha nessun marcatore, l'ipotesi è fuori contesto.
+//
+// È una RETROCESSIONE, non un'esclusione, e la differenza è il punto: la
+// famiglia è un'euristica sul linguaggio, non una legge fisica. L'ipotesi
+// resta viva, disponibile, e torna su se l'utente nomina ciò che manca —
+// cosa che ora il multi-turn permette. Uccidere qui costerebbe cause vere.
+//
+// I marcatori di `rele` sono più larghi di quanto sembri necessario, e lo
+// sono per una ragione misurata: con una prima versione più stretta
+// venivano dichiarate fuori contesto la causa vera di FORUM-IT-010
+// ("contatto del contattore degradato", su un racconto che parla di motore
+// trifase e compressore ma non nomina il contattore) e quella di
+// FORUM-SPEC-001 ("relè crepuscolare", su "le luci si accendono da sole").
+// Un motore, un compressore, un condizionatore, una caldaia, una pompa
+// contengono organi di commutazione anche quando il cliente non li nomina.
+var DOMAIN_FAMILIES = [
+  { id: "fotovoltaico",
+    label: /fotovoltaic|pannell|celle rotte|\bmc4\b|bypass diode|stringa/,
+    story: /fotovoltaic|\bfv\b|pannell|solare|stringa|\bmc4\b|inverter/ },
+
+  { id: "automazione",
+    label: /\bplc\b|segnale enable|segnale run|pull up|conduttore 0v|uscita non isolata/,
+    story: /\bplc\b|automazion|macchina|industrial|quadro di comando|scheda/ },
+
+  { id: "commutazione",
+    label: /\brele\b|contattor|bobina|soppression/,
+    story: /\brele\b|contattor|bobina|motore|compressor|condizionator|caldaia|pompa|macchina|si accendono da sole|crepuscolar|timer/ },
+
+  { id: "illuminazione_elettronica",
+    label: /\bled\b|driver led|dimmer/,
+    story: /\bled\b|faretto|striscia|dimmer|driver|lampadin|luce|luci/ }
+];
+
+/**
+ * L'ipotesi appartiene a una famiglia che questo impianto non giustifica?
+ *
+ * Si legge il RACCONTO, non le prove: è la stessa dottrina di KR-11 —
+ * l'applicabilità strutturale non è una misura, è il contesto.
+ */
+function outOfDomainFamilies(label, story) {
+  var lab = normalize(label);
+  var st = normalize(story);
+  return DOMAIN_FAMILIES.filter(function(fam) {
+    return fam.label.test(lab) && !fam.story.test(st);
+  }).map(function(fam) { return fam.id; });
+}
+
+function isOutOfDomain(label, story) {
+  return outOfDomainFamilies(label, story).length > 0;
+}
+
 // ── Confirm rules: la misura che CONFERMA, non solo quella che esclude ──
 //
 // Il motore sapeva solo escludere. KR-01 legge l'isolamento per uccidere
@@ -1469,7 +1530,118 @@ function byEvidenceThenProbability(a, b) {
   return pb - pa;
 }
 
+/**
+ * L'ordine in cui ROCCO espone e sceglie le ipotesi.
+ *
+ * Chiavi, in ordine:
+ *  1. **pertinenza al contesto** — un'ipotesi che questo impianto non
+ *     giustifica non guida mai, nemmeno se una soglia l'ha confermata.
+ *     Veniva prima il livello di certezza, e il risultato era "CONFERMATO:
+ *     dispersione DC verso terra — pannello con celle rotte" su una
+ *     lavatrice in appartamento: la misura di isolamento conferma la
+ *     famiglia "dispersione", e l'etichetta fotovoltaica era solo il primo
+ *     rappresentante generato.
+ *  2. **conferma per misura** (`confirmed`): la prova strumentale.
+ *  3. **probabilità del simulatore causale**.
+ *  4. probable/possible dal controfattuale, dove la probabilità manca.
+ *  5. numero di righe di prova.
+ *
+ * Perché la probabilità precede il conteggio delle prove: la prova
+ * *misurata* è già espressa dalla chiave 2, e quel che resta in
+ * `supporting_evidence` è in gran parte il controfattuale, che dice solo
+ * "una previsione combacia" — un booleano debole. La probabilità è invece
+ * una stima del simulatore sul sintomo riconosciuto. Misurato: con il
+ * conteggio delle prove davanti, la causa reale compariva fra le ipotesi
+ * stampate in 12 casi su 21; con la probabilità davanti, in 14.
+ *
+ * Misurato sui 21 casi italiani: ipotesi fuori contesto fra le 4 stampate
+ * da 5 a 0, causa reale stampata da 12 a 14 su 21. La pertinenza è una
+ * retrocessione: nessuna ipotesi viene esclusa.
+ *
+ * **Scartata** una variante che sembrava migliore: pesare la sovrapposizione
+ * lessicale fra etichetta e racconto. Misurata, premia la tautologia — su
+ * FORUM-IT-007 metteva "inverter in errore" (che ripete le parole del
+ * cliente) sopra "guasto di isolamento lato DC" (che le spiega, ed è la
+ * causa vera) — e cade sugli omonimi: su FORUM-IT-003 dava il punteggio più
+ * alto alle ipotesi sul quadro elettrico perché il cliente aveva appeso un
+ * quadro al muro.
+ */
+/**
+ * I punteggi appresi: rete neurale e distillatore d'esperienza.
+ *
+ * Erano usati da una seconda `sort` che girava DOPO verifyConclusion e
+ * sovrascriveva la graduatoria del motore — per questo l'ipotesi
+ * fotovoltaica tornava in alto nell'elenco passato al narratore anche
+ * quando la bozza l'aveva correttamente retrocessa. Quella formula leggeva
+ * anche `h.probability`, campo che non è mai esistito (il campo è
+ * `probabilita`, e `makeHypothesis` non dichiarava l'altro): valeva 0.5 per
+ * ogni ipotesi, cioè una costante. Qui i due punteggi veri restano, come
+ * ultima parola.
+ */
+function stimaAppresa(h) {
+  var neural = typeof h.neural_score === "number" ? h.neural_score : 0;
+  var distiller = typeof h.distiller_boost === "number" ? h.distiller_boost : 0;
+  return neural * 0.4 + distiller * 0.2;
+}
+
+function makeHypothesisComparator(cs) {
+  var story = s(cs && cs.problem_summary);
+  var cache = {};
+
+  function fuoriContesto(h) {
+    var k = s(h && h.label);
+    if (cache[k] === undefined) cache[k] = isOutOfDomain(k, story) ? 1 : 0;
+    return cache[k];
+  }
+
+  return function(a, b) {
+    var fa = fuoriContesto(a);
+    var fb = fuoriContesto(b);
+    if (fa !== fb) return fa - fb;
+
+    // La prova strumentale: confermata davanti a tutto il resto.
+    var ca = a.confidence === "confirmed" ? 1 : 0;
+    var cb = b.confidence === "confirmed" ? 1 : 0;
+    if (cb !== ca) return cb - ca;
+
+    // La stima del simulatore prima del conteggio delle prove: vedi sopra.
+    var pa = typeof a.probabilita === "number" ? a.probabilita : 0;
+    var pb = typeof b.probabilita === "number" ? b.probabilita : 0;
+    if (pb !== pa) return pb - pa;
+
+    // Dove la probabilità manca resta il segnale del controfattuale.
+    var ra = CONFIDENCE_RANK[a.confidence] === undefined ? 1 : CONFIDENCE_RANK[a.confidence];
+    var rb = CONFIDENCE_RANK[b.confidence] === undefined ? 1 : CONFIDENCE_RANK[b.confidence];
+    if (rb !== ra) return rb - ra;
+
+    var de = b.supporting_evidence.length - a.supporting_evidence.length;
+    if (de !== 0) return de;
+
+    // Ultima parola ai punteggi appresi (rete neurale, distillatore).
+    return stimaAppresa(b) - stimaAppresa(a);
+  };
+}
+
 function verifyConclusion(cs) {
+  // Lo stesso ordine che l'utente leggerà: la diagnosi nominata e la prima
+  // riga della sezione IPOTESI devono essere la stessa cosa.
+  var perOrdine = makeHypothesisComparator(cs);
+
+  // L'ordine diventa quello del case_state, non resta locale a questa
+  // funzione: il narratore prendeva `active.slice(0, 8)` nell'ordine di
+  // GENERAZIONE e ripescava le ipotesi che il motore aveva retrocesso —
+  // in risposta tornava l'ipotesi fotovoltaica su una lavatrice, dopo che
+  // la bozza l'aveva correttamente messa in fondo. Ordinando qui, ogni
+  // consumatore a valle (bozza, narratore, snapshot, DB) vede la stessa
+  // graduatoria.
+  cs.hypotheses = cs.hypotheses.slice().sort(function(a, b) {
+    var aa = a.status === "active" ? 0 : 1;
+    var ab = b.status === "active" ? 0 : 1;
+    if (aa !== ab) return aa - ab;
+    if (aa === 1) return 0;
+    return perOrdine(a, b);
+  });
+
   var active = cs.hypotheses.filter(function(h) { return h.status === "active"; });
 
   if (active.length === 0) {
@@ -1492,7 +1664,18 @@ function verifyConclusion(cs) {
   // prove e prima in ordine di generazione.
   var confirmed = active.filter(function(h) {
     return h.confidence === "confirmed" && h.contradicting_evidence.length === 0;
-  }).sort(byEvidenceThenProbability);
+  }).sort(perOrdine);
+
+  // La pertinenza precede la certezza anche qui. Se la soglia ha confermato
+  // soltanto etichette che questo impianto non giustifica, il fenomeno è
+  // reale ma il nome no: dire CONFERMATO e nominare "dispersione DC su
+  // pannello fotovoltaico" per una lavatrice sarebbe la versione peggiore
+  // del difetto, perché la certezza dà peso all'etichetta sbagliata.
+  var confermateInContesto = confirmed.filter(function(h) {
+    return !isOutOfDomain(h.label, cs.problem_summary);
+  });
+  var soloFuoriContesto = confirmed.length > 0 && confermateInContesto.length === 0;
+  confirmed = confermateInContesto;
 
   if (confirmed.length && hasMeasurement && !aiOnly) {
     cs.final_confidence = "confirmed";
@@ -1520,6 +1703,20 @@ function verifyConclusion(cs) {
     return;
   }
 
+  // La soglia ha confermato solo etichette inapplicabili a questo impianto:
+  // il valore misurato resta un fatto, la causa va riferita a un'ipotesi
+  // pertinente e la certezza non sale.
+  if (soloFuoriContesto) {
+    var pertinenti = active.filter(function(h) {
+      return !isOutOfDomain(h.label, cs.problem_summary);
+    }).sort(perOrdine);
+    cs.final_confidence = "probable";
+    cs.final_diagnosis = (pertinenti.length ? pertinenti[0].label : active[0].label)
+      + ". Soglia superata dalla misura, ma le ipotesi che la soglia conferma"
+      + " non si applicano a questo impianto: serve localizzare il guasto qui.";
+    return;
+  }
+
   // Prove parziali: controfattuale coerente coi fatti, o convergenza per
   // esclusione (una sola ipotesi sopravvissuta ai kill, non una sola
   // generata — in quel caso non c'è stata nessuna eliminazione).
@@ -1528,7 +1725,7 @@ function verifyConclusion(cs) {
   // probabilità. A pari prove le piste restano pari.
   var sostenute = active.filter(function(h) {
     return h.supporting_evidence.length > 0 || h.confidence === "probable";
-  }).sort(byEvidenceThenProbability);
+  }).sort(perOrdine);
 
   // PROBABILE vuol dire che UNA ipotesi guida. Con quattro ipotesi sostenute
   // a pari merito e quindici ancora in piedi non è "probabile": è ancora da
@@ -1573,16 +1770,17 @@ function formatResponse(cs, percezione) {
   // e la sezione IPOTESI devono raccontare la stessa cosa, altrimenti l'utente
   // legge CONFERMATO sopra un'ipotesi diversa da quella accertata.
   var guidaNorm = normalize(s(cs.final_diagnosis).split(". ")[0]);
+  var perOrdine = makeHypothesisComparator(cs);
   var active = cs.hypotheses.filter(function(h) { return h.status === "active"; })
     .slice()
     .sort(function(a, b) {
+      // L'ipotesi che la diagnosi nomina resta in testa: è scelta con lo
+      // stesso comparatore, quindi di norma è già prima — questa chiave
+      // garantisce che le due sezioni non si contraddicano comunque.
       var ga = guidaNorm && normalize(a.label) === guidaNorm ? 1 : 0;
       var gb = guidaNorm && normalize(b.label) === guidaNorm ? 1 : 0;
       if (gb !== ga) return gb - ga;
-      var ra = CONFIDENCE_RANK[a.confidence] === undefined ? 1 : CONFIDENCE_RANK[a.confidence];
-      var rb = CONFIDENCE_RANK[b.confidence] === undefined ? 1 : CONFIDENCE_RANK[b.confidence];
-      if (rb !== ra) return rb - ra;
-      return byEvidenceThenProbability(a, b);
+      return perOrdine(a, b);
     });
   var rejected = cs.hypotheses.filter(function(h) { return h.status === "rejected"; });
   var best = cs.next_action;
@@ -2215,12 +2413,16 @@ function createOrchestrator(options) {
         } catch(e) { /* graceful degradation */ }
       }
 
-      // Ordina le ipotesi attive per neural_score + probability (la migliore in cima)
+      // Un solo ordinamento, quello del motore: la pertinenza al contesto
+      // per prima, poi la conferma per misura, la probabilità, il
+      // controfattuale, le prove e infine i punteggi appresi. Qui girava una
+      // seconda sort che riordinava per conto proprio e sovrascriveva questa
+      // graduatoria subito dopo verifyConclusion.
+      var perOrdineFinale = makeHypothesisComparator(cs);
       cs.hypotheses.sort(function(a, b) {
         if (a.status !== b.status) return a.status === "active" ? -1 : 1;
-        var scoreA = (a.neural_score || 0) * 0.4 + (a.probability || 0.5) * 0.6 + (a.distiller_boost || 0) * 0.2;
-        var scoreB = (b.neural_score || 0) * 0.4 + (b.probability || 0.5) * 0.6 + (b.distiller_boost || 0) * 0.2;
-        return scoreB - scoreA;
+        if (a.status !== "active") return 0;
+        return perOrdineFinale(a, b);
       });
 
       // Sincronizza formato legacy
@@ -2364,6 +2566,11 @@ module.exports = {
   applyPriorContext: applyPriorContext,
   // Conferma per misura — esportati per i test
   CONFIRM_RULES: CONFIRM_RULES,
+  // Pertinenza — esportati per i test
+  DOMAIN_FAMILIES: DOMAIN_FAMILIES,
+  isOutOfDomain: isOutOfDomain,
+  outOfDomainFamilies: outOfDomainFamilies,
+  makeHypothesisComparator: makeHypothesisComparator,
   PROTECTION_TRIPPING_PATTERN: PROTECTION_TRIPPING_PATTERN,
   applyConfirmRules: applyConfirmRules,
   hypothesisClaim: hypothesisClaim,
