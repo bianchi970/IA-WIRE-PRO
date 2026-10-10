@@ -11,6 +11,12 @@ cd backend && node server.js
 # Run DB migration (idempotent, transactional)
 cd backend && node migrate.js
 
+# Banco di prova: una pagella, esce con errore se una metrica peggiora
+cd backend && node bench/rocco_bench.js
+
+# Rigenera la banca dispositivi dalle cinque fonti
+cd backend && node knowledge/build_dispositivi.js
+
 # Health check
 curl http://localhost:3000/health
 
@@ -516,6 +522,164 @@ Pattern corretto in `/tools/` (la cartella alla radice resta ignorata).
 **Dopo ogni nuova cartella sotto `backend/`, verificare `git status`**: un
 file non tracciato qui non rompe la macchina di sviluppo, rompe solo la
 produzione.
+
+### Banco di prova — la pagella (`bench/rocco_bench.js`)
+
+```bash
+cd backend && node bench/rocco_bench.js
+```
+
+Un comando, una pagella, **esce con errore se una metrica peggiora**. Prima
+esisteva solo nelle misure scritte a mano, una per blocco, che sparivano col
+blocco: senza una pagella stabile non si vede né un miglioramento né una
+regressione, e con 21 casi il rischio non è sbagliare una regola — è tararla
+su 21 esempi senza accorgersene.
+
+**Linea di base (2026-10-10, deterministica):**
+
+| metrica | valore |
+|---|---|
+| componenti inesistenti | 0 |
+| ipotesi fuori contesto stampate | 0 |
+| certezze senza misura | 0 |
+| conferme fuori bersaglio | 0 |
+| contesto multi-turn perso | 0 |
+| causa reale fra le ipotesi stampate | **16/21** |
+| causa reale fra le attive | 16/21 |
+| casi conclusi con la misura | 9/21 (su 13 che la prescrivono) |
+
+**Si alzano quando una misura le supera, non si abbassano per far passare
+una modifica.** Se una scende è una regressione: va spiegata.
+
+Tre cose che il banco ha corretto appena accesso, due delle quali erano
+**numeri riportati male da me**:
+1. Il motore non era deterministico (vedi sotto).
+2. Lo stato appreso falsava la misura: il caso N+1 girava su un motore che
+   aveva già visto il caso N. Il banco fotografa `data/**.json`, lo
+   ripristina **prima di ogni caso** e lo rimette come era alla fine.
+3. Ero io a inventare le premesse: la misura del secondo turno la scelevo da
+   una parola della domanda. Ora è **dedotta dalle `verifiche` del caso**, e
+   dove il caso non prescrive strumenti il secondo turno non si fa (13 su 21).
+
+`METRO_CIECO` elenca i casi in cui il confronto lessicale è noto per
+sbagliare (FORUM-IT-010: "conduttore interrotto" = la mancanza di fase del
+caso, detta con altre parole): esclusi dal conteggio e **stampati come
+nota**, così una conferma davvero fuori bersaglio resta visibile.
+
+In fondo stampa il numero che limita tutto: **46 voci di vocabolario su 255
+(18%) esercitate da frasi vere, 48 casi con causa nota (21 italiani)**.
+
+### Il neurale è riproducibile (`neural_core.rnd()`)
+41 `Math.random()` nel percorso neurale: `neural_core` inizializzava i pesi
+e mescolava gli esempi a caso, `neural_patterns` **generava a caso i propri
+dati di addestramento** (280 esempi che nessuno ha mai misurato, diversi a
+ogni avvio) — e il punteggio neurale è una delle chiavi con cui le ipotesi
+vengono ordinate. Due corse di fila davano 10 e 11 casi conclusi: **rumore**,
+indistinguibile da una regressione.
+
+Ora la casualità viene da `nc.rnd()`, PRNG con seme fisso, `nc.setSeed()`
+per variarlo deliberatamente. Zero `Math.random()` residui. Misurato: due
+corse identiche, causa vera stampata 14 → **15/21**.
+
+Il banco ha smesso di aver bisogno del suo trucco (fissava `Math.random`) e
+quel codice è stato **rimosso** invece di restare a sembrare utile.
+
+**Cosa fa il neurale, verificato:** ordina (`scoreHypotheses`), rileva la
+novità, costruisce il modello del mondo, e **decide se consultare l'IA** (se
+i punteggi sono alti e concordanti, ROCCO basta a sé). **Non afferma**: le
+ipotesi vengono dal motore, dal grafo e dal simulatore —
+`simulator_state.json` è conoscenza vera (causa, probabilità, come la
+verifico, cosa esclude). Nel comparatore il punteggio appreso è l'**ultima**
+chiave, dopo la prova misurata.
+
+### Le norme in un posto solo (`knowledge/limiti.js`)
+Gli stessi numeri vivevano in sei posti, **e avevano già divergito**:
+
+| | motore | rete neurale | confirm rule |
+|---|---|---|---|
+| tensione sana | 207–253 V | 220–240 V | — |
+| isolamento sano | ≥ 1 MΩ | ≥ 5 MΩ | ≥ 1 MΩ |
+| temperatura morsetto | 80 °C | — | 70 °C |
+
+22 limiti, ognuno con valore, unità, verso del confronto, etichetta italiana
+**e provenienza**: 16 da `norma` citata dal curriculum, 5 dalla `scuola`
+senza codice, **1 sola da `pratica`** — la temperatura assoluta, perché la
+scuola non insegna una temperatura: insegna il **ΔT fra le fasi** (CEI 11-27:
+<10 °C regolare, >30 °C critico) e le classi di isolamento. I 70 °C erano un
+numero inventato.
+
+**Il ponte con la scuola è un test, non una convenzione**: `limiti.test.js`
+verifica che ogni limite risalga a un livello di curriculum esistente, che
+la norma dichiarata sia citata, e **che il numero compaia nel testo che la
+scuola insegna**. Se qualcuno cambia uno dei due senza l'altro, si rompe.
+Verifica anche che nessun consumatore si tenga più il proprio letterale.
+
+Consumatori agganciati: motore, confirm/kill rules, narratore (i numeri
+ammessi nelle risposte non sono più un elenco a mano), inviluppo di
+addestramento della rete.
+
+### Banca dispositivi (`knowledge/dispositivi.json`)
+Era l'unica conoscenza che per esistere richiedeva Postgres: col DB spento
+ROCCO restava **senza niente** sui dispositivi (`[DEVICE KB] Schema error`).
+E anche funzionante era collegata **solo** al vecchio `/api/chat`:
+l'orchestratore V2 — il percorso che il frontend usa — non la vedeva.
+
+`knowledge/build_dispositivi.js` raccoglie le **cinque fonti** che ROCCO già
+aveva: seed SQL (35 apparecchi con targa e norma, 17 guasti, 17 misure),
+`components.json` (50 → 219 guasti con le verifiche di campo),
+`encyclopedia.json` (24 → 46 guasti con prove e rimedi),
+`failure_patterns` (40 pattern d'impianto), `limiti.js` (22 riferimenti).
+→ **109 dispositivi · 322 guasti · 39 riferimenti · 36 famiglie.**
+
+Ogni voce porta `fonte`; **le 33 lacune sono scritte nel file**, e un valore
+atteso che la fonte non dà resta "non specificato nella fonte" e **non viene
+stampato**. Il file è generato: si corregge la fonte e si rigenera.
+
+Nel ragionamento (passo 5c-bis): un guasto noto **è** un'ipotesi, e porta
+verifica, strumento, valore atteso e norma. Massimo 3 per caso, poi passa
+per le stesse regole di tutte. Misurato: causa reale stampata 15 → **16/21**.
+
+### Il percorso inverso — come trovare i dati che si fermano
+Il difetto che si ripete in questo codice è **dato calcolato e mai letto**
+(trovato dodici volte). Il modo più efficace di cercarlo è partire dalla
+fine: **risposta API ← narratore ← bozza ← case_state ← strumenti**,
+chiedendo a ogni stadio chi legge cosa. Su un caso reale, **4 dei 28 campi
+pieni** del `case_state` non erano letti da nessuno.
+
+Trovati così, e corretti:
+- **`runtime_trace` arrivava sempre null**: `server.js` leggeva `cs._trace`,
+  campo inesistente — la traccia si scrive in `caseState.runtime.trace`. E il
+  frontend **ha già il pulsante** che la mostra (`app.js:1178`).
+- **`fallback_used` non veniva dichiarato**: col provider giù ROCCO risponde
+  in modo deterministico — giusto — ma una risposta nata senza l'IA sembrava
+  identica a una nata con essa. Ora `network_down: …` e
+  `invalid_reasoner_json`. **Attenzione**: `runtimeTrace.record()` scrive il
+  *passo della traccia*, i metadati della risposta li aggiorna
+  `mergeRuntime()` — metterli solo nel primo li lascia invisibili.
+
+Dichiarati e non toccati: `cs.narration` (copia morta), `cs.simulazione_causale`
+(risultato completo del simulatore, sopravvive solo `anomaly_type`),
+`cs.user_goal` (**nel contratto**, letto da nessuno), `h.neural_cf`.
+
+### `test/rocco-v2-core.test.js` è il contratto del loop MORTO
+Rossa da sempre, e non si poteva aggiustare toccando il motore: i 10 passi
+di traccia che pretende (`loop_start`, `loop_tool_selected`, `loop_stop`,
+`model_result`…) sono emessi **soltanto** da `orchestrator_legacy.js`.
+L'orchestratore attuale ne emette 35, completamente diversi: **zero
+sovrapposizione**.
+
+Due sue asserzioni codificavano però contratti che il motore attuale deve
+rispettare, e hanno trovato i due difetti sui metadati sopra.
+
+**Codice non raggiungibile da `server.js`** (verificato col grafo delle
+dipendenze, risolutore di Node): `orchestrator_legacy.js` (2.129 righe),
+`planner.js`, `verifier.js` (usati solo dal legacy e da questa suite),
+`rocco/rocco_learn_online.js`, `rocco/rocco_study_session.js`,
+`rocco/rocco_tools.js`, `test.js`. In totale ~2.500 righe.
+
+**Decisione aperta**: riscrivere quelle asserzioni nel vocabolario attuale,
+o ritirare insieme il loop legacy e la sua suite. Tenere una suite rossa in
+repo è peggio di entrambe: insegna a ignorare i fallimenti.
 
 ### Formato risposta (RISOLTO)
 `rocco/index.js` produce `TECH_REPORT_V1` con sezioni: OSSERVAZIONI, COMPONENTI COINVOLTI, IPOTESI, LIVELLO DI CERTEZZA, VERIFICHE OPERATIVE, RISCHI REALI, PROSSIMO PASSO.
