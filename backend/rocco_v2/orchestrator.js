@@ -1509,7 +1509,17 @@ function callAI(cs, gateway, hint) {
 
     runtimeTrace.record(cs, "ai_called", { provider: r.provider_used, parsed: !!json });
 
-    if (!json) return;
+    // L'IA ha risposto ma non in JSON valido: ROCCO la scarta e continua col
+    // ragionamento deterministico — giusto — ma anche questo va **detto**.
+    // Scartare in silenzio significa che una risposta nata senza il
+    // contributo dell'IA sembra identica a una nata con esso.
+    if (!json) {
+      runtimeTrace.mergeRuntime(cs, {
+        fallback_used: true,
+        fallback_reason: "invalid_reasoner_json"
+      });
+      return;
+    }
     // Output AI è PROPOSTA — non verità. Fonte: external_ai
     arr(json.ipotesi || json.active).forEach(function(item) {
       var lab = s(item && (item.causa || item.label));
@@ -1519,7 +1529,26 @@ function callAI(cs, gateway, hint) {
         ["Ipotesi generata da AI esterna — da verificare con misure"]));
     });
   }).catch(function(err) {
-    runtimeTrace.record(cs, "ai_failed", { error: s(err && err.message) });
+    // L'IA non è raggiungibile: ROCCO continua con il ragionamento
+    // deterministico — ed è il comportamento giusto — ma deve **dirlo**.
+    //
+    // Qui si registrava solo l'evento nella traccia: `fallback_used` restava
+    // falso e nessuno sapeva che la risposta era arrivata senza l'IA. Il
+    // gateway segnala la caduta solo quando passa da un provider all'altro
+    // ("provider_switch"); se cadono tutti, la sua eccezione dice
+    // `provider_unavailable` e si fermava lì. La provenienza di una risposta
+    // è un'informazione che l'elettricista e chi guarda i log hanno diritto
+    // di avere.
+    var motivo = s(err && (err.message || err));
+    var tuttiGiu = /provider_unavailable|provider_missing|network|enotfound|etimedout|econnreset|econnrefused/i.test(motivo);
+    var ragione = tuttiGiu ? "network_down: " + motivo : "ai_failed: " + motivo;
+
+    // La traccia e i metadati sono due cose diverse: `record()` scrive il
+    // passo nella traccia, `mergeRuntime()` aggiorna i metadati della
+    // risposta. Mettere i campi solo nel primo li lasciava invisibili —
+    // l'avevo fatto, e il test me l'ha detto.
+    runtimeTrace.record(cs, "ai_failed", { error: motivo, fallback_reason: ragione });
+    runtimeTrace.mergeRuntime(cs, { fallback_used: true, fallback_reason: ragione });
   });
 }
 

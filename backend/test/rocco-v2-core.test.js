@@ -817,8 +817,13 @@ function testMalformedReasonerFallback() {
     toolRegistry: makeToolRegistry()
   });
 
+  // Il messaggio deve essere uno che porta ROCCO a consultare davvero
+  // l'IA: con "quando attivo la cucina" il livello neurale conclude che i
+  // suoi punteggi bastano, l'IA non viene chiamata, e il contratto sul JSON
+  // malformato asseriva su un percorso non percorso. Le asserzioni restano
+  // identiche: cambia la premessa, non la pretesa.
   return orchestrator.runDiagnosis({
-    message: "Il differenziale scatta quando attivo la cucina."
+    message: "Il differenziale scatta senza motivo apparente."
   }).then(function (result) {
     assert.strictEqual(result.runtime_metadata.fallback_used, true);
     assert.strictEqual(result.runtime_metadata.fallback_reason, "invalid_reasoner_json");

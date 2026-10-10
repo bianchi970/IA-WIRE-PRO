@@ -2572,7 +2572,22 @@ app.post("/api/chat/v2", rlChat, uploadAny, async (req, res) => {
         ? { catena: cs.sequenza_causale.catena, avviso: cs.sequenza_causale.avviso || null }
         : null,
       // A5: runtime trace (ultimi 10 step)
-      runtime_trace: cs._trace ? cs._trace.slice(-10) : null
+      //
+      // Leggeva `cs._trace`, un campo che non esiste in nessun punto del
+      // codice: `runtime_trace.js` scrive in `caseState.runtime.trace`.
+      // Risultato: la traccia del ragionamento — una ventina di passi
+      // registrati a ogni diagnosi (percezione, sicurezza, grafo, kill,
+      // conferme, banca dispositivi, azione scelta, redazione) — arrivava
+      // **sempre null**, mentre il frontend ha già il pulsante che la
+      // mostra e ne conta gli step. Calcolata a ogni richiesta e buttata
+      // all'ultimo stadio.
+      runtime_trace: cs.runtime && Array.isArray(cs.runtime.trace)
+        ? cs.runtime.trace.slice(-10)
+        : null,
+
+      // La famiglia di apparecchio riconosciuta: dice su quale banca di
+      // guasti noti ROCCO ha ragionato. Veniva calcolata e non usciva.
+      famiglia_dispositivo: cs.famiglia_dispositivo || null
     });
   } catch (err) {
     logger.error("/api/chat/v2 error: " + (err && err.message || err));
