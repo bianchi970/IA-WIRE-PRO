@@ -367,6 +367,60 @@ Test: `backend/rocco_v2/neural/test/confirm_rules.test.js` — 53 asserzioni.
 fotovoltaiche fra le attive (pertinenza al dominio del caso — vedi
 `SYNONYM_MAP` e iperonimi).
 
+### Senso delle parole (engine/diagnosticEngine.js)
+Riconoscere la parola non basta: va riconosciuto il **senso** in cui il
+cliente l'ha usata. Misurato sui 21 casi italiani, attribuendo ogni
+rilevamento alla keyword che lo causava: su **35 componenti rilevati, 14
+erano inesistenti**.
+
+| metrica | prima | dopo |
+|---|---|---|
+| componenti rilevati sul corpus | 35 | 23 |
+| di cui inesistenti | **14** | **0** |
+| rilevamenti corretti persi | — | 0 |
+| causa reale fra le ipotesi stampate | 14/21 | **15/21** |
+
+Il caso emblematico: *"Ho forato il muro per appendere un **quadro** […] Cosa
+ho **combinato**?"* produceva la custodia IP di un quadro elettrico e un
+magnetotermico differenziale *combinato*, e da lì tre ipotesi sulla
+conformità del quadro che scalzavano la causa vera.
+
+**Cinque meccanismi:**
+1. **Negazione** — `isKeywordNegated()`: "inverter **senza** trasformatore"
+   faceva rilevare un trasformatore 24V. Guarda le 24 battute prima di ogni
+   occorrenza; se una occorrenza è libera, vale. **Tollera l'articolo**: il
+   cliente scrive "non ha **il** differenziale", "manca **il** contatore".
+2. **Omonimi** — `SENSE_RULES`: `excludedBy` seleziona l'altro senso,
+   `unless` riporta al senso tecnico, `component` limita la regola alle
+   parole con due sensi entrambi elettrici.
+   - `quadro` → il dipinto (con `unless` su "quadro elettrico/centralino").
+   - `inverter` → fotovoltaico contro variatore di frequenza per motori.
+   - `interruttore` → tasto a muro contro magnetotermico. **Non tocca**
+     `SYNONYM_MAP interruttore→magnetotermico`, che resta decisione di
+     dominio: pretende solo il contesto da quadro. Su IT-002 ("tirare su gli
+     interruttori ma uno non resta su") il senso da quadro è giusto e resta.
+3. **Nomi d'agente** — lo stemmer collassa `bruciatore` sul participio
+   `bruciato`: "odore di bruciato" in un quadro rilevava la caldaia. Per
+   `-tore/-trice/-sore` il matching lasco è **disattivato**: si pretende la
+   forma esatta o il plurale.
+4. **Un token non vale per due posizioni** — la keyword `aria-aria` era
+   soddisfatta da una sola occorrenza di "aria" ("compressore ad aria").
+5. **Il senso si verifica anche sulla parola CANONICA** — `SYNONYM_MAP`
+   mappa `armadio`→`quadro` e `variatore`→`inverter`: la regola di senso,
+   controllata solo sulla keyword grezza, veniva scavalcata.
+
+**Igiene keyword** (9 rimozioni, ognuna un falso positivo misurato e
+ridondante): `combinato` (RCBO), `NO` (pulsante), `kW` (motore trifase),
+`portata` (pompa — in elettrotecnica è quella del cavo), `ciclico`/`24V`/
+`230V`/`DIN` (timer), `variatore` (dimmer).
+
+**Perché conta una sola keyword sbagliata**: il filtro a valle accetta
+`score >= 2`, cioè **una** keyword.
+
+Test: `backend/rocco_v2/neural/test/senso_parole.test.js` — 53 asserzioni,
+con l'elenco dei rilevamenti corretti che devono restare (rete di sicurezza
+contro un filtro troppo zelante).
+
 ### ROCCO V2 — pertinenza delle ipotesi
 Su una lavatrice in appartamento uscivano "Dispersione DC verso terra:
 pannello con celle rotte, cavo MC4" e "Cavo di terra a valle del relè".
