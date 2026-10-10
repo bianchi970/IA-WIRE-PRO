@@ -5,6 +5,37 @@
 // MLP con backpropagation, zero dipendenze esterne
 // ============================================================================
 
+// --- Sorgente di casualità riproducibile -----------------------------------
+//
+// Una rete ha bisogno di numeri casuali per rompere la simmetria dei pesi e
+// per mescolare gli esempi. Quello che NON deve essere casuale è ROCCO: con
+// `Math.random()` i pesi nascevano diversi a ogni avvio, e il punteggio
+// neurale è una delle chiavi con cui le ipotesi vengono ordinate.
+//
+// Misurato col banco di prova: due corse di fila sullo stesso corpus davano
+// 10 e 11 casi conclusi, 1 e 2 conferme fuori bersaglio. Non era un
+// miglioramento né un peggioramento — era rumore, e rendeva impossibile
+// distinguere una regressione dal caso.
+//
+// Qui la sorgente è un PRNG con seme fisso (mulberry32), lo stesso che usano
+// tutti i framework quando si scrive `seed=42`. `setSeed()` permette di
+// variarlo deliberatamente — per esempio per misurare quanto l'esito dipende
+// dall'inizializzazione.
+var SEME_PREDEFINITO = 20261010;
+var semeCorrente = SEME_PREDEFINITO >>> 0;
+
+function setSeed(seme) {
+  semeCorrente = (typeof seme === "number" && isFinite(seme) ? seme : SEME_PREDEFINITO) >>> 0;
+}
+
+function rnd() {
+  semeCorrente = (semeCorrente + 0x6D2B79F5) >>> 0;
+  var t = semeCorrente;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
 // --- Funzioni di attivazione ---
 
 function sigmoid(x) {
@@ -140,7 +171,7 @@ function clipGradients(grads, maxNorm) {
 
 function shuffleArray(arr) {
   for (var i = arr.length - 1; i > 0; i--) {
-    var j = Math.floor(Math.random() * (i + 1));
+    var j = Math.floor(rnd() * (i + 1));
     var tmp = arr[i];
     arr[i] = arr[j];
     arr[j] = tmp;
@@ -177,7 +208,7 @@ function Layer(inputSize, outputSize, activationName) {
     this.weights[i] = new Array(inputSize);
     this.vWeights[i] = new Array(inputSize);
     for (var j = 0; j < inputSize; j++) {
-      this.weights[i][j] = (Math.random() * 2 - 1) * scale;
+      this.weights[i][j] = (rnd() * 2 - 1) * scale;
       this.vWeights[i][j] = 0;
     }
     this.biases[i] = 0;
@@ -539,7 +570,7 @@ function randomVector(dim) {
   var v = new Array(dim);
   var scale = Math.sqrt(1.0 / dim);
   for (var i = 0; i < dim; i++) {
-    v[i] = (Math.random() * 2 - 1) * scale;
+    v[i] = (rnd() * 2 - 1) * scale;
   }
   return v;
 }
@@ -580,6 +611,10 @@ function oneHot(idx, size) {
 // ============================================================================
 
 module.exports = {
+  // Casualità riproducibile
+  rnd: rnd,
+  setSeed: setSeed,
+  SEME_PREDEFINITO: SEME_PREDEFINITO,
   // Classi
   Network: Network,
   Layer: Layer,

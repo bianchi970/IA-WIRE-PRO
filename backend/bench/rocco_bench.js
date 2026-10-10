@@ -35,32 +35,18 @@ require("dotenv").config({ path: require("path").join(__dirname, "..", ".env"), 
 var fs = require("fs");
 var path = require("path");
 
-// ── Il caso fissato ───────────────────────────────────────────────────
+// ── Riproducibilità ───────────────────────────────────────────────────
 //
-// `neural_core.js` inizializza i pesi della rete con `Math.random()` e
-// `neural_patterns.js` genera esempi sintetici allo stesso modo: il motore è
-// non deterministico **per costruzione**, e il punteggio neurale è una delle
-// chiavi con cui le ipotesi vengono ordinate. Misurato: due corse di fila
-// davano 10 e 11 casi conclusi, e 1 e 2 conferme fuori bersaglio.
+// Qui il banco sostituiva `Math.random` con un PRNG a seme fisso, perché il
+// motore era non deterministico: `neural_core.js` inizializzava i pesi della
+// rete a caso e `neural_patterns.js` generava a caso i suoi esempi di
+// addestramento. Due corse di fila davano 10 e 11 casi conclusi.
 //
-// Un banco che deve distinguere una regressione dal rumore non può
-// permetterselo: qui il generatore è sostituito da un PRNG con seme fisso
-// (mulberry32) per la durata della corsa. Non è un trucco per far tornare i
-// numeri — è la condizione perché i numeri vogliano dire qualcosa. Con
-// `ROCCO_BENCH_SEED=0` si misura il motore come gira in produzione, con la
-// sua variabilità.
-var SEED = process.env.ROCCO_BENCH_SEED === undefined ? 20261010 : Number(process.env.ROCCO_BENCH_SEED);
-var RANDOM_ORIGINALE = Math.random;
-var stato = SEED >>> 0;
-if (SEED !== 0) {
-  Math.random = function seeded() {
-    stato = (stato + 0x6D2B79F5) >>> 0;
-    var t = stato;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+// Quel trucco è stato rimosso perché il difetto è stato corretto alla
+// radice: la casualità del neurale ora viene da `nc.rnd()`, con seme fisso e
+// `nc.setSeed()` per variarlo deliberatamente. Il banco misura il motore
+// come gira in produzione, senza manometterlo — che è l'unico modo perché i
+// numeri vogliano dire qualcosa.
 
 var de = require("../engine/diagnosticEngine");
 var componenti = require("../knowledge/components.json").items;
@@ -112,7 +98,7 @@ process.on("exit", ripristinaStato);
 // ── Linee di base misurate (2026-10-10) ───────────────────────────────
 var BASELINE = {
   componenti_fantasma:        { valore: 0,  verso: "min" },   // meno è meglio
-  causa_vera_stampata:        { valore: 14, verso: "max" },   // su 21
+  causa_vera_stampata:        { valore: 15, verso: "max" },   // su 21
   causa_vera_attiva:          { valore: 16, verso: "max" },
   rumore_fuori_contesto:      { valore: 0,  verso: "min" },
   conferme_senza_misura:      { valore: 0,  verso: "min" },   // certezze regalate
@@ -324,7 +310,6 @@ casi.forEach(function (caso) {
     // Ogni caso parte dallo stesso motore: stesso stato appreso e stesso
     // seme, così la differenza fra due casi è il caso, non la corsa.
     ripristinaStato();
-    if (SEED !== 0) { stato = SEED >>> 0; }
     return primoTurno(caso).then(function (r) { return secondoTurno(caso, r); });
   });
 });

@@ -402,22 +402,22 @@ function bootstrapSintetico() {
   var normali = [];
   for (var n = 0; n < 100; n++) {
     var f = new Array(INPUT_DIM);
-    f[0] = normalizeValue(220 + Math.random() * 20, 0, 400);     // tensione_fn ~220-240V
-    f[1] = normalizeValue(380 + Math.random() * 20, 0, 700);     // tensione_ff ~380-400V
-    f[2] = normalizeValue(2 + Math.random() * 14, 0, 100);       // corrente ~2-16A
-    f[3] = logNormalize(5 + Math.random() * 995, 999);           // isolamento >5MOhm
-    f[4] = logNormalize(0.1 + Math.random() * 0.9, 999);         // continuità <1ohm
-    f[5] = 0.85 + Math.random() * 0.15;                          // cosφ ~0.85-1.0
-    f[6] = normalizeValue(49.5 + Math.random(), 45, 65);         // frequenza ~49.5-50.5Hz
-    f[7] = normalizeValue(20 + Math.random() * 25, 0, 200);      // temperatura ~20-45°C
-    f[8] = normalizeValue(Math.random() * 5, 0, 100);            // THD <5%
-    f[9] = normalizeValue(Math.random() * 10, 0, 500);           // dispersione <10mA
-    f[10] = normalizeValue(Math.random() * 3, 0, 50);            // squilibrio <3%
-    f[11] = normalizeValue(Math.random() * 2, 0, 100);           // corrente neutro <2A
+    f[0] = normalizeValue(220 + nc.rnd() * 20, 0, 400);     // tensione_fn ~220-240V
+    f[1] = normalizeValue(380 + nc.rnd() * 20, 0, 700);     // tensione_ff ~380-400V
+    f[2] = normalizeValue(2 + nc.rnd() * 14, 0, 100);       // corrente ~2-16A
+    f[3] = logNormalize(5 + nc.rnd() * 995, 999);           // isolamento >5MOhm
+    f[4] = logNormalize(0.1 + nc.rnd() * 0.9, 999);         // continuità <1ohm
+    f[5] = 0.85 + nc.rnd() * 0.15;                          // cosφ ~0.85-1.0
+    f[6] = normalizeValue(49.5 + nc.rnd(), 45, 65);         // frequenza ~49.5-50.5Hz
+    f[7] = normalizeValue(20 + nc.rnd() * 25, 0, 200);      // temperatura ~20-45°C
+    f[8] = normalizeValue(nc.rnd() * 5, 0, 100);            // THD <5%
+    f[9] = normalizeValue(nc.rnd() * 10, 0, 500);           // dispersione <10mA
+    f[10] = normalizeValue(nc.rnd() * 3, 0, 50);            // squilibrio <3%
+    f[11] = normalizeValue(nc.rnd() * 2, 0, 100);           // corrente neutro <2A
     // Sistema random
-    var sys = Math.floor(Math.random() * 5);
+    var sys = Math.floor(nc.rnd() * 5);
     for (var s = 0; s < 5; s++) f[12 + s] = s === sys ? 1 : 0;
-    f[17] = Math.random() > 0.3 ? 1 : 0;  // ha diff
+    f[17] = nc.rnd() > 0.3 ? 1 : 0;  // ha diff
     f[18] = 1;                              // ha mcb
     f[19] = 0;                              // non scattato
     f[20] = 1;                              // carico collegato
@@ -434,8 +434,8 @@ function bootstrapSintetico() {
   // Dispersione: isolamento basso, corrente dispersione alta
   for (var n = 0; n < 20; n++) {
     var f = generaFeatureBase();
-    f[3] = logNormalize(0.01 + Math.random() * 0.4, 999); // isolamento <0.5MOhm
-    f[9] = normalizeValue(30 + Math.random() * 200, 0, 500); // dispersione >30mA
+    f[3] = logNormalize(0.01 + nc.rnd() * 0.4, 999); // isolamento <0.5MOhm
+    f[9] = normalizeValue(30 + nc.rnd() * 200, 0, 500); // dispersione >30mA
     f[19] = 1; // protezione scattata
     faultInputs.push(f);
     faultTargets.push(nc.oneHot(0, NUM_FAULTS));
@@ -444,7 +444,7 @@ function bootstrapSintetico() {
   // Cortocircuito: corrente molto alta
   for (var n = 0; n < 20; n++) {
     var f = generaFeatureBase();
-    f[2] = normalizeValue(50 + Math.random() * 50, 0, 100); // corrente >50A
+    f[2] = normalizeValue(50 + nc.rnd() * 50, 0, 100); // corrente >50A
     f[3] = logNormalize(0, 999); // isolamento ~0
     f[19] = 1;
     faultInputs.push(f);
@@ -454,8 +454,8 @@ function bootstrapSintetico() {
   // Sovraccarico: corrente sopra nominale
   for (var n = 0; n < 20; n++) {
     var f = generaFeatureBase();
-    f[2] = normalizeValue(18 + Math.random() * 15, 0, 100); // corrente 18-33A
-    f[7] = normalizeValue(50 + Math.random() * 40, 0, 200); // temperatura alta
+    f[2] = normalizeValue(18 + nc.rnd() * 15, 0, 100); // corrente 18-33A
+    f[7] = normalizeValue(50 + nc.rnd() * 40, 0, 200); // temperatura alta
     f[19] = 1;
     faultInputs.push(f);
     faultTargets.push(nc.oneHot(2, NUM_FAULTS));
@@ -464,7 +464,7 @@ function bootstrapSintetico() {
   // Interruzione: tensione 0, corrente 0
   for (var n = 0; n < 20; n++) {
     var f = generaFeatureBase();
-    f[0] = normalizeValue(Math.random() * 5, 0, 400); // tensione ~0
+    f[0] = normalizeValue(nc.rnd() * 5, 0, 400); // tensione ~0
     f[2] = normalizeValue(0, 0, 100); // corrente 0
     f[20] = 0;
     faultInputs.push(f);
@@ -474,8 +474,8 @@ function bootstrapSintetico() {
   // Surriscaldamento: temperatura alta
   for (var n = 0; n < 20; n++) {
     var f = generaFeatureBase();
-    f[7] = normalizeValue(70 + Math.random() * 80, 0, 200); // >70°C
-    f[2] = normalizeValue(10 + Math.random() * 20, 0, 100); // corrente moderata-alta
+    f[7] = normalizeValue(70 + nc.rnd() * 80, 0, 200); // >70°C
+    f[2] = normalizeValue(10 + nc.rnd() * 20, 0, 100); // corrente moderata-alta
     faultInputs.push(f);
     faultTargets.push(nc.oneHot(4, NUM_FAULTS));
   }
@@ -483,8 +483,8 @@ function bootstrapSintetico() {
   // Guasto componente: valori anomali misti
   for (var n = 0; n < 20; n++) {
     var f = generaFeatureBase();
-    f[5] = Math.random() * 0.5; // cosφ basso
-    f[0] = normalizeValue(180 + Math.random() * 30, 0, 400); // tensione bassa
+    f[5] = nc.rnd() * 0.5; // cosφ basso
+    f[0] = normalizeValue(180 + nc.rnd() * 30, 0, 400); // tensione bassa
     faultInputs.push(f);
     faultTargets.push(nc.oneHot(5, NUM_FAULTS));
   }
@@ -492,8 +492,8 @@ function bootstrapSintetico() {
   // Squilibrio: squilibrio alto
   for (var n = 0; n < 20; n++) {
     var f = generaFeatureBase();
-    f[10] = normalizeValue(10 + Math.random() * 30, 0, 50); // squilibrio >10%
-    f[11] = normalizeValue(5 + Math.random() * 20, 0, 100); // corrente neutro alta
+    f[10] = normalizeValue(10 + nc.rnd() * 30, 0, 50); // squilibrio >10%
+    f[11] = normalizeValue(5 + nc.rnd() * 20, 0, 100); // corrente neutro alta
     f[13] = 1; f[12] = 0; // sistema motore
     faultInputs.push(f);
     faultTargets.push(nc.oneHot(6, NUM_FAULTS));
@@ -535,19 +535,19 @@ function bootstrapSintetico() {
 
 function generaFeatureBase() {
   var f = new Array(INPUT_DIM);
-  f[0] = normalizeValue(225 + Math.random() * 10, 0, 400);
-  f[1] = normalizeValue(385 + Math.random() * 10, 0, 700);
-  f[2] = normalizeValue(5 + Math.random() * 10, 0, 100);
-  f[3] = logNormalize(10 + Math.random() * 500, 999);
-  f[4] = logNormalize(0.2 + Math.random() * 0.5, 999);
-  f[5] = 0.9 + Math.random() * 0.1;
+  f[0] = normalizeValue(225 + nc.rnd() * 10, 0, 400);
+  f[1] = normalizeValue(385 + nc.rnd() * 10, 0, 700);
+  f[2] = normalizeValue(5 + nc.rnd() * 10, 0, 100);
+  f[3] = logNormalize(10 + nc.rnd() * 500, 999);
+  f[4] = logNormalize(0.2 + nc.rnd() * 0.5, 999);
+  f[5] = 0.9 + nc.rnd() * 0.1;
   f[6] = normalizeValue(50, 45, 65);
-  f[7] = normalizeValue(25 + Math.random() * 15, 0, 200);
-  f[8] = normalizeValue(2 + Math.random() * 3, 0, 100);
-  f[9] = normalizeValue(Math.random() * 5, 0, 500);
-  f[10] = normalizeValue(Math.random() * 2, 0, 50);
-  f[11] = normalizeValue(Math.random() * 1, 0, 100);
-  var sys = Math.floor(Math.random() * 5);
+  f[7] = normalizeValue(25 + nc.rnd() * 15, 0, 200);
+  f[8] = normalizeValue(2 + nc.rnd() * 3, 0, 100);
+  f[9] = normalizeValue(nc.rnd() * 5, 0, 500);
+  f[10] = normalizeValue(nc.rnd() * 2, 0, 50);
+  f[11] = normalizeValue(nc.rnd() * 1, 0, 100);
+  var sys = Math.floor(nc.rnd() * 5);
   for (var s = 0; s < 5; s++) f[12 + s] = s === sys ? 1 : 0;
   f[17] = 1;
   f[18] = 1;
