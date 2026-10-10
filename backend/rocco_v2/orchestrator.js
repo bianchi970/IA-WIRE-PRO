@@ -910,6 +910,25 @@ var RESISTANCE_TO_MOHM = { "mω": 1, "mohm": 1, "kω": 0.001, "kohm": 0.001, "ω
  *  facts     → chiavi di evidenza derivate dal motore (isolation_high, ...)
  *  measure() → valore numerico per grandezza, normalizzato (isolamento in MOhm)
  */
+var PRIOR_CONTEXT_MARK = "[CONTESTO PRECEDENTE]";
+
+/**
+ * Riporta il contesto dei turni precedenti dentro problem_summary.
+ *
+ * Idempotente: può essere chiamata più volte nel flusso senza accodare due
+ * volte lo stesso testo. Serve perché problem_summary viene riscritto dal
+ * merge del safety guard, e da problem_summary dipendono sia il racconto
+ * (`story`, l'ambito) sia le prove (`text`, via extractUserExclusions):
+ * senza questa riapplicazione quello che l'utente ha già escluso o misurato
+ * nei turni precedenti sparisce dal ragionamento.
+ */
+function applyPriorContext(cs) {
+  if (!cs || !cs.prior_context) return;
+  var summary = s(cs.problem_summary);
+  if (summary.indexOf(PRIOR_CONTEXT_MARK) !== -1) return;
+  cs.problem_summary = summary + "\n\n" + PRIOR_CONTEXT_MARK + "\n" + cs.prior_context;
+}
+
 function buildEvidenceContext(cs) {
   var facts = {};
   var measures = {};
@@ -1464,11 +1483,15 @@ function createOrchestrator(options) {
     cs.grafo = null;
     cs.controfattuale_risultati = [];
 
-    // G4: Multi-turn — integra contesto conversazione precedente
+    // G4: Multi-turn — integra contesto conversazione precedente.
+    // L'arricchimento va riapplicato dopo mergeSafetySeedOutput, che
+    // riscrive problem_summary col seed del safety guard (solo messaggio
+    // corrente) e cancellava il contesto dei turni precedenti: le esclusioni
+    // già dichiarate dall'utente non diventavano mai prove e ROCCO
+    // richiedeva verifiche che l'utente aveva appena fatto.
     if (inp.prior_context) {
       cs.prior_context = inp.prior_context;
-      // Arricchisci il problem_summary con il contesto
-      cs.problem_summary = cs.problem_summary + "\n\n[CONTESTO PRECEDENTE]\n" + inp.prior_context;
+      applyPriorContext(cs);
     }
 
     runtimeTrace.record(cs, "start", { has_image: cs.runtime.has_image, multi_turn: !!inp.prior_context });
@@ -1494,6 +1517,7 @@ function createOrchestrator(options) {
     // ═══ 3. SICUREZZA ═══
     return safetyGuard.run(inp).then(function(out) {
       caseStateHelpers.mergeSafetySeedOutput(cs, out);
+      applyPriorContext(cs);
       caseStateHelpers.addToolResult(cs, out.tool_result);
       runtimeTrace.record(cs, "safety", { level: cs.safety.level });
 
@@ -2065,6 +2089,7 @@ module.exports = {
   SISTEMI: SISTEMI,
   KILL_RULES: KILL_RULES,
   buildEvidenceContext: buildEvidenceContext,
+  applyPriorContext: applyPriorContext,
   buildAlreadyDoneMatchers: buildAlreadyDoneMatchers,
   ruleTriggered: ruleTriggered,
   extractUserExclusions: extractUserExclusions,

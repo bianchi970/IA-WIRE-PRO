@@ -56,6 +56,15 @@ try {
   console.warn('[ROCCO RUNNER] Non disponibile:', e && e.message);
 }
 
+// STORE CONVERSAZIONI LOCALE — continuità multi-turn quando Postgres non risponde
+let convStore = null;
+try {
+  convStore = require('./store/conversationStore');
+  console.log('[STORE LOCALE] Conversazioni su disco ✓');
+} catch (e) {
+  console.warn('[STORE LOCALE] Non disponibile:', e && e.message);
+}
+
 // ROCCO V2 ORCHESTRATOR — nucleo deduttivo strutturato
 let roccoV2 = null;
 try {
@@ -540,17 +549,25 @@ function formatDocChunks(chunks) {
  * Restituisce null se il DB non è disponibile o in caso di errore.
  */
 async function convCreate({ title = null, user_id = null } = {}) {
-  if (!pool) return null;
-  try {
-    const r = await pool.query(
-      `INSERT INTO conversations (title, user_id) VALUES ($1, $2) RETURNING id`,
-      [title || null, user_id || null]
-    );
-    return r.rows[0]?.id || null;
-  } catch (e) {
-    console.warn("⚠️ convCreate failed:", e?.message || e);
-    return null;
+  if (pool) {
+    try {
+      const r = await pool.query(
+        `INSERT INTO conversations (title, user_id) VALUES ($1, $2) RETURNING id`,
+        [title || null, user_id || null]
+      );
+      const id = r.rows[0]?.id || null;
+      if (id) return id;
+    } catch (e) {
+      console.warn("⚠️ convCreate failed:", e?.message || e);
+    }
   }
+  // Ripiego su disco: senza un convId la continuità multi-turn non esiste e
+  // ROCCO ricomincia la diagnosi da zero a ogni messaggio.
+  if (convStore) {
+    const localId = convStore.createConversation({ title: title, user_id: user_id });
+    if (localId) return localId;
+  }
+  return null;
 }
 
 /**
@@ -558,7 +575,14 @@ async function convCreate({ title = null, user_id = null } = {}) {
  * Restituisce l'id del messaggio inserito o null.
  */
 async function msgInsert({ conversation_id, role, content, content_format = "text", provider = null, model = null, certainty = null, meta_json = null } = {}) {
-  if (!pool || !conversation_id) return null;
+  if (!conversation_id) return null;
+  // Conversazione nata su disco: i suoi messaggi restano su disco.
+  if (convStore && convStore.isLocalId(conversation_id)) {
+    return convStore.insertMessage({
+      conversation_id, role, content, content_format, provider, model, certainty, meta_json
+    });
+  }
+  if (!pool) return null;
   try {
     const r = await pool.query(
       `INSERT INTO messages
@@ -602,7 +626,12 @@ function extractCertainty(text) {
  * Aggiorna updated_at della conversation (fire-and-forget, non blocca la risposta).
  */
 async function convTouch(id) {
-  if (!pool || !id) return;
+  if (!id) return;
+  if (convStore && convStore.isLocalId(id)) {
+    convStore.touchConversation(id);
+    return;
+  }
+  if (!pool) return;
   try {
     await pool.query(`UPDATE conversations SET updated_at = NOW() WHERE id = $1`, [id]);
   } catch (e) {
@@ -616,6 +645,9 @@ async function convTouch(id) {
  */
 async function generateContextSummary(convId, provider) {
   if (!pool || !convId) return;
+  // Il riassunto resta una funzione del DB: su una conversazione locale la
+  // continuità è già garantita dallo storico su disco.
+  if (convStore && convStore.isLocalId(convId)) return;
   try {
     const countRes = await pool.query(
       `SELECT COUNT(*) AS cnt FROM messages WHERE conversation_id = $1 AND role IN ('user','assistant')`,
@@ -1098,6 +1130,11 @@ app.get("/health", async (req, res) => {
     runningFile: "backend/server.js",
     strictFormat: STRICT_FORMAT,
     db: { connected: dbOk, serverTime: dbTime },
+    // Chi tiene la continuità multi-turn adesso: Postgres o il disco.
+    conversationStore: {
+      local: !!convStore,
+      active: convStore ? (dbOk ? "postgres" : "local") : "postgres"
+    },
     ai: {
       connected: aiConnected,
       activeProvider: activeProvider,
@@ -1279,20 +1316,41 @@ function checkOwnership(row, req) {
 // SEC-02: filtra sempre per req.authenticatedUserId, ignora user_id da query
 app.get("/api/conversations", async (req, res) => {
   try {
-    if (!pool) return res.json({ ok: true, count: 0, items: [], note: "DB non configurato" });
-
     const archived = req.query.archived === "1";
     const limit = Math.min(parseInt(req.query.limit || "50", 10) || 50, 200);
 
-    const r = await pool.query(
+    // Le conversazioni nate su disco restano elencate anche quando il DB
+    // torna: altrimenti all'utente sparirebbero dallo storico.
+    const localItems = convStore
+      ? convStore.listConversations({ user_id: req.authenticatedUserId, archived: archived, limit: limit })
+      : [];
+
+    // `pool` è un oggetto anche quando il DB non risponde: non basta
+    // controllarne l'esistenza, va intercettato il fallimento della query.
+    if (!pool) {
+      return res.json({ ok: true, count: localItems.length, items: localItems, source: "local" });
+    }
+
+    let r;
+    try {
+      r = await pool.query(
       `SELECT id, title, user_id, created_at, updated_at, is_archived
        FROM conversations
        WHERE is_archived = $1 AND user_id = $2
        ORDER BY updated_at DESC
        LIMIT $3`,
       [archived, req.authenticatedUserId, limit]
-    );
-    res.json({ ok: true, count: r.rowCount, items: r.rows });
+      );
+    } catch (dbErr) {
+      // DB muto: l'utente vede almeno lo storico su disco, non un errore.
+      console.warn("⚠️ GET /api/conversations: DB non risponde, elenco locale:", dbErr?.message || dbErr);
+      return res.json({ ok: true, count: localItems.length, items: localItems, source: "local" });
+    }
+
+    const items = (r.rows || []).concat(localItems).sort(function (a, b) {
+      return String(b.updated_at || "").localeCompare(String(a.updated_at || ""));
+    }).slice(0, limit);
+    res.json({ ok: true, count: items.length, items: items });
   } catch (err) {
     console.error("❌ GET /api/conversations error:", err);
     res.status(500).json({ ok: false, error: "Errore lettura conversations" });
@@ -1302,16 +1360,32 @@ app.get("/api/conversations", async (req, res) => {
 // POST /api/conversations
 // SEC-02: user_id scritto da req.authenticatedUserId, non da body
 app.post("/api/conversations", async (req, res) => {
+  const createLocal = () => {
+    if (!convStore) return null;
+    const localId = convStore.createConversation({
+      title: (req.body || {}).title || null,
+      user_id: req.authenticatedUserId
+    });
+    return localId ? convStore.getConversation(localId) : null;
+  };
+
   try {
-    if (!pool) return res.status(503).json({ ok: false, error: "DB non configurato" });
+    if (pool) {
+      const { title } = req.body || {};
+      try {
+        const r = await pool.query(
+          `INSERT INTO conversations (title, user_id) VALUES ($1, $2) RETURNING *`,
+          [title || null, req.authenticatedUserId]
+        );
+        return res.status(201).json({ ok: true, item: r.rows[0] });
+      } catch (dbErr) {
+        console.warn("⚠️ POST /api/conversations: DB non risponde, creo su disco:", dbErr?.message || dbErr);
+      }
+    }
 
-    const { title } = req.body || {};
-
-    const r = await pool.query(
-      `INSERT INTO conversations (title, user_id) VALUES ($1, $2) RETURNING *`,
-      [title || null, req.authenticatedUserId]
-    );
-    res.status(201).json({ ok: true, item: r.rows[0] });
+    const localItem = createLocal();
+    if (!localItem) return res.status(503).json({ ok: false, error: "DB non configurato" });
+    res.status(201).json({ ok: true, item: localItem, source: "local" });
   } catch (err) {
     console.error("❌ POST /api/conversations error:", err);
     res.status(500).json({ ok: false, error: "Errore creazione conversation" });
@@ -1322,10 +1396,18 @@ app.post("/api/conversations", async (req, res) => {
 // SEC-02: ownership check
 app.get("/api/conversations/:id", async (req, res) => {
   try {
-    if (!pool) return res.status(503).json({ ok: false, error: "DB non configurato" });
-
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ ok: false, error: "id non valido" });
+
+    if (convStore && convStore.isLocalId(id)) {
+      const localConv = convStore.getConversation(id);
+      if (!localConv) return res.status(404).json({ ok: false, error: "Conversation non trovata" });
+      const localOwn = checkOwnership(localConv, req);
+      if (!localOwn.ok) return res.status(localOwn.status).json({ ok: false, error: localOwn.error });
+      return res.json({ ok: true, item: localConv, messages: convStore.getMessages(id, 500), source: "local" });
+    }
+
+    if (!pool) return res.status(503).json({ ok: false, error: "DB non configurato" });
 
     const conv = await pool.query(
       `SELECT id, title, user_id, created_at, updated_at, is_archived
@@ -1356,10 +1438,26 @@ app.get("/api/conversations/:id", async (req, res) => {
 // SEC-02: fetch + ownership check prima dell'update
 app.patch("/api/conversations/:id", async (req, res) => {
   try {
-    if (!pool) return res.status(503).json({ ok: false, error: "DB non configurato" });
-
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ ok: false, error: "id non valido" });
+
+    if (convStore && convStore.isLocalId(id)) {
+      const localConv = convStore.getConversation(id);
+      if (!localConv) return res.status(404).json({ ok: false, error: "Conversation non trovata" });
+      const localOwn = checkOwnership(localConv, req);
+      if (!localOwn.ok) return res.status(localOwn.status).json({ ok: false, error: localOwn.error });
+      if (req.body.title === undefined && req.body.is_archived === undefined) {
+        return res.status(400).json({ ok: false, error: "Nessun campo da aggiornare" });
+      }
+      const updated = convStore.updateConversation(id, {
+        title: req.body.title,
+        is_archived: req.body.is_archived
+      });
+      if (!updated) return res.status(500).json({ ok: false, error: "Errore aggiornamento conversation" });
+      return res.json({ ok: true, item: updated, source: "local" });
+    }
+
+    if (!pool) return res.status(503).json({ ok: false, error: "DB non configurato" });
 
     const existing = await pool.query(
       `SELECT id, user_id FROM conversations WHERE id = $1`, [id]
@@ -1403,10 +1501,19 @@ app.patch("/api/conversations/:id", async (req, res) => {
 // SEC-02: fetch + ownership check prima della delete
 app.delete("/api/conversations/:id", async (req, res) => {
   try {
-    if (!pool) return res.status(503).json({ ok: false, error: "DB non configurato" });
-
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ ok: false, error: "id non valido" });
+
+    if (convStore && convStore.isLocalId(id)) {
+      const localConv = convStore.getConversation(id);
+      if (!localConv) return res.status(404).json({ ok: false, error: "Conversation non trovata" });
+      const localOwn = checkOwnership(localConv, req);
+      if (!localOwn.ok) return res.status(localOwn.status).json({ ok: false, error: localOwn.error });
+      convStore.deleteConversation(id);
+      return res.json({ ok: true, source: "local" });
+    }
+
+    if (!pool) return res.status(503).json({ ok: false, error: "DB non configurato" });
 
     const existing = await pool.query(
       `SELECT id, user_id FROM conversations WHERE id = $1`, [id]
@@ -1428,10 +1535,20 @@ app.delete("/api/conversations/:id", async (req, res) => {
 // SEC-02: ownership check sulla conversation prima di restituire i messaggi
 app.get("/api/conversations/:id/messages", async (req, res) => {
   try {
-    if (!pool) return res.json({ ok: true, count: 0, items: [], note: "DB non configurato" });
-
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ ok: false, error: "id non valido" });
+
+    if (convStore && convStore.isLocalId(id)) {
+      const localConv = convStore.getConversation(id);
+      if (!localConv) return res.status(404).json({ ok: false, error: "Conversation non trovata" });
+      const localOwn = checkOwnership(localConv, req);
+      if (!localOwn.ok) return res.status(localOwn.status).json({ ok: false, error: localOwn.error });
+      const localLimit = Math.min(parseInt(req.query.limit || "100", 10) || 100, 500);
+      const localMsgs = convStore.getMessages(id, localLimit);
+      return res.json({ ok: true, count: localMsgs.length, items: localMsgs, source: "local" });
+    }
+
+    if (!pool) return res.json({ ok: true, count: 0, items: [], note: "DB non configurato" });
 
     const conv = await pool.query(
       `SELECT id, user_id FROM conversations WHERE id = $1`, [id]
@@ -1540,7 +1657,10 @@ app.post("/api/chat", rlChat, uploadAny, async (req, res) => {
     }
 
     // ===== CONVERSATION PERSISTENCE — utente =====
-    if (pool) {
+    // convCreate/msgInsert ripiegano su disco da sé: qui non si richiede più
+    // un pool vivo, altrimenti a DB spento convId resta null e la history
+    // caricata sotto è sempre vuota.
+    if (pool || convStore) {
       try {
         if (!convId) {
           convId = await convCreate({
@@ -1563,7 +1683,12 @@ app.post("/api/chat", rlChat, uploadAny, async (req, res) => {
     // ===== LOAD HISTORY + SUMMARY FROM DB =====
     let dbHistory = null;
     let convSummary = null;
-    if (pool && convId) {
+    if (convStore && convId && convStore.isLocalId(convId)) {
+      dbHistory = convStore.getRecentMessages(convId, HISTORY_MAX, ["user", "assistant"])
+        .map(function (m) { return { role: m.role, content: m.content }; });
+      const localConv = convStore.getConversation(convId);
+      convSummary = (localConv && localConv.summary) || null;
+    } else if (pool && convId) {
       try {
         const hRes = await pool.query(
           `SELECT role, content FROM messages
@@ -2347,20 +2472,28 @@ app.post("/api/chat/v2", rlChat, uploadAny, async (req, res) => {
       convId = await convCreate({ title: message.slice(0, 80), user_id: user_id });
     }
 
-    // G4: Carica contesto conversazione precedente per multi-turn
+    // G4: Carica contesto conversazione precedente per multi-turn.
+    // Senza questo blocco il case_state nasce vergine a ogni messaggio: ROCCO
+    // dimentica il caso e richiede la verifica che l'utente ha già eseguito.
     let priorContext = "";
-    if (convId && pool) {
+    if (convId) {
       try {
-        const prevMsgs = await pool.query(
-          `SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 6`,
-          [convId]
-        );
-        if (prevMsgs.rows.length > 0) {
-          priorContext = prevMsgs.rows.reverse().map(function(r) {
+        let prevRows = [];
+        if (convStore && convStore.isLocalId(convId)) {
+          prevRows = convStore.getRecentMessages(convId, 6, ["user", "assistant"]);
+        } else if (pool) {
+          const prevMsgs = await pool.query(
+            `SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 6`,
+            [convId]
+          );
+          prevRows = (prevMsgs.rows || []).reverse();
+        }
+        if (prevRows.length > 0) {
+          priorContext = prevRows.map(function(r) {
             return (r.role === "user" ? "UTENTE" : "ROCCO") + ": " + String(r.content || "").slice(0, 300);
           }).join("\n");
         }
-      } catch(e) { /* DB non disponibile — procedi senza contesto */ }
+      } catch(e) { /* storico non leggibile — procedi senza contesto */ }
     }
 
     // G1: Salva messaggio utente in DB

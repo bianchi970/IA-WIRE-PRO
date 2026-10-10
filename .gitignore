@@ -11,3 +11,7 @@ BACKUP/
 CLEANUP.md
 SELFBUILD/
 .claude/
+
+# Store conversazioni locale: dati di runtime, non codice
+backend/data/conversations-local.json
+backend/data/conversations-local.json.tmp
