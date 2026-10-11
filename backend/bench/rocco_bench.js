@@ -258,10 +258,14 @@ var BASELINE = {
   //
   // Il controllo di onestà sul numero sopra: quante volte il credito sta su
   // una parola che il cliente **non** aveva già detto. 20 su 21 — l'unica
-  // eccezione è FORUM-SPEC-003, dichiarata in LACUNE_CONOSCENZA. Se un
+  // eccezione è FORUM-SPEC-003, dichiarata in SINTOMI_SENZA_CHIAVE. Se un
   // giorno `causa_vera_stampata` sale e questa no, il guadagno è del metro,
   // non di ROCCO.
-  causa_vera_stretta:         { valore: 20, verso: "max" },   // su 21
+  // ALZATA a 21/21 il 2026-10-11 notte, colmando l'unico caso che mancava —
+  // e **senza toccare il metro**: FORUM-SPEC-003, il fotovoltaico che rende
+  // il 30% in meno. Quello che mancava non era conoscenza: era la strada.
+  // Vedi CLAUDE.md, "La scuola insegnava e il ragionamento non sapeva".
+  causa_vera_stretta:         { valore: 21, verso: "max" },   // su 21
   rumore_fuori_contesto:      { valore: 0,  verso: "min" },
   conferme_senza_misura:      { valore: 0,  verso: "min" },   // certezze regalate
   // ALZATA 9 → 10 l'11/10 sera: una previsione non elimina più una causa.
@@ -301,7 +305,7 @@ var BASELINE = {
   // verifico, cosa esclude) non vengono lette e il distillatore lavora a
   // vuoto. Era `undefined` su **6 casi italiani su 21** e nessuna metrica
   // lo vedeva, perché un riconoscimento mancato non lasciava traccia.
-  // Le lacune dichiarate in LACUNE_CONOSCENZA non contano: lì tacere è la
+  // Le lacune dichiarate in SINTOMI_SENZA_CHIAVE non contano: lì tacere è la
   // risposta giusta.
   sintomo_non_riconosciuto:   { valore: 0,  verso: "min" },
   conferme_sbagliate:         { valore: 0,  verso: "min" },   // causa vera NON fra le confermate
@@ -409,41 +413,39 @@ var CORPUS_NON_CHIUDIBILE = {
     "racconto e giustifica un PROBABILE, non un confermato."
 };
 
-// Le LACUNE DI CONOSCENZA: i casi in cui ROCCO non sa che fenomeno sia, e
-// in cui tacere è la risposta giusta.
+// I SINTOMI SENZA UNA CHIAVE — e perché questo elenco si è dimezzato.
 //
-// FORUM-SPEC-005 — la caldaia che fa 3-4 cicli al minuto. Il corpus la
-// etichetta `caldaia_non_accende`, ma le cinque cause che ROCCO ha sotto
-// quella chiave parlano di **mancata accensione**: elettrodo di
-// rilevazione, valvola gas, pressione acqua, scheda, ventilatore. Il
-// corto-ciclo è un altro fenomeno — circolazione, valvola a 3 vie, portata
-// — e non è in nessuna fonte di ROCCO. Riconoscerlo come mancata accensione
-// gli darebbe cinque cause sbagliate con probabilità alte: **peggio del
-// silenzio.**
+// Qui c'erano due "lacune di conoscenza" dichiarate da me, e **nessuna delle
+// due era una lacuna di conoscenza.** Vale la pena tenere la correzione
+// scritta, perché l'errore è lo stesso che questo codice fa da sempre:
+// scambiare "ROCCO non lo sa" con "ROCCO lo sa e non ci arriva".
 //
-// Si colma nella fonte (una voce di corto-ciclo con la sua verifica), non
-// allargando il riconoscitore.
-var LACUNE_CONOSCENZA = {
-  // L'hot spot non è un'ipotesi di ROCCO. "hot-spot" e "diodo bypass
-  // guasto" compaiono nel curriculum fra i `guasti_tipici` del generatore
-  // DC, e il simulatore ha "stringa con diodo bypass in cortocircuito" —
-  // ma nessuno dei due arriva fra le prime quattro ipotesi, perché il
-  // fenomeno "calo graduale di produzione senza errori" non ha una voce
-  // propria. ROCCO stampa l'inverter in errore e la dispersione DC: piste
-  // plausibili, non quella giusta.
-  //
-  // Si colma nella fonte — una voce di hot spot con la sua verifica
-  // (termografia dei moduli, tensione di stringa) — non allargando una
-  // regola.
-  "FORUM-SPEC-003":
-    "hot spot e diodo bypass: nel curriculum come guasti tipici, ma non " +
-    "come ipotesi con verifica. ROCCO prende il credito del metro largo " +
-    "su una parola della domanda, non sulla causa.",
-
+//  - **FORUM-SPEC-003** (fotovoltaico che rende il 30% in meno; causa reale:
+//    hot spot con diodo bypass in cortocircuito più sporcizia). Avevo
+//    scritto che hot spot e diodo bypass non erano ipotesi di ROCCO. Erano
+//    nel **curriculum**, livello L21, con causa, sintomo e verifica: *"uno o
+//    più diodi bypass in cortocircuito… misurare la tensione di ogni
+//    pannello separatamente o termografia per hot-spot"*. I 44 guasti che la
+//    scuola insegna non erano fra le fonti della banca dispositivi, quindi
+//    non diventavano ipotesi. Collegati, SPEC-003 stampa la causa vera e il
+//    metro stretto passa a 21/21. **Uscito da questo elenco.**
+//
+//  - **FORUM-SPEC-005** (caldaia che fa 3-4 cicli al minuto; causa reale:
+//    circolatore bloccato o valvola a 3 vie inceppata). Avevo scritto che
+//    ROCCO ha solo le cause della mancata accensione. Falso: la banca ha
+//    *"caldaia parte e poi si spegne → circolatore non funzionante (impianto
+//    a circuito chiuso)"*, famiglia TERMICO, e arriva fra le ipotesi.
+//    Resta qui per una ragione **diversa e vera**: fra le 9 chiavi di
+//    esperienza del simulatore il corto-ciclo non c'è, e nessuna delle 9 è
+//    quella giusta — `caldaia_non_accende` parlerebbe di elettrodo, valvola
+//    gas e pressione. Perciò `riconosciSintomo` torna `null` di proposito:
+//    è una lacuna della **tassonomia dei sintomi**, non della conoscenza.
+//    Si colma aggiungendo la chiave al simulatore con le sue cause.
+var SINTOMI_SENZA_CHIAVE = {
   "FORUM-SPEC-005":
-    "caldaia in corto-ciclo: ROCCO ha solo le cause della mancata " +
-    "accensione, il corto-ciclo (circolazione, valvola a 3 vie) non è in " +
-    "nessuna fonte. Tacere è giusto."
+    "corto-ciclo di caldaia: la causa è nella banca (TERMICO, circolatore) " +
+    "ma fra le 9 chiavi del simulatore non esiste il fenomeno. Tacere è " +
+    "giusto finché la chiave non c'è."
 };
 
 var METRO_CIECO = {
@@ -627,8 +629,8 @@ function primoTurno(caso) {
       // Il sintomo è arrivato? Senza di quello l'esperienza non si apre.
       var tracciaT1 = (cs.runtime && cs.runtime.trace) || [];
       if (tracciaT1.some(function (x) { return x.step === "sintomo_non_riconosciuto"; })) {
-        if (LACUNE_CONOSCENZA[caso.id]) {
-          note.push(caso.id + ": lacuna di conoscenza — " + LACUNE_CONOSCENZA[caso.id].slice(0, 90));
+        if (SINTOMI_SENZA_CHIAVE[caso.id]) {
+          note.push(caso.id + ": sintomo senza una chiave — " + SINTOMI_SENZA_CHIAVE[caso.id].slice(0, 90));
         } else {
           m.sintomo_non_riconosciuto++;
           dettagli.push(caso.id + ": SINTOMO NON RICONOSCIUTO — l'esperienza del simulatore non si apre");
@@ -917,9 +919,9 @@ catena.then(function () {
   ok = riga("conferme_sbagliate", m.conferme_sbagliate) && ok;
   ok = riga("chiusure_non_dovute", m.chiusure_non_dovute) && ok;
   ok = riga("sintomo_non_riconosciuto", m.sintomo_non_riconosciuto) && ok;
-  Object.keys(LACUNE_CONOSCENZA).forEach(function (id) {
-    console.log("    " + id + ": lacuna di conoscenza dichiarata — " +
-      LACUNE_CONOSCENZA[id].slice(0, 70));
+  Object.keys(SINTOMI_SENZA_CHIAVE).forEach(function (id) {
+    console.log("    " + id + ": sintomo senza una chiave, dichiarato — " +
+      SINTOMI_SENZA_CHIAVE[id].slice(0, 70));
   });
   Object.keys(CORPUS_NON_CHIUDIBILE).forEach(function (id) {
     console.log("    " + id + ": il corpus non contiene il dato decisivo — deve restare aperto");

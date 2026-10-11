@@ -20,7 +20,7 @@ npm run smoke               # 5 chiamate HTTP sul servizio vero (con i provider)
 npm run migrate             # schema DB — idempotente, transazionale
 npm run ingest:manuali      # RAG doc_chunks — idempotente
 npm run ingest:enciclopedia # components + issues — idempotente
-npm run build:dispositivi   # rigenera knowledge/dispositivi.json dalle 5 fonti
+npm run build:dispositivi   # rigenera knowledge/dispositivi.json dalle 6 fonti
 npm run pulisci:residui     # residui del corpus d'esame nello stato appreso
 
 npm install                 # dipendenze
@@ -641,7 +641,7 @@ ROCCO restava **senza niente** sui dispositivi (`[DEVICE KB] Schema error`).
 E anche funzionante era collegata **solo** al vecchio `/api/chat`:
 l'orchestratore V2 — il percorso che il frontend usa — non la vedeva.
 
-`knowledge/build_dispositivi.js` raccoglie le **cinque fonti** che ROCCO già
+`knowledge/build_dispositivi.js` raccoglie le **sei fonti** che ROCCO già
 aveva: seed SQL (35 apparecchi con targa e norma, 17 guasti, 17 misure),
 `components.json` (50 → 219 guasti con le verifiche di campo),
 `encyclopedia.json` (24 → 46 guasti con prove e rimedi),
@@ -883,6 +883,113 @@ questa correzione, e non si vedeva dai numeri.
 **Domanda aperta, stampata in fondo alla pagella**: perché il "ha visto"
 sottrae invece di aggiungere. Va capito **prima** di dare più peso ai
 punteggi appresi.
+
+### La scuola insegnava e il ragionamento non sapeva
+
+**44 guasti, 19 livelli su 22, e nessuno nel percorso diagnostico li**
+**leggeva.** Ogni guasto del curriculum ha già la forma di un'ipotesi —
+`nome`, `causa`, `sintomo`, `verifica`, `componenti_coinvolti` — e serviva
+soltanto alla scuola: nodi del grafo, vocabolario, formule, norme. La sesta
+volta che in questo codice si trova conoscenza presente e mai letta.
+
+Il caso che l'ha fatto vedere è FORUM-SPEC-003 — *"il mio impianto
+fotovoltaico produce il 30% in meno, i pannelli sembrano ok, nessun errore
+sull'inverter"*, causa reale **hot spot con diodo bypass in cortocircuito**
+**più sporcizia**. Il livello L21 insegna esattamente quello:
+
+> *guasto:* produzione FV calata drasticamente — *causa:* uno o più diodi
+> bypass in cortocircuito → bypassa permanentemente un gruppo di celle —
+> *verifica:* misurare tensione di ogni pannello separatamente (o termografia
+> per hot-spot)
+
+**Non serviva una strada nuova.** La banca dispositivi è già la fonte da cui
+il passo 5c-bis ricava ipotesi con verifica, strumento e valore atteso:
+mancava l'innesto. Il curriculum è la **sesta fonte** di
+`build_dispositivi.js` — 322 → **366 guasti noti**. La famiglia si dichiara
+per livello (L21→FOTOVOLTAICO, L10→MOTORE, L11→TRASFORMATORE,
+L14→ALIMENTATORE, L17→SENSORE) e gli altri restano IMPIANTO, come i 40
+pattern: metterli nella famiglia sbagliata li nasconderebbe, perché la
+ricerca filtra per famiglia. La scuola non dichiara probabilità e **non se ne
+inventa una**.
+
+Collegarla non è bastato: fra la banca e l'ipotesi c'erano **tre filtri che**
+**leggevano male l'italiano**, e il guasto giusto non entrava nemmeno fra i
+primi otto.
+
+**1. La ricerca confrontava parole intere.** `punteggioTesto` cercava la
+parola per esteso: chi scrive dice "i **pannelli**", la banca scrive "il
+**pannello**", e `"pannello".indexOf("pannelli")` è −1. In italiano una
+parola non combacia quasi mai con sé stessa. Ora il confronto è sulla radice
+troncata a sei caratteri, come già fa `coerente()` del banco e come pretende
+il plurale femminile nel riconoscitore di componenti.
+
+**2. La ricerca contava le parole di una NEGAZIONE.** Il punteggio dei primi
+tre guasti veniva da *"**nessun errore** sull'**inverter**"* — tre punti
+("nessun", "errore", "inverter") per una frase che quei guasti **esclude** —
+mentre il guasto giusto ne prendeva uno. E "nessun" contava come parola di
+sintomo. È il difetto già corretto nel riconoscitore di componenti
+(*"inverter **senza** trasformatore"* faceva rilevare un trasformatore).
+
+La negazione viveva nel motore e stava per diventare **tre** elenchi di
+parole: ora è `rocco_v2/negazione.js`, modulo puro senza dipendenze, con
+`isKeywordNegated` (una parola), `isNegationWord` (la parola *è* una
+negazione) e `hasUnnegatedMatch` (un regex ha almeno un'occorrenza libera).
+Lo usano il motore, la ricerca nella banca e la classificazione del sintomo.
+
+**3. Il sintomo non parlava la lingua della banca.** Delle classi di
+comportamento ne erano mappate nove: `riduce`, `cessa`, `in_blocco`,
+`ripete`, `spontaneo`, `correlato` **non arrivavano alla banca**, quindi un
+racconto che dice solo "rende meno" partiva senza nessun token di sintomo. Le
+parole dell'espansione sono **contate nel file prima di scriverle**: "ridott"
+compare in 9 guasti, "degrad" in 28, "calo" in 17, "calat" in quello del
+curriculum — mentre "rendimento" e "prestazioni" in **zero**, e metterle
+sarebbe stato scrivere parole mie. "calo" e "calat" sono due voci e non una:
+il troncamento non le unisce, e la radice che le unirebbe ("cal") prende
+anche "caldo" e "calcolo".
+
+**Il risultato, senza aver toccato il metro:** su SPEC-003 ROCCO stampa
+*"uno o più diodi bypass in cortocircuito"* con il riferimento CEI 0-21 che
+viene dal livello del curriculum, e **`causa_vera_stretta` passa da 20 a
+21/21**. Il metro stretto è quello che pretende una parola distintiva, non
+già presente nella domanda: è la metrica che non si può compiacere.
+
+**Due dichiarazioni mie, entrambe sbagliate, corrette qui.** Avevo scritto
+che SPEC-003 e SPEC-005 erano *lacune di conoscenza*. Nessuna delle due lo
+era, ed è lo stesso errore che questo codice fa da sempre — scambiare "ROCCO
+non lo sa" con "ROCCO lo sa e non ci arriva":
+- **SPEC-003**: hot spot e diodo bypass erano nel curriculum, con la
+  verifica. Uscito dall'elenco.
+- **SPEC-005** (caldaia, 3-4 cicli al minuto): avevo scritto che ROCCO ha
+  solo le cause della mancata accensione. Falso — la banca ha *"caldaia parte
+  e poi si spegne → circolatore non funzionante"*, famiglia TERMICO, e arriva
+  fra le ipotesi. Resta dichiarato per una ragione **diversa e vera**: fra le
+  9 chiavi di esperienza del simulatore il corto-ciclo non esiste, e
+  `caldaia_non_accende` parlerebbe di elettrodo, valvola gas e pressione.
+  È una lacuna della **tassonomia dei sintomi**, non della conoscenza:
+  `SINTOMI_SENZA_CHIAVE`.
+
+**Un altro falso positivo mio**: avevo messo `gradi` fra le forme del
+surriscaldamento. *"Il termostato è impostato a 21 ma in casa ci sono 18
+**gradi**"* è una temperatura ambiente che manca, non un componente che
+scalda — e su SPEC-005 faceva classificare un corto-ciclo come
+surriscaldamento. Tolto; `temperatura` resta, perché è la parola delle
+verifiche della banca.
+
+| metrica | prima | dopo |
+|---|---|---|
+| guasti noti nella banca | 322 | **366** |
+| fonti della banca | 5 | **6** |
+| causa vera, **metro stretto** | 20/21 | **21/21** |
+| causa vera stampata · attiva | 21/21 · 21/21 | invariate |
+| casi conclusi con la misura | 11/21 | 11/21 |
+| conferme sbagliate · chiusure non dovute | 0 | 0 |
+
+**Resta aperto, e va detto**: su SPEC-003 il PROSSIMO PASSO è ancora
+*"inverter funzionante senza allarmi"* e non la verifica che decide fra le
+ipotesi (tensione di ogni stringa, o termografia dei moduli). La verifica
+**esiste** nel guasto: è `selectBestAction` che non la sceglie.
+`esame_verifica_proposta` è 48/48 perché *una* verifica viene proposta, non
+perché sia la migliore — ed è il prossimo numero da rendere onesto.
 
 ### Il sintomo è la chiave, e non girava nella toppa
 

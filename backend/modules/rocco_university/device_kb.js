@@ -18,13 +18,14 @@
  *
  * Ora la banca è un file di conoscenza come gli altri —
  * `knowledge/dispositivi.json`, generato da `knowledge/build_dispositivi.js`
- * mettendo insieme le cinque fonti che ROCCO ha già: il seed SQL, i 50
- * componenti locali, l'enciclopedia, i 40 pattern di guasto e i limiti
- * normativi. Funziona sempre, DB o no.
+ * mettendo insieme le sei fonti che ROCCO ha già: il seed SQL, i 50
+ * componenti locali, l'enciclopedia, i 40 pattern di guasto, i limiti
+ * normativi e i 44 guasti che la sua scuola insegna. Funziona sempre,
+ * DB o no.
  *
  * ── Cosa contiene, misurato ─────────────────────────────────────────
  *
- *   109 dispositivi · 322 guasti noti · 39 valori di riferimento
+ *   109 dispositivi · 366 guasti noti · 39 valori di riferimento
  *   36 famiglie · 33 lacune dichiarate
  *
  * Ogni voce porta `fonte`, e le lacune sono scritte nel file. Un valore
@@ -45,6 +46,9 @@
 
 const fs   = require('fs');
 const forme = require('../../rocco_v2/forme_sintomo');
+// La negazione: un modulo puro, tarato sulle frasi vere, condiviso con il
+// motore e con la classificazione del sintomo.
+const negazione = require('../../rocco_v2/negazione');
 const path = require('path');
 
 const PERCORSO_BANCA = path.join(__dirname, '..', '..', 'knowledge', 'dispositivi.json');
@@ -116,6 +120,17 @@ function rileveFamigliaInTesto(testo) {
 // Ora la forma si dichiara una volta e questa funzione fa il solo lavoro
 // che è suo: tradurre una classe di comportamento nel token con cui la
 // banca nomina quel sintomo.
+//
+// Delle classi dichiarate ne erano mappate nove: `riduce`, `cessa`,
+// `in_blocco`, `ripete`, `spontaneo` e `correlato` **non arrivavano alla
+// banca**, quindi su un racconto che dice solo "rende meno" la ricerca
+// partiva senza nessun token di sintomo.
+//
+// Misurato su FORUM-SPEC-003 ("il fotovoltaico produce il 30% in meno"): la
+// banca ha due guasti pertinenti — *"produzione ridotta: stringa
+// ombreggiata, modulo degradato"* e, dal curriculum, *"diodi bypass in
+// cortocircuito"* — e nessuno dei due veniva pescato, perché la parola che
+// li lega al racconto (`riduce`) non aveva voce.
 const CLASSE_A_TOKEN = [
   ['scatta',        'scatta'],
   ['botta',         'botta'],
@@ -125,7 +140,13 @@ const CLASSE_A_TOKEN = [
   ['ronza',         'ronza'],
   ['non_parte',     'non avvia'],
   ['surriscalda',   'surriscalda'],
-  ['umido',         'umidità']
+  ['umido',         'umidità'],
+  ['riduce',        'resa ridotta'],
+  ['cessa',         'non funziona'],
+  ['in_blocco',     'in blocco'],
+  ['ripete',        'intermittente'],
+  ['spontaneo',     'senza comando'],
+  ['correlato',     'con altro carico']
 ];
 
 function rilevaSintomoDalTesto(testo) {
@@ -145,12 +166,69 @@ function normalizza(t) {
 }
 
 /** Quante parole significative della ricerca compaiono nel testo. */
+/**
+ * Quante parole significative della ricerca compaiono nel testo.
+ *
+ * Il confronto si fa sulla **radice troncata**, non sulla parola intera.
+ * Cercando la parola per esteso l'italiano non combacia quasi mai con sé
+ * stesso: chi scrive dice "i **pannelli**" e la banca scrive "il
+ * **pannello**", e `"pannello".indexOf("pannelli")` è −1. È la stessa
+ * trappola del riconoscitore di componenti (il plurale femminile
+ * `cassette`/`cassetta`) e del confronto `coerente()` del banco, che per
+ * questo tronca a sei caratteri.
+ *
+ * Misurato su FORUM-SPEC-003 — "il fotovoltaico produce il 30% in meno, i
+ * **pannelli** sembrano ok": il guasto che il curriculum insegna per quel
+ * fenomeno ("diodi bypass in cortocircuito… misurare la tensione di ogni
+ * **pannello** separatamente o termografia per hot-spot") **non entrava
+ * nemmeno fra i primi otto**, perché nessuna parola della domanda combaciava
+ * per esteso con il testo del guasto.
+ *
+ * Sei caratteri: la flessione italiana cambia una o due lettere in coda, e
+ * meno di quattro non identifica niente (il filtro sulle parole è già a 4).
+ */
+const RADICE = 6;
+
+/**
+ * Le parole della ricerca che VALGONO: né neganti, né negate.
+ *
+ * Una frase come "i pannelli sembrano ok, **nessun errore** sull'inverter"
+ * esclude i guasti dell'inverter, e la ricerca la contava a loro favore:
+ * "nessun", "errore" e "inverter" facevano tre punti. Misurato su
+ * FORUM-SPEC-003 — il guasto che il curriculum insegna per quel fenomeno
+ * (diodi bypass in cortocircuito) prendeva **un** punto e non entrava
+ * nemmeno fra i primi otto, mentre i primi tre erano tutti guasti
+ * d'inverter scelti dalle parole di una negazione.
+ *
+ * È lo stesso difetto già corretto nel riconoscitore di componenti
+ * ("inverter **senza** trasformatore" faceva rilevare un trasformatore), e
+ * la logica si riusa da lì: `NEGATORS` è tarato sulle frasi vere e tollera
+ * l'articolo ("non ha **il** differenziale").
+ *
+ * Il risultato è memorizzato per ricerca: `punteggioTesto` viene chiamata
+ * una volta per guasto, e sono 366.
+ */
+const _parolePesate = new Map();
+
+function parolePesate(ricerca) {
+  const chiave = String(ricerca == null ? "" : ricerca);
+  if (_parolePesate.has(chiave)) return _parolePesate.get(chiave);
+  const norm = normalizza(chiave);
+  const out = (norm.match(/[a-z0-9]{4,}/g) || []).filter(function (p) {
+    if (negazione.isNegationWord(p)) return false;
+    return !negazione.isKeywordNegated(norm, p);
+  });
+  if (_parolePesate.size > 200) _parolePesate.clear();
+  _parolePesate.set(chiave, out);
+  return out;
+}
+
 function punteggioTesto(testo, ricerca) {
   const t = normalizza(testo);
-  const parole = normalizza(ricerca).match(/[a-z0-9]{4,}/g) || [];
+  const parole = parolePesate(ricerca);
   if (!parole.length) return 0;
   let n = 0;
-  parole.forEach(function (p) { if (t.indexOf(p) >= 0) n++; });
+  parole.forEach(function (p) { if (t.indexOf(p.slice(0, RADICE)) >= 0) n++; });
   return n;
 }
 
@@ -214,6 +292,11 @@ const ORDINE_PROBABILITA = { Alta: 1, Media: 2, Bassa: 3 };
 // "misurare la temperatura") e matcherebbe quasi tutto, quindi non c'è.
 // Ogni voce deve essere lunga almeno 4 caratteri, perché `punteggioTesto`
 // scarta le più corte.
+// Le parole con cui la BANCA nomina un sintomo, non quelle con cui lo dice
+// il cliente. Contate nel file prima di scriverle qui: "ridott" compare in 9
+// guasti, "degrad" in 28, "calo" in 17, "produzion" in 3 — mentre
+// "rendimento" e "prestazioni" in **zero**, e metterle sarebbe stato
+// scrivere parole mie.
 var SINONIMI_SINTOMO = {
   "surriscalda":   "surriscald caldo bruciat",
   "scatta":        "scatt riarm",
@@ -223,7 +306,18 @@ var SINONIMI_SINTOMO = {
   "non avvia":     "bloccat",
   "umidità":       "umidit acqua condensa",
   "ronza":         "ronz vibra rumore",
-  "botta":         "botta istantane"
+  "botta":         "botta istantane",
+  // "calo" e "calat" sono due parole, non una: il troncamento a sei
+  // caratteri non le unisce ("calata".indexOf("calo") è -1) e la radice che
+  // le unirebbe — "cal" — prende anche "caldo" e "calcolo". Si elencano
+  // entrambe, ed entrambe sono nella banca: "calo" in 17 guasti, "calat" in
+  // quello che il curriculum insegna per il calo di produzione FV.
+  "resa ridotta":  "ridott produzion calo calat degrad",
+  "non funziona":  "non funziona interrott",
+  "in blocco":     "blocco errore allarme",
+  "intermittente": "intermittent alcune volte",
+  "senza comando": "senza causa apparente",
+  "con altro carico": "quando si preme quando si eccita"
 };
 
 /** Aggiunge alla ricerca le parole con cui la banca nomina quel sintomo. */

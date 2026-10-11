@@ -70,7 +70,13 @@ check("ci sono valori di riferimento", c.misure_attese >= 30);
 check("le famiglie coprono più dei quadri di protezione", c.famiglie >= 20);
 
 // Ogni voce dichiara da dove viene: niente conoscenza anonima.
-var fontiAttese = ["seed_sql", "components", "encyclopedia", "failure_patterns", "limiti"];
+// `curriculum` è la sesta fonte, aggiunta l'11/10: i 44 guasti che la scuola
+// di ROCCO insegna — 19 livelli su 22 — avevano già la forma di un'ipotesi
+// (causa, sintomo, verifica, componenti) e **nessuno nel percorso
+// diagnostico li leggeva**. La banca era già la strada per cui un guasto noto
+// diventa un'ipotesi con verifica: mancava l'innesto.
+var fontiAttese = ["seed_sql", "components", "encyclopedia", "failure_patterns",
+  "limiti", "curriculum"];
 banca.dispositivi.forEach(function (d) {
   check("dispositivo " + d.codice + " dichiara la fonte", fontiAttese.indexOf(d.fonte) >= 0);
 });

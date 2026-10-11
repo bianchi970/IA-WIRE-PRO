@@ -101,7 +101,12 @@ var COMPORTAMENTI = {
   // CORRELAZIONE — succede quando faccio un'altra cosa.
   correlato: /quando (accend|part|us|attiv|inseri|colleg)|appena (accend|part|colleg)|se accendo|mentre (us|funzion|lavor)/,
 
-  surriscalda: /surriscald|\bcaldo\b|scalda|bruciat|brucia|\bfuma\b|odore|fuso|\bnero\b|temperatura|\bgradi\b|burning|smell|etincelle|funke|quemado|heiss/,
+  // `gradi` NON c'è, e l'ho provato: "il termostato è impostato a 21 ma in
+  // casa ci sono 18 **gradi**" è una temperatura ambiente che manca, non un
+  // componente che scalda. Su FORUM-SPEC-005 faceva classificare una caldaia
+  // in corto-ciclo come surriscaldamento. `temperatura` resta, perché la
+  // aveva già `device_kb` e perché è la parola delle verifiche della banca.
+  surriscalda: /surriscald|\bcaldo\b|scalda|bruciat|brucia|\bfuma\b|odore|fuso|\bnero\b|temperatura|burning|smell|etincelle|funke|quemado|heiss/,
 
   // Due rumori diversi, e la banca dispositivi li tiene separati perché
   // portano a guasti diversi: il ronzio continuo (lamierature, vibrazione)
@@ -143,6 +148,13 @@ var OGGETTI = {
   impianto: /tensione|corrente|impianto|circuito|luce|luci|presa|prese|elettrodomestic/
 };
 
+// La negazione: un marcatore di comportamento dentro una negazione non
+// afferma niente. Su FORUM-SPEC-003 — "i pannelli sembrano ok, **nessun
+// errore** sull'inverter" — la parola "errore" faceva classificare il
+// fenomeno come *apparecchio in blocco*, e da lì la banca pescava tre
+// guasti d'inverter: cioè esattamente quello che il cliente aveva escluso.
+var negazione = require("./negazione");
+
 function normalizza(testo) {
   return String(testo == null ? "" : testo).toLowerCase()
     .replace(/[àáâãä]/g, "a")
@@ -152,34 +164,36 @@ function normalizza(testo) {
     .replace(/[ùúûü]/g, "u");
 }
 
-/** Le classi di comportamento presenti nel testo. */
+/** Le classi di comportamento AFFERMATE nel testo. */
 function comportamenti(testo) {
   var t = normalizza(testo);
   var out = [];
   Object.keys(COMPORTAMENTI).forEach(function (k) {
-    if (COMPORTAMENTI[k].test(t)) out.push(k);
+    if (negazione.hasUnnegatedMatch(t, COMPORTAMENTI[k])) out.push(k);
   });
   return out;
 }
 
-/** Le classi di oggetto presenti nel testo. */
+/** Le classi di oggetto nominate (non negate) nel testo. */
 function oggetti(testo) {
   var t = normalizza(testo);
   var out = [];
   Object.keys(OGGETTI).forEach(function (k) {
-    if (OGGETTI[k].test(t)) out.push(k);
+    if (negazione.hasUnnegatedMatch(t, OGGETTI[k])) out.push(k);
   });
   return out;
 }
 
 function haComportamento(testo, classe) {
   var re = COMPORTAMENTI[classe];
-  return !!re && re.test(normalizza(testo));
+  return !!re && negazione.hasUnnegatedMatch(normalizza(testo), re);
 }
 
+// L'oggetto segue la stessa regola: "inverter **senza** trasformatore" non
+// nomina un trasformatore.
 function haOggetto(testo, classe) {
   var re = OGGETTI[classe];
-  return !!re && re.test(normalizza(testo));
+  return !!re && negazione.hasUnnegatedMatch(normalizza(testo), re);
 }
 
 module.exports = {

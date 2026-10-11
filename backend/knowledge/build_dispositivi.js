@@ -19,7 +19,7 @@
  * dispositivi — 35 apparecchi, 17 guasti e 17 misure attese chiusi in un
  * file SQL che nessuno poteva leggere.
  *
- * ── Le cinque fonti ──────────────────────────────────────────────────
+ * ── Le sei fonti ─────────────────────────────────────────────────────
  *
  *  1. `db/rocco_dispositivi_seed.sql`  35 apparecchi con targa e norma,
  *     17 guasti con verifica/strumento/valore atteso, 17 misure attese.
@@ -35,7 +35,7 @@
  * ── La regola ────────────────────────────────────────────────────────
  *
  * Ogni voce porta `fonte`. Nessuna riga nasce qui: se un dato non c'è in
- * nessuna delle cinque fonti, **manca**, e il file lo dichiara nella
+ * nessuna delle sei fonti, **manca**, e il file lo dichiara nella
  * sezione `lacune`. Dire "non lo so" è parte della conoscenza.
  */
 
@@ -190,6 +190,8 @@ function costruisci() {
   var pattern = leggiJson("knowledge/failure_patterns.json");
   pattern = pattern.items || pattern.patterns || Object.values(pattern).find(Array.isArray) || [];
   var limiti = require("./limiti");
+// La scuola di ROCCO: 22 livelli, e in 19 di essi i guasti che insegna.
+var curriculum = require("../rocco_v2/neural/curriculum");
 
   var dispositivi = [];
   var guasti = [];
@@ -320,6 +322,63 @@ function costruisci() {
       riferimento_norma: null,
       pattern_id: p.id,
       fonte: "failure_patterns"
+    });
+  });
+
+  // ── 3f. Dal CURRICULUM: i 44 guasti che la scuola insegna ──────────
+  //
+  // Diciannove dei ventidue livelli insegnano guasti, e ognuno ha già la
+  // forma di un'ipotesi: `nome`, `causa`, `sintomo`, `verifica`,
+  // `componenti_coinvolti`. **Nessuno nel percorso diagnostico li leggeva.**
+  // Il curriculum serviva alla scuola (nodi del grafo, vocabolario, formule,
+  // norme) e non arrivava a chi risponde — la sesta volta che in questo
+  // codice si trova conoscenza presente e mai letta.
+  //
+  // Non serviva una strada nuova: la banca dispositivi è già la fonte da cui
+  // il passo 5c-bis dell'orchestratore ricava ipotesi con verifica,
+  // strumento e valore atteso. Mancava l'innesto.
+  //
+  // Il caso che l'ha fatto vedere è FORUM-SPEC-003 — "il fotovoltaico
+  // produce il 30% in meno, i pannelli sembrano ok, nessun errore
+  // sull'inverter", causa reale **hot spot con diodo bypass in
+  // cortocircuito più sporcizia**. Il livello L21 insegna esattamente
+  // questo: *"produzione FV calata drasticamente → uno o più diodi bypass
+  // in cortocircuito, verifica: misurare la tensione di ogni pannello
+  // separatamente, o termografia per hot-spot"*. ROCCO lo sapeva e non lo
+  // diceva.
+  var FAMIGLIA_DEL_LIVELLO = {
+    L10: "MOTORE", L11: "TRASFORMATORE", L14: "ALIMENTATORE",
+    L17: "SENSORE", L21: "FOTOVOLTAICO"
+  };
+  // Gli altri livelli restano IMPIANTO, come i 40 pattern: un guasto che non
+  // appartiene a un apparecchio appartiene all'impianto, e lì resta
+  // trovabile. Mettere un guasto nella famiglia sbagliata lo nasconde,
+  // perché la ricerca filtra per famiglia.
+  (curriculum.LIVELLI || []).forEach(function (liv) {
+    var fam = FAMIGLIA_DEL_LIVELLO[liv.id] || "IMPIANTO";
+    var norma = (liv.norme || []).map(function (n) {
+      return typeof n === "string" ? n : (n && (n.codice || n.norma || n.nome));
+    }).filter(Boolean)[0] || null;
+
+    (liv.guasti || []).forEach(function (g) {
+      if (!g || !g.nome) return;
+      guasti.push({
+        dispositivo_codice: null, famiglia: fam,
+        // Il sintomo è come il guasto si manifesta; il nome del guasto da
+        // solo non basta a trovarlo per sintomo.
+        sintomo: [g.sintomo, g.nome].filter(Boolean).join(" — "),
+        causa_probabile: g.causa || g.nome,
+        // La scuola non dichiara una probabilità: non se ne inventa una.
+        probabilita: null,
+        verifica: g.verifica || "verifica non specificata nella fonte",
+        strumento: dedurreStrumento(String(g.verifica || "")),
+        valore_atteso: estraiAtteso(String(g.verifica || "")) ||
+          "non specificato nella fonte",
+        rischio: null,
+        riferimento_norma: norma,
+        livello_curriculum: liv.id,
+        fonte: "curriculum"
+      });
     });
   });
 
@@ -456,7 +515,7 @@ if (require.main === module) {
   console.log("  famiglie         " + String(banca.copertura.famiglie).padStart(4));
 
   console.log("\n  per fonte:");
-  ["seed_sql", "components", "encyclopedia", "failure_patterns", "limiti"].forEach(function (f) {
+  ["seed_sql", "components", "encyclopedia", "failure_patterns", "limiti", "curriculum"].forEach(function (f) {
     var d = banca.dispositivi.filter(function (x) { return x.fonte === f; }).length;
     var g = banca.guasti.filter(function (x) { return x.fonte === f; }).length;
     var m = banca.misure_attese.filter(function (x) { return x.fonte === f; }).length;

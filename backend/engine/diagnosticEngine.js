@@ -1124,36 +1124,19 @@ function containsKeyword(queryNorm, keyword) {
 // Fra il negatore e il componente il cliente mette l'articolo: "non ha **il**
 // differenziale", "manca **il** contatore". Senza questa tolleranza la
 // negazione si vedeva solo in "senza differenziale".
-var ARTICOLI = "(?:\\s+(?:il|lo|la|i|gli|le|un|uno|una|dei|degli|delle|del|dello|della|l))*";
-var NEGATORS = new RegExp(
-  "(senza|privo di|priva di|privi di|sprovvist\\w+ di|non ha|non hanno|non c e|non ce|" +
-  "manca|mancano|mancante|assente|assenza di|nessun\\w*|niente)" + ARTICOLI + "\\s*$"
-);
-
-// Quante parole prima dell'occorrenza si guarda per trovare la negazione.
-var NEGATION_LOOKBEHIND = 24;
-
-/**
- * Tutte le occorrenze della keyword sono negate?
- *
- * Se il cliente nomina il componente una volta negandolo e un'altra volta
- * no, vale la volta buona: basta un'occorrenza non negata.
- */
-function isKeywordNegated(queryNorm, kn) {
-  var escaped = kn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  var re = new RegExp("(^|[^a-z0-9])" + escaped + "([^a-z0-9]|$)", "gi");
-  var trovataUnaLibera = false;
-  var trovataQualcuna = false;
-  var m;
-  while ((m = re.exec(queryNorm)) !== null) {
-    trovataQualcuna = true;
-    var inizio = m.index + m[1].length;
-    var prima = queryNorm.slice(Math.max(0, inizio - NEGATION_LOOKBEHIND), inizio);
-    if (!NEGATORS.test(prima)) trovataUnaLibera = true;
-    if (m.index === re.lastIndex) re.lastIndex += 1;
-  }
-  return trovataQualcuna && !trovataUnaLibera;
-}
+// ── La negazione vive in `rocco_v2/negazione.js` ────────────────────
+//
+// Nata qui, dove ha corretto "inverter **senza** trasformatore". Da quando
+// gli usi sono tre — riconoscimento componenti, ricerca nella banca
+// dispositivi, classificazione del sintomo — le parole stanno in un modulo
+// puro, perché stavano per diventare tre elenchi.
+var negazione = require("../rocco_v2/negazione");
+var ARTICOLI = negazione.ARTICOLI;
+var PAROLE_NEGANTI = negazione.PAROLE_NEGANTI;
+var NEGATORS = negazione.NEGATORS;
+var NEGATION_LOOKBEHIND = negazione.NEGATION_LOOKBEHIND;
+var isKeywordNegated = negazione.isKeywordNegated;
+var isNegationWord = negazione.isNegationWord;
 
 /**
  * Omonimi: la parola giusta nel senso sbagliato.
@@ -5413,6 +5396,11 @@ module.exports = {
   // Esposti per i test e per diagnosticare il riconoscimento componenti:
   // è il punto dove nascono i falsi positivi, e va potuto misurare.
   containsKeyword:         containsKeyword,
+  // La negazione è dichiarata qui, con le parole tarate sulle frasi vere
+  // (tollera l'articolo: "non ha **il** differenziale"). Chi deve pesare le
+  // parole di una ricerca la riusa da qui invece di riscriverla.
+  isKeywordNegated:        isKeywordNegated,
+  isNegationWord:          isNegationWord,
   scoreComponentMatch:     scoreComponentMatch,
   tokensMatch:             tokensMatch,
   tokenize:                tokenize,
