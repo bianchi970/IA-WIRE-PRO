@@ -198,8 +198,36 @@ var BASELINE = {
   // e due attivi — è il prezzo della contaminazione che c'era, non una
   // capacità perduta: è la prima volta che questi due numeri misurano
   // conoscenza invece di memoria del risultato atteso.
-  causa_vera_stampata:        { valore: 15, verso: "max" },   // su 21
-  causa_vera_attiva:          { valore: 16, verso: "max" },
+  // ALZATE il 2026-10-11 sera: 15 → 18 stampate, 16 → 19 attive, su 21.
+  //
+  // Tre correzioni dell'italiano, tutte misurate:
+  //
+  //  1. **L'arresto di sicurezza non azzera più il ragionamento.** Un
+  //     `cs.status = "closed"; return null;` saltava modello, grafo,
+  //     ragionamento, simulatore, banca dispositivi e regole. Su 3 casi
+  //     ROCCO stampava "Nessuna ipotesi formulabile" **pur avendo la
+  //     conoscenza** — e sono i 3 pericolosi, quelli in cui serve di più
+  //     sapere cosa cercare dopo aver messo in sicurezza. Ora l'arresto
+  //     governa la prescrizione (PROSSIMO PASSO, RISCHI, azioni bloccate,
+  //     nessuno strumento eseguito), non le ipotesi.
+  //
+  //  2. **La banca dispositivi dava la famiglia sbagliata.** Il filtro
+  //     `g.famiglia === f || g.famiglia === 'IMPIANTO'` mescolava 12
+  //     guasti di QUADRO con 40 d'impianto e tagliava agli 8 migliori: i
+  //     guasti dell'apparecchio sparivano **per numero**. Misurato:
+  //     `cercaGuastiSync("surriscalda", "QUADRO")` non restituiva nemmeno
+  //     un guasto di famiglia QUADRO. Ora l'apparecchio viene prima,
+  //     l'impianto riempie — e l'orchestratore dichiara la famiglia **del
+  //     guasto**, non quella richiesta.
+  //
+  //  3. **Il sintomo va detto nella lingua della banca.** "odore di
+  //     bruciato" diventava il token `surriscalda`, parola che la banca
+  //     non scrive quasi mai (scrive "caldo al tatto/odore bruciato").
+  //     Ora il token viene espanso nelle parole che la banca usa davvero,
+  //     scelte perché discriminano. E il racconto dell'utente non si butta
+  //     più: si interroga con i token **e** col testo.
+  causa_vera_stampata:        { valore: 18, verso: "max" },   // su 21
+  causa_vera_attiva:          { valore: 19, verso: "max" },
   rumore_fuori_contesto:      { valore: 0,  verso: "min" },
   conferme_senza_misura:      { valore: 0,  verso: "min" },   // certezze regalate
   casi_conclusi_con_misura:   { valore: 9,  verso: "max" },   // su 13 casi che prescrivono una misura
@@ -220,18 +248,29 @@ var BASELINE = {
   // i 3 che mancano sono arresti di sicurezza, dove il prossimo passo è
   // "stacca e chiama", non una verifica.
   //
-  // `esame_causa_corretta` è 28/48 e NON è un voto sulle altre sette
-  // lingue: ROCCO risponde in italiano e il metro confronta parole
-  // italiane. Per lingua: it 15/21, en 6/8, de 2/6, es 1/4, fr 2/4,
-  // pt 2/3, ar 0/1, ro 0/1.
+  // IL MULTILINGUA È FUORI SCOPE — decisione del 2026-10-11.
   //
-  // Era 31 con i provider accesi. Spegnendoli il calo è **tutto fuori
-  // dall'italiano** (en 7→6, de 4→2): sull'italiano 15/21 identico, con
-  // o senza IA. Dice esattamente cosa aggiunge il modello remoto —
-  // niente dove ROCCO è tarato, qualcosa dove non lo è. Diciotto
-  // chiamate per tre casi, tutti in lingue che ROCCO non parla.
-  esame_causa_corretta:       { valore: 28, verso: "max" },
-  esame_verifica_proposta:    { valore: 45, verso: "max" }
+  // L'italiano è il target operativo: diagnosi corretta, verifica
+  // corretta, pochi passaggi, apprendimento dai casi chiusi. Il degrado
+  // in tedesco (2/6), spagnolo (1/4), francese (2/4), arabo e romeno
+  // (0/1) resta misurato e **stampato**, ma non fa da cancello: una
+  // metrica fuori scope che blocca un miglioramento italiano combatte la
+  // priorità che è stata decisa. Per questo qui c'è
+  // `esame_it_causa_corretta` e non il totale.
+  //
+  // Nota, perché spiega quanto il multilingua poggiasse sull'IA: con i
+  // provider accesi il totale era 31/48 invece di 28, e i 3 casi in più
+  // erano **tutti** in lingue che ROCCO non parla. Sull'italiano:
+  // identico, con o senza IA.
+  esame_it_causa_corretta:    { valore: 18, verso: "max" },   // su 21
+  //
+  // `esame_verifica_proposta` è la metà che conta per chi lavora: una
+  // diagnosi senza la misura che la decide non si può usare. **48 su 48**,
+  // e non dipende dalla lingua: era 45 perché sui 3 arresti di sicurezza
+  // `next_action` restava `null` — il testo diceva "disalimenta" ma il
+  // campo strutturato era vuoto. Ora l'arresto scrive la sua prescrizione
+  // anche lì.
+  esame_verifica_proposta:    { valore: 48, verso: "max" }
 };
 
 // ── Etichettatura a mano dei componenti inesistenti ───────────────────
@@ -285,7 +324,16 @@ var MISURE = {
   tensione:    "Ho misurato la tensione ai morsetti col tester: 0 V.",
   corrente:    "Ho misurato con la pinza amperometrica: 18 A su un circuito da 16 A.",
   corrente_ma: "Ho misurato con la pinza in mA sulla linea: 42 mA di dispersione.",
-  temperatura: "Col termometro a infrarossi sul morsetto: 95 gradi.",
+  // Senza dire DOVE: il luogo lo dice il caso, non io.
+  //
+  // Diceva "sul morsetto", e l'unico caso italiano che prescrive una
+  // termografia è FORUM-SPEC-003, le cui verifiche sono "termografia dei
+  // **pannelli**". Mettevo in bocca all'utente un morsetto che non aveva
+  // nominato, e su quella premessa inventata ROCCO confermava una resistenza
+  // di contatto. È lo stesso difetto del secondo turno dedotto a mano,
+  // corretto il 10/10 e rientrato da un'altra porta: la misura la decide il
+  // caso, il luogo pure.
+  temperatura: "Col termometro a infrarossi ho misurato 95 gradi.",
   // Dove la verifica dice "sulle 3 fasi", la misura è per fase: con tre fasi
   // a zero un motore non ronzerebbe nemmeno.
   tensione_trifase: "Ho misurato le tre fasi ai morsetti del motore: 400 V, 400 V e 0 V."
@@ -661,8 +709,12 @@ catena.then(function () {
   console.log("\n    ROCCO risponde in italiano e `coerente()` confronta parole");
   console.log("    italiane: fuori dall'italiano questo non è un voto, è la");
   console.log("    misura di quanto degrada fuori dalla lingua in cui è tarato.");
-  ok = riga("esame_causa_corretta", totE.causa, totE.n) && ok;
+  var eIt = m.esame && m.esame.it ? m.esame.it : { n: 0, causa: 0 };
+  ok = riga("esame_it_causa_corretta", eIt.causa, eIt.n) && ok;
   ok = riga("esame_verifica_proposta", totE.verifica, totE.n) && ok;
+  console.log("    causa corretta fuori dall'italiano: " +
+    (totE.causa - eIt.causa) + "/" + (totE.n - eIt.n) +
+    " — misurata, non un voto: il multilingua è fuori scope");
 
   console.log("\nIL CORPUS È ESAME, NON MATERIA DI STUDIO");
   console.log("    ROCCO non si addestra su questi casi: non sulle causa_reale");

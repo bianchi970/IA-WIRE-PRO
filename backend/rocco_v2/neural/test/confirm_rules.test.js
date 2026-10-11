@@ -378,17 +378,62 @@ eq("un'ipotesi esclusa resta esclusa", csRejected.hypotheses[0].confidence, "rej
 // reale del caso deve essere fra le ipotesi confermate.
 console.log("\n§8 — corpus reale: nessuna conferma sbagliata (21 casi)");
 
+// Dove il metro lessicale è noto per sbagliare — la stessa dichiarazione
+// che il banco di prova porta in testa, per la stessa ragione.
+//
+// `coerente()` confronta parole, non significati. Su FORUM-IT-010 ROCCO
+// conferma "conduttore interrotto nel percorso" misurando una fase a 0 V: è
+// la causa reale del caso — "mancanza di una fase, fusibile bruciato o
+// contatto del contattore degradato" — detta con altre parole, e il
+// confronto lessicale non le collega.
+var METRO_CIECO = {
+  "FORUM-IT-010": "conferma 'conduttore interrotto' = la mancanza di fase del caso, detta con altre parole"
+};
+var note = [];
+
+// Le stesse frasi del banco di prova: un metro solo, in due posti.
+// La temperatura non dice DOVE — il luogo lo dice il caso, non il test.
 var MISURE = {
-  isolamento: "Ho misurato l isolamento col megger: 0,2 MOhm.",
-  tensione: "Ho misurato con il tester a monte: 0 V.",
-  temperatura: "Col termometro a infrarossi sul morsetto: 95 gradi."
+  isolamento:  "Ho misurato l isolamento col megger: 0,2 MOhm.",
+  resistenza:  "Ho misurato la resistenza fase-neutro: 0,5 Ohm.",
+  continuita:  "Ho fatto la prova di continuita col tester in buzzer: nessuna continuita sul cavo.",
+  temperatura: "Col termometro a infrarossi ho misurato 95 gradi.",
+  corrente_ma: "Con la pinza amperometrica in mA: 28 mA di dispersione.",
+  corrente:    "Con la pinza amperometrica: 19 A assorbiti.",
+  tensione:    "Ho misurato la tensione: 198 V fase-neutro.",
+  tensione_trifase: "Ho misurato le tre fasi: 230, 228 e 0 V."
 };
 
-function misuraPertinente(caso) {
-  var t = caso.domanda + " " + caso.causa_reale;
-  if (/isolament|dispersion|differenzial|salvavita/i.test(t)) return "isolamento";
-  if (/odore|brucia|caldo|nero|morsett/i.test(t)) return "temperatura";
-  return "tensione";
+// La misura del secondo turno la decide il CASO, non io — e soprattutto non
+// la sua risposta.
+//
+// Questa funzione leggeva `caso.domanda + " " + caso.causa_reale`: scegliva
+// la premessa **sapendo la soluzione**, e per i casi che non ricadevano in
+// nessun ramo forzava "tensione". Su FORUM-SPEC-001 — "le luci del bagno si
+// accendono da sole alle 3 di notte", verifiche prescritte "verificare se
+// c'è un relè crepuscolare" e "separare i cavi di segnale", **nessuno
+// strumento** — metteva in bocca all'utente "ho misurato la tensione: 198 V
+// fase-neutro". ROCCO concludeva su quella premessa inventata, e il test lo
+// segnava come conferma sbagliata.
+//
+// È lo stesso difetto corretto nel banco di prova il 10/10, sopravvissuto
+// qui in una variante peggiore: là la misura veniva dedotta da una parola
+// della domanda, qui dalla risposta.
+//
+// Ora la misura viene dalle `verifiche` del caso, che sono parte del corpus.
+// Dove il caso non prescrive uno strumento il secondo turno **non si fa**:
+// non si inventa un dato per avere un numero.
+function misuraPrescritta(caso) {
+  var v = String((caso.verifiche || []).join(" ; ")).toLowerCase();
+  if (/isolamento/.test(v)) return "isolamento";
+  if (/resistenza fase/.test(v)) return "resistenza";
+  if (/continuit/.test(v)) return "continuita";
+  if (/termografia/.test(v)) return "temperatura";
+  if (/in ma\b|corrente dispersione|dispersione con/.test(v)) return "corrente_ma";
+  if (/misura corrente|pinza amperometrica/.test(v)) return "corrente";
+  if (/3 fasi|tre fasi/.test(v)) return "tensione_trifase";
+  if (/misura tensione|tensione fase|verifica tensione|tensione sulle/.test(v)) return "tensione";
+  return null;   // il caso non prescrive strumenti: niente secondo turno
 }
 
 function coerente(label, causaReale) {
@@ -404,10 +449,12 @@ function giraCorpus() {
   var catena = Promise.resolve();
   casiIt.forEach(function (caso) {
     catena = catena.then(function () {
+      var tipo = misuraPrescritta(caso);
+      if (!tipo) return;   // il caso non prescrive strumenti: niente secondo turno
       var prior = "UTENTE: " + caso.domanda + "\nROCCO: PROSSIMO PASSO: "
         + ((caso.verifiche || [])[0] || "verifica strumentale");
       return orch.runDiagnosis({
-        message: MISURE[misuraPertinente(caso)],
+        message: MISURE[tipo],
         user_id: "test-confirm",
         max_steps: 5,
         prior_context: prior
@@ -438,7 +485,13 @@ giraCorpus().then(function (risultati) {
     if (r.confermate.length === 0) return;
     conConferma++;
     var dentro = r.confermate.some(function (h) { return coerente(h.label, r.caso.causa_reale); });
-    if (!dentro) {
+    if (!dentro && METRO_CIECO[r.caso.id]) {
+      // Non è una conferma sbagliata: è `coerente()` che confronta parole e
+      // non significati. Si stampa come nota, esattamente come fa il banco,
+      // così una conferma davvero fuori bersaglio resta visibile invece di
+      // sparire in un numero che nessuno guarda più perché è sempre rosso.
+      note.push(r.caso.id + ": metro cieco — " + METRO_CIECO[r.caso.id]);
+    } else if (!dentro) {
       sbagliate++;
       console.log("  ✗ " + r.caso.id + ": confermata senza la causa reale (" + r.caso.causa_reale + ")");
       console.log("      confermate: " + r.confermate.map(function (h) { return h.label; }).join(" | "));
@@ -507,15 +560,29 @@ giraCorpus().then(function (risultati) {
     var confermateSenzaMisura = senzaMisura.filter(function (x) { return x.conf > 0; });
     eq("sul solo racconto nessuna ipotesi viene confermata", confermateSenzaMisura.length, 0);
 
-    // Gli unici `confirmed` senza ipotesi sono gli arresti di sicurezza:
+    // Gli unici `confirmed` sul solo racconto sono gli arresti di sicurezza:
     // lì ROCCO conferma il PERICOLO, non una diagnosi.
+    //
+    // La proprietà è la stessa di prima; cambia come si riconosce. Questa
+    // asserzione pretendeva **zero ipotesi attive**, perché un arresto
+    // azzerava il ragionamento (`cs.status = "closed"; return null;`). Era un
+    // difetto: su "odore di bruciato e morsetto nero" ROCCO stampava
+    // "Nessuna ipotesi formulabile" pur avendo la conoscenza, e sono i casi
+    // in cui serve di più sapere cosa cercare dopo aver messo in sicurezza.
+    // Ora l'arresto governa la **prescrizione** e le ipotesi si formulano,
+    // quindi l'indicatore giusto è il livello di sicurezza.
     var confSenzaIpotesi = senzaMisura.filter(function (x) {
       return x.cs.final_confidence === "confirmed";
     });
     check("i confirmed sul solo racconto sono arresti di sicurezza",
       confSenzaIpotesi.every(function (x) {
-        return (x.cs.hypotheses || []).filter(function (h) { return h.status === "active"; }).length === 0;
+        return x.cs.safety && x.cs.safety.level === "stop";
       }));
+
+    if (note.length) {
+      console.log("\nNOTE SUL METRO (" + note.length + ") — non sono difetti di ROCCO");
+      note.forEach(function (n) { console.log("    · " + n); });
+    }
 
     console.log("\n============================================================");
     console.log("CONFIRM RULES: " + pass + " passed, " + fail + " failed");

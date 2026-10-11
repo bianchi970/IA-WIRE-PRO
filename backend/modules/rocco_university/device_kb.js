@@ -176,33 +176,97 @@ const ORDINE_PROBABILITA = { Alta: 1, Media: 2, Bassa: 3 };
  * catena di Promise già avviata e non possono mettersi in attesa.
  * Le versioni async restano per non cambiare l'interfaccia pubblica.
  */
-function cercaGuastiSync(sintomo, famiglia) {
-  const b = caricaBanca();
-  let out = b.guasti.slice();
+// Il sintomo va detto nella lingua della banca.
+//
+// `rilevaSintomoDalTesto()` riduce "odore di bruciato", "il morsetto è
+// diventato nero", "scotta" a un token canonico — `surriscalda` — e
+// `punteggioTesto()` poi cerca **quella parola** nel testo dei guasti. Ma la
+// banca non la scrive quasi mai: scrive "caldo al tatto/odore bruciato",
+// "corpo del dispositivo molto caldo". Zero corrispondenze.
+//
+// Misurato: la famiglia MCB ha due guasti con causa "morsetto allentato
+// (resistenza di contatto elevata)" — esattamente la causa reale di
+// FORUM-IT-014, un magnetotermico col morsetto bruciato — e
+// `cercaGuastiSync("surriscalda", "MCB")` non ne restituiva **nessuno**.
+//
+// Qui il token canonico viene tradotto nelle parole che la banca usa
+// davvero. Le parole sono scelte perché **discriminano**, non perché sono
+// frequenti: "temperatura" compare in 37 guasti su 322 (sta nelle verifiche:
+// "misurare la temperatura") e matcherebbe quasi tutto, quindi non c'è.
+// Ogni voce deve essere lunga almeno 4 caratteri, perché `punteggioTesto`
+// scarta le più corte.
+var SINONIMI_SINTOMO = {
+  "surriscalda":   "surriscald caldo bruciat",
+  "scatta":        "scatt riarm",
+  "dispersione":   "dispersion isolament",
+  "cortocircuito": "cortocircuito",
+  "sovraccarico":  "sovraccarico",
+  "non avvia":     "bloccat",
+  "umidità":       "umidit acqua condensa",
+  "ronza":         "ronz vibra rumore",
+  "botta":         "botta istantane"
+};
 
-  if (famiglia) {
-    const f = String(famiglia).toUpperCase();
-    // I guasti d'impianto valgono sempre: non appartengono a un apparecchio.
-    out = out.filter(function (g) { return g.famiglia === f || g.famiglia === 'IMPIANTO'; });
-  }
+/** Aggiunge alla ricerca le parole con cui la banca nomina quel sintomo. */
+function espandiSintomo(sintomo) {
+  var testo = String(sintomo || "");
+  if (!testo) return testo;
+  var aggiunte = [];
+  Object.keys(SINONIMI_SINTOMO).forEach(function (k) {
+    if (testo.indexOf(k) >= 0) aggiunte.push(SINONIMI_SINTOMO[k]);
+  });
+  return aggiunte.length ? testo + " " + aggiunte.join(" ") : testo;
+}
 
-  if (sintomo) {
-    out = out.map(function (g) {
-      const campi = [g.sintomo, g.causa_probabile, g.verifica].join(' ');
-      return { g: g, p: punteggioTesto(campi, sintomo) };
-    }).filter(function (x) { return x.p > 0; })
-      .sort(function (a, b2) {
-        if (b2.p !== a.p) return b2.p - a.p;
-        return (ORDINE_PROBABILITA[a.g.probabilita] || 2) - (ORDINE_PROBABILITA[b2.g.probabilita] || 2);
-      })
-      .map(function (x) { return x.g; });
-  } else {
-    out.sort(function (a, b2) {
-      return (ORDINE_PROBABILITA[a.probabilita] || 2) - (ORDINE_PROBABILITA[b2.probabilita] || 2);
+/** Ordina per pertinenza al sintomo, e a pari merito per probabilità. */
+function ordinaPerSintomo(lista, sintomo) {
+  if (!sintomo) {
+    return lista.slice().sort(function (a, b) {
+      return (ORDINE_PROBABILITA[a.probabilita] || 2) - (ORDINE_PROBABILITA[b.probabilita] || 2);
     });
   }
+  return lista.map(function (g) {
+    const campi = [g.sintomo, g.causa_probabile, g.verifica].join(' ');
+    return { g: g, p: punteggioTesto(campi, sintomo) };
+  }).filter(function (x) { return x.p > 0; })
+    .sort(function (a, b) {
+      if (b.p !== a.p) return b.p - a.p;
+      return (ORDINE_PROBABILITA[a.g.probabilita] || 2) - (ORDINE_PROBABILITA[b.g.probabilita] || 2);
+    })
+    .map(function (x) { return x.g; });
+}
 
-  return out.slice(0, 8);
+// I guasti dell'APPARECCHIO vengono prima di quelli d'impianto.
+//
+// Il filtro era `g.famiglia === f || g.famiglia === 'IMPIANTO'`, con
+// l'intenzione giusta — i guasti d'impianto valgono sempre, non
+// appartengono a un apparecchio — ma una conseguenza che annullava
+// l'identificazione della famiglia: `IMPIANTO` contiene i 40 pattern
+// d'impianto, contro i 12 di QUADRO e gli 11 di MCB. Mescolati in un'unica
+// lista e tagliati agli 8 migliori, i guasti d'impianto vincevano **per
+// numero**, e di quello specifico apparecchio non restava niente.
+//
+// Misurato: `cercaGuastiSync("surriscalda", "QUADRO")` restituiva 8 guasti
+// di cui **nessuno** di famiglia QUADRO — i primi erano "STB (termostato
+// sicurezza) scattato" e "corrente di spunto troppo alta", cioè caldaia e
+// avviamento motore. Su "odore di bruciato e morsetto nero nel quadro"
+// ROCCO proponeva quelli, e la causa vera — morsetto allentato con
+// resistenza di contatto alta — non compariva.
+//
+// Ora si ordinano le due liste separatamente e si concatenano: prima
+// l'apparecchio, poi l'impianto a riempire. L'intenzione del commento
+// originale resta, il soffocamento no.
+function cercaGuastiSync(sintomo, famiglia) {
+  const b = caricaBanca();
+  sintomo = espandiSintomo(sintomo);
+
+  if (!famiglia) return ordinaPerSintomo(b.guasti, sintomo).slice(0, 8);
+
+  const f = String(famiglia).toUpperCase();
+  const propri = ordinaPerSintomo(b.guasti.filter(function (g) { return g.famiglia === f; }), sintomo);
+  const impianto = ordinaPerSintomo(b.guasti.filter(function (g) { return g.famiglia === 'IMPIANTO'; }), sintomo);
+
+  return propri.concat(impianto).slice(0, 8);
 }
 
 async function cercaGuasti(sintomo, famiglia) {

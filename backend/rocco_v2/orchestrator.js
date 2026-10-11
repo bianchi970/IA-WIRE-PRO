@@ -1008,12 +1008,32 @@ var CONFIRM_RULES = [
     reason: "Isolamento misurato sotto " + limiti.etichetta("isolamento_minimo") + ": dispersione verso terra accertata" },
 
   // Morsetto caldo = resistenza di contatto: la temperatura è la prova.
+  //
+  // Due correzioni, entrambe perché la regola affermava più di quello che la
+  // misura dice.
+  //
+  // 1. Il `confirms` accettava `surriscald|sovratemperatur`, cioè due parole
+  //    **termiche generiche**: qualunque temperatura confermava qualunque
+  //    ipotesi che contenesse "surriscaldamento". Misurato su FORUM-SPEC-003
+  //    (fotovoltaico che produce il 30% in meno, termografia su un pannello
+  //    a 85 °C): ROCCO dava per accertata "Sovratemperatura inverter" — una
+  //    temperatura letta su un pannello usata per accertare un problema
+  //    dell'inverter. Una temperatura alta **è** un fatto, ma non è una
+  //    prova su quale parte sia calda: quella la dice il racconto.
+  //
+  // 2. Serve il `context`. La `reason` di questa regola dichiara "su un
+  //    punto di connessione" — allora lo pretenda: se l'utente non nomina un
+  //    morsetto, una giunzione, un serraggio, la temperatura non accerta una
+  //    resistenza di contatto. Su FORUM-IT-004 ("un morsetto è diventato
+  //    nero") e FORUM-IT-014 ("morsetto superiore surriscaldato") il
+  //    contesto c'è e la conferma resta.
   { id: "CF-02",
+    context: [/morsett|giunzion|connession|contatt|capocorda|serraggi|barra|pettine/],
     when: function(ctx) {
       var t = ctx.measure("temperatura");
       return t !== null ? t >= limiti.valore("temperatura_connessione") : ctx.facts.temperature_high === true;
     },
-    confirms: /contatto.*resistiv|morsetto.*allentat|serraggio|surriscald|sovratemperatur/,
+    confirms: /contatto.*resistiv|morsetto.*allentat|serraggio/,
     reason: "Temperatura oltre il limite su un punto di connessione: contatto resistivo accertato" },
 
   // Resistenza prossima a zero dove non deve esserci continuità.
@@ -2146,11 +2166,36 @@ function createOrchestrator(options) {
       caseStateHelpers.addToolResult(cs, out.tool_result);
       runtimeTrace.record(cs, "safety", { level: cs.safety.level });
 
+      // L'ARRESTO DI SICUREZZA DECIDE COSA SI PRESCRIVE, NON COSA SI PENSA.
+      //
+      // Qui un arresto faceva `cs.status = "closed"; return null;` — e con
+      // quel return si saltava **tutto**: modello del sistema, grafo causale,
+      // ragionamento, simulatore, banca dispositivi, kill e confirm rules.
+      // Il cervello di ROCCO si spegneva proprio quando la situazione è
+      // pericolosa.
+      //
+      // Misurato sui 21 casi italiani: su 3 arresti ROCCO stampava
+      // "Nessuna ipotesi formulabile con i dati disponibili" **pur avendo la
+      // conoscenza**. "Odore di bruciato e morsetto nero" → morsetto
+      // allentato con resistenza di contatto alta, che sta nei suoi pattern.
+      // "Caldaia, fa la scintilla ma si spegne, errore fiamma" → elettrodo di
+      // rilevazione sporco, che sta nella banca dispositivi, famiglia
+      // caldaia. Tre casi su ventuno, e sono i tre **pericolosi**: quelli in
+      // cui all'elettricista serve di più sapere cosa cercare dopo aver messo
+      // in sicurezza.
+      //
+      // "Stacca e chiama" e "ecco cosa probabilmente è" non sono in
+      // conflitto: sapere la causa probabile rende l'arresto più utile, non
+      // meno. Quindi il ragionamento prosegue, e l'arresto resta dominante
+      // dove deve: PROSSIMO PASSO è la messa in sicurezza, i RISCHI sono i
+      // suoi, le azioni bloccate restano bloccate, e nessuno strumento viene
+      // eseguito su un impianto dichiarato pericoloso.
       if (cs.safety.level === "stop") {
-        cs.final_diagnosis = cs.safety.reasons[0] || "Condizione pericolosa. Fermare immediatamente ogni operazione.";
-        cs.final_confidence = "confirmed";
-        cs.status = "closed";
-        return null;
+        cs.arresto_sicurezza = true;
+        runtimeTrace.record(cs, "arresto_sicurezza", {
+          ragione: cs.safety.reasons[0] || "",
+          nota: "il ragionamento continua: l'arresto governa la prescrizione, non le ipotesi"
+        });
       }
 
       // ═══ 4. COMPRENDERE — modello del sistema ═══
@@ -2312,9 +2357,26 @@ function createOrchestrator(options) {
         if (deviceKb && deviceKb.rileveFamigliaInTesto) {
           var famigliaApp = deviceKb.rileveFamigliaInTesto(cs.problem_summary);
           if (famigliaApp) {
+            // Il racconto dell'utente non si butta mai.
+            //
+            // Qui era `cercaGuastiSync(sintomiApp || cs.problem_summary, …)`:
+            // se un sintomo veniva riconosciuto si interrogava la banca **solo**
+            // con quel token, e tutto il resto di quel che l'utente ha scritto
+            // spariva. Su FORUM-IT-011 — "Dopo abbondanti piogge il MTD
+            // scatta", causa vera: isolamento degradato dall'umidità — si
+            // riconosceva "scatta" e si perdeva "piogge", che è la parola che
+            // porta alla causa. Un segnale derivato **parziale** che sostituisce
+            // l'originale completo: il difetto è peggiore del non riconoscere
+            // niente, perché nei casi dove non si riconosce nulla il testo
+            // intero veniva usato e funzionava.
+            //
+            // Ora si interroga con **entrambi**: i token aggiungono il
+            // vocabolario canonico della banca, il racconto conserva tutto il
+            // resto.
             var sintomiApp = deviceKb.rilevaSintomoDalTesto(cs.problem_summary).join(" ");
             cs.famiglia_dispositivo = famigliaApp;
-            var guastiNoti = deviceKb.cercaGuastiSync(sintomiApp || cs.problem_summary, famigliaApp);
+            var guastiNoti = deviceKb.cercaGuastiSync(
+              (sintomiApp ? sintomiApp + " " : "") + s(cs.problem_summary), famigliaApp);
             var aggiunti = 0;
             guastiNoti.forEach(function(g) {
               if (aggiunti >= 3) return;          // non si allaga il campo
@@ -2325,7 +2387,16 @@ function createOrchestrator(options) {
               });
               if (duplicata) return;
 
-              var catena = ["Guasto noto della famiglia " + famigliaApp + " (banca dispositivi)"];
+              // La famiglia che si dichiara è quella del GUASTO, non quella
+              // richiesta: `cercaGuastiSync` restituisce anche i guasti
+              // d'impianto, che non appartengono a un apparecchio. Dire
+              // "guasto noto della famiglia QUADRO" davanti a un guasto di
+              // famiglia IMPIANTO è affermare una cosa falsa su quale
+              // apparecchio sia coinvolto.
+              var famigliaGuasto = s(g.famiglia).toUpperCase() || famigliaApp;
+              var catena = [famigliaGuasto === "IMPIANTO"
+                ? "Guasto noto d'impianto (banca dispositivi)"
+                : "Guasto noto della famiglia " + famigliaGuasto + " (banca dispositivi)"];
               if (g.riferimento_norma) catena.push("Riferimento: " + g.riferimento_norma);
               if (g.valore_atteso && !/non specificato/.test(g.valore_atteso)) {
                 catena.push("Valore atteso: " + g.valore_atteso);
@@ -2517,6 +2588,11 @@ function createOrchestrator(options) {
       }
 
       // ═══ 7. TOOL — solo se il cervello locale non basta ═══
+      //
+      // Su un impianto dichiarato pericoloso nessuno strumento viene
+      // eseguito: gli strumenti sono azioni, e le azioni le governa
+      // l'arresto. Il ragionamento invece è già stato fatto, qui sopra.
+      if (cs.arresto_sicurezza) return null;
       var td = decideToolNeeded(cs);
       if (!td) return null;
       runtimeTrace.record(cs, "tool", { tool: td.tool, reason: td.reason });
@@ -2588,6 +2664,26 @@ function createOrchestrator(options) {
         verifyConclusion(cs);
         // ═══ 10. DECIDERE — qual è la prossima azione migliore? ═══
         cs.next_action = selectBestAction(cs);
+
+        // Su un arresto di sicurezza la prossima azione è **una sola**: la
+        // messa in sicurezza che il safety guard prescrive. Le ipotesi
+        // formulate qui sopra restano, e servono: dicono all'elettricista
+        // cosa cercare **dopo** aver togliato tensione. Ma non si prescrive
+        // una misura su un impianto che si è appena detto di non toccare.
+        if (cs.arresto_sicurezza) {
+          cs.next_action = {
+            action_type: "ask_user",
+            tool_name: null,
+            reason: cs.safety.reasons[0] || "condizione pericolosa",
+            expected_discriminator: cs.safety.allowed_next_step ||
+              "Disalimentare e verificare assenza tensione prima di qualsiasi prova"
+          };
+          cs.final_confidence = "confirmed";
+          var guida = cs.hypotheses.filter(function(h) { return h.status === "active"; })[0];
+          cs.final_diagnosis = (cs.safety.reasons[0] ||
+            "Condizione pericolosa. Fermare ogni operazione.") +
+            (guida ? " Causa probabile da verificare dopo la messa in sicurezza: " + guida.label + "." : "");
+        }
         // Neural hook: arricchisce la discriminazione dell'azione
         try {
           if (neuralIntegration && cs.next_action) {
