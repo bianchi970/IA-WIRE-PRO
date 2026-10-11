@@ -884,6 +884,92 @@ questa correzione, e non si vedeva dai numeri.
 sottrae invece di aggiungere. Va capito **prima** di dare più peso ai
 punteggi appresi.
 
+### Il primo guasto vero — e la lacuna che ha trovato
+
+Il 2026-10-11 ROCCO ha lavorato sul primo guasto reale, non di corpus:
+
+> *"c'è un teleruttore che comanda una pompa sommersa di un pozzo la bobina
+> fa rumore, la centralina della pompa sommersa il display segna che manca
+> una fase"*
+
+**Cosa ha fatto bene.** Ha letto entrambi i sintomi; quattro ipotesi tutte
+pertinenti al contattore, fra cui la causa vera (*fusibile bruciato su una
+fase*); prossimo passo strumentale con i morsetti giusti e la soglia
+(*misurare la tensione A1-A2, ±15% del nominale*); certezza `DA VERIFICARE`,
+che senza misure è l'unica onesta.
+
+**Cosa ha mancato.** Le ha messe in **parallelo** invece di vedere la catena:
+un fusibile aperto spiega **insieme** la fase mancante sul display, il
+teleruttore che non chiude e ronza, e — restando in quello stato — la bobina
+che si brucia. Era un'unica causa con tre conseguenze.
+
+**La causa vera, confermata dall'elettricista**: fusibile aperto; teleruttore
+sostituito perché la bobina (230V) era andata completamente.
+
+**Il giro dell'apprendimento ha funzionato end-to-end**, per la prima volta
+su un caso vero: `/api/rocco/close-case` → tre memorie (`casi_chiusi`,
+`memoria_didattica` su disco col DB spento, `neurale`) → e su un secondo
+pozzo detto con altre parole ROCCO mette **il caso di ieri in prima
+posizione**, marcato come precedente.
+
+**Una trappola trovata chiudendo il caso, e l'errore era mio.**
+`findRelevantClosedCases` somma **+0.15 se il dominio combacia** e
+`ragionaPerAnalogia` filtra a `match_score >= 0.25`: con il dominio il
+punteggio era 0.317, senza 0.167. Nel payload di chiusura avevo scritto
+`domain: "elettrico"`, mentre la pipeline produce `domain: "tensione"` — il
+precedente era archiviato con un dominio che ROCCO non genera mai, quindi
+cadeva sotto soglia e non veniva mai riusato. **Chi chiude un caso deve
+passare il `case_state` vero**, non un dominio scritto a mano: è quello che
+fa il bottone del frontend. Resta da guardare che `domain` valga "tensione"
+— che è una **grandezza**, non un dominio: campo col vocabolario sbagliato.
+
+**La lacuna che il caso ha trovato, misurata**: la parola "sommersa" compare
+**zero volte** in tutta la banca — 0 dispositivi, 0 guasti — e non esiste una
+famiglia POMPA. Le uniche pompe sono i circolatori del riscaldamento, in
+famiglia TERMICO. **Per questo nella risposta usciva "Pompa di
+circolazione"**: non era un iperonimo sbagliato, era l'unica pompa che aveva.
+
+**Le lacune si vedevano solo sulle famiglie presenti.** Per ognuna si
+dichiarava se mancavano guasti o valori di riferimento; una famiglia che non
+esiste affatto non poteva comparire, quindi *"di questa cosa ROCCO non sa
+niente"* era l'unico buco invisibile. Ora `FAMIGLIE_ATTESE` in
+`build_dispositivi.js` dichiara le famiglie che il mestiere ha e la banca no,
+col perché accanto: **34 lacune** invece di 33.
+
+**E la famiglia POMPA non è un modello, è una configurazione.** La
+distinzione che conta non è l'uso — pozzo, drenaggio, acque nere, autoclave,
+irrigazione — ma **essere un motore che lavora immerso e in fondo a un cavo
+lungo**. I guasti del motore (avvolgimento, rotore bloccato, perdita di fase)
+sono già in MOTORE e **non vanno duplicati**: manca ciò che dipende dalla
+configurazione — acqua negli avvolgimenti, giunzione del cavo nel pozzetto,
+caduta di tensione sulla lunghezza, marcia a secco.
+
+**Perché i valori non sono stati scritti.** Cercando le soglie d'isolamento
+dei motori sommersi ho trovato numeri (200 MΩ nuovo, 10 usato, 0,5 = estrarre
+la pompa) **solo in riassunti di ricerca**: il manuale primario è un PDF che
+qui non si legge, e la copia HTML rimanda al manuale senza riportare la
+tabella. Il file lo dice da sé:
+
+> *"Ogni voce porta `fonte`. Nessuna riga nasce qui: se un dato non c'è in
+> nessuna delle sei fonti, **manca**, e il file lo dichiara nella sezione
+> `lacune`. Dire «non lo so» è parte della conoscenza."*
+
+Non esiste una `fonte` che valga "letto in un riassunto", e la tassonomia dei
+limiti (`norma` · `scuola` · `pratica`) non ne prevede una. Quindi la lacuna
+è dichiarata e i numeri non sono entrati. **E i numeri di marca non
+servirebbero comunque**: quello che generalizza è il criterio **relativo** —
+*le tre resistenze uguali fra loro*, *isolamento fra conduttori e terra con
+la pompa isolata*, *quando scatta* — che non ha bisogno di un modello. Il
+curriculum già scrive così: *"confrontare con datasheet (apertura =
+bruciata)"*.
+
+**Dai forum: resa zero.** Quattro thread italiani scaricati per intero, **0
+con la causa verificata**: finiscono tutti in ipotesi (*"probabilmente il
+filo non era inserito bene"*), uno dopo due settimane in officina si chiude
+senza soluzione. Per un **esame** servono le risposte, e i forum danno
+domande. La crescita vera del corpus viene dai casi che l'elettricista
+chiude, non dalla rete.
+
 ### La verifica discriminante — il numero a metà, chiuso
 
 `esame_verifica_proposta` è **48/48** e dice soltanto che *una* verifica

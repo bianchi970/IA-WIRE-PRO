@@ -8544,6 +8544,12 @@
    "famiglia": "UPS",
    "manca": "valori di riferimento",
    "dispositivi": 1
+  },
+  {
+   "famiglia": "POMPA",
+   "manca": "la famiglia intera: nessuna fonte la copre",
+   "dispositivi": 0,
+   "perche": "pompa elettrica che lavora immersa e in fondo a un cavo lungo (sommersa da pozzo, sommergibile per drenaggio o acque nere, autoclave, irrigazione). Non è il modello che conta: è la configurazione. I guasti del motore (avvolgimento, rotore bloccato, perdita di fase) sono già in MOTORE e NON vanno duplicati; quello che manca è ciò che dipende dall'essere immersa e distante: acqua negli avvolgimenti, giunzione del cavo nel pozzetto, caduta di tensione sulla lunghezza del cavo, marcia a secco."
   }
  ]
 }

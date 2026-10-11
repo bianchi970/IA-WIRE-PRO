@@ -398,6 +398,34 @@ var curriculum = require("../rocco_v2/neural/curriculum");
   });
 
   // ── 4. Le lacune: cosa manca, dichiarato ───────────────────────────
+  //
+  // Le lacune si calcolavano **solo sulle famiglie presenti**: per ognuna si
+  // dichiarava se le mancavano i guasti o i valori di riferimento. Una
+  // famiglia che non esiste affatto non poteva comparire, quindi il buco più
+  // grande — "di questa cosa ROCCO non sa niente" — era l'unico invisibile.
+  //
+  // Trovato da un caso vero: un teleruttore che comanda una **pompa
+  // sommersa** di un pozzo. Nella banca la parola "sommersa" compare **zero
+  // volte**, e le uniche pompe sono i circolatori del riscaldamento: per
+  // questo nella risposta ROCCO ha scritto "Pompa di circolazione". Non era
+  // un sinonimo sbagliato, era l'unica pompa che aveva.
+  //
+  // Qui si dichiarano le famiglie che il mestiere ha e la banca no. Non è un
+  // elenco di cose da aggiungere a caso: ognuna va riempita da una fonte, e
+  // finché la fonte non c'è la riga dice che manca. Dire "non lo so" è parte
+  // della conoscenza.
+  var FAMIGLIE_ATTESE = {
+    POMPA:
+      "pompa elettrica che lavora immersa e in fondo a un cavo lungo " +
+      "(sommersa da pozzo, sommergibile per drenaggio o acque nere, " +
+      "autoclave, irrigazione). Non è il modello che conta: è la " +
+      "configurazione. I guasti del motore (avvolgimento, rotore bloccato, " +
+      "perdita di fase) sono già in MOTORE e NON vanno duplicati; quello " +
+      "che manca è ciò che dipende dall'essere immersa e distante: acqua " +
+      "negli avvolgimenti, giunzione del cavo nel pozzetto, caduta di " +
+      "tensione sulla lunghezza del cavo, marcia a secco."
+  };
+
   var famiglie = {};
   dispositivi.forEach(function (d) {
     famiglie[d.famiglia] = famiglie[d.famiglia] || { dispositivi: 0, guasti: 0, misure: 0 };
@@ -417,6 +445,12 @@ var curriculum = require("../rocco_v2/neural/curriculum");
     var v = famiglie[f];
     if (!v.guasti) lacune.push({ famiglia: f, manca: "guasti noti", dispositivi: v.dispositivi });
     if (!v.misure) lacune.push({ famiglia: f, manca: "valori di riferimento", dispositivi: v.dispositivi });
+  });
+  // E le famiglie attese che nessuna fonte copre: la lacuna intera.
+  Object.keys(FAMIGLIE_ATTESE).sort().forEach(function (f) {
+    if (famiglie[f]) return;
+    lacune.push({ famiglia: f, manca: "la famiglia intera: nessuna fonte la copre",
+      dispositivi: 0, perche: FAMIGLIE_ATTESE[f] });
   });
   var senzaAtteso = guasti.filter(function (g) {
     return /non specificato/.test(g.valore_atteso);
