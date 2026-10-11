@@ -67,6 +67,9 @@ ia-wire-pro/
 │   │       └── basicPatterns.js  ← 40 pattern BT civili/industriali
 │   ├── utils/           ← Utility condivise
 │   │   └── certainty.js ← normalizeCertainty() → ALTA | MEDIA | BASSA
+│   ├── store/           ← Store su disco: ROCCO funziona a DB spento
+│   │   ├── conversationStore.js ← conversazioni (id > 1e9), continuità multi-turn
+│   │   └── universityStore.js   ← memoria didattica: casi reali, errori, esami
 │   └── .env             ← dotenv loaded with path.join(__dirname, ".env")
 └── frontend/
     ├── app.js           ← Vanilla JS IIFE, no framework, PWA SW registration
@@ -535,7 +538,7 @@ blocco: senza una pagella stabile non si vede né un miglioramento né una
 regressione, e con 21 casi il rischio non è sbagliare una regola — è tararla
 su 21 esempi senza accorgersene.
 
-**Linea di base (2026-10-10, deterministica):**
+**Linea di base (2026-10-11, deterministica):**
 
 | metrica | valore |
 |---|---|
@@ -544,9 +547,11 @@ su 21 esempi senza accorgersene.
 | certezze senza misura | 0 |
 | conferme fuori bersaglio | 0 |
 | contesto multi-turn perso | 0 |
-| causa reale fra le ipotesi stampate | **16/21** |
+| causa reale fra le ipotesi stampate | **15/21** (era 16, vedi auto-conferma) |
 | causa reale fra le attive | 16/21 |
 | casi conclusi con la misura | 9/21 (su 13 che la prescrivono) |
+| precedente riusato · in testa | **17/21 · 17/21** |
+| esperienza persa | 0 |
 
 **Si alzano quando una misura le supera, non si abbassano per far passare
 una modifica.** Se una scende è una regressione: va spiegata.
@@ -639,9 +644,157 @@ Nel ragionamento (passo 5c-bis): un guasto noto **è** un'ipotesi, e porta
 verifica, strumento, valore atteso e norma. Massimo 3 per caso, poi passa
 per le stesse regole di tutte. Misurato: causa reale stampata 15 → **16/21**.
 
+### Il giro dell'apprendimento — il caso chiuso arriva alle tre memorie
+`guasto chiuso → causa capita → esperienza salvata → ROCCO la riusa.`
+
+Il giro era **interrotto ai due capi, e le due metà si nascondevano a
+vicenda** — la variante peggiore del difetto ricorrente, perché il lettore
+non protesta (trova una lista vuota) e lo scrittore non manca a nessuno.
+
+- **Scrittura assente**: il bottone "Caso risolto" (`app.js:1196` →
+  `/api/rocco/close-case`) addestrava **solo** i pesi neurali. Prova a
+  riposo: `data/rocco-v2-memory.json` = `{"closed_cases": []}`, sempre.
+- **Lettura a vuoto**: `ragionaPerAnalogia()` (orchestrator, D3) quei casi
+  li leggeva da sempre, trovandone zero.
+
+Un caso chiuso va in **tre** posti, perché sono tre cose diverse:
+1. **il caso citabile** (`rocco_v2/memory.js`) — causa accertata, verifica
+   che l'ha decisa, ipotesi scartate. È quello che ROCCO riusa;
+2. **la lezione** (`rocco_university/memory.js`, materia `diagnosi_guasti`);
+3. **i pesi** (`neural/neural_integration.js`), che ordinano e non affermano.
+
+`/api/rocco/correct` registra la pista smentita come **errore ricorrente**
+nella memoria didattica, dove il contatore conta quante volte ROCCO l'ha
+ripetuta. Il premere il bottone **è** la validazione: l'endpoint dichiara
+`validated: true`, senza cui `saveValidatedClosedCase` rifiuta il caso.
+
+**Il precedente ordina, non afferma.** `h.esperienza = { caso_id,
+somiglianza }` ha una chiave sua in `makeHypothesisComparator`: **sopra** la
+probabilità del simulatore — `probabilita` è un a priori, il precedente è un
+fatto accaduto e verificato, e un a priori non batte un'osservazione — e
+**sotto** `confirmed`, perché la misura di adesso conta più di una misura
+dell'altra volta. Non scrive `supporting_evidence` (farebbe salire la
+certezza a `probable` senza una misura) né `probabilita`.
+
+`ragiona()` deduplica tenendo la **prima** ipotesi e l'analogia è
+concatenata per ultima: un precedente che il motore aveva già pensato da sé
+veniva scartato, perdendo `esperienza` proprio quando le due fonti
+concordano — il caso più forte. Ora il duplicato **consegna** il precedente
+all'ipotesi che resta (catena e `confirm_tests` compresi).
+
+**Il banco misura l'apprendimento** (sezione APPRENDIMENTO). Serviva una
+metrica a sé: il banco ripristina `data/**.json` prima di ogni caso, quindi
+nelle altre misure i casi chiusi sono **sempre zero** — ed è per questo che
+nessuna misura si era accorta della strada rotta. Il caso viene chiuso con
+la `causa_reale` del corpus e la verifica che il corpus prescrive.
+
+Misurato, chiave dell'esperienza sotto e sopra la probabilità:
+
+| metrica | sotto | sopra |
+|---|---|---|
+| precedente fra le ipotesi stampate | 17/21 | 17/21 |
+| precedente in testa | 12/21 | **17/21** |
+| tutto il resto | invariato | invariato |
+
+I 4 casi restanti non sono esperienza perduta e il banco li **stampa come
+note**: 3 arresti di sicurezza (il caso non arriva al ragionamento) e 1
+precedente escluso dal controfattuale — il precedente che passa per le
+stesse regole di tutte le ipotesi.
+
+Test: `rocco_v2/neural/test/caso_chiuso.test.js` — 27 asserzioni, con lo
+stato fotografato e rimesso: un test non lascia casi inventati nella memoria
+di produzione. La §5 è quella che conta: **un precedente non fa salire la
+certezza**.
+
+### Un solo pool, e tre memorie dichiarate in /health
+Il progetto apriva **tre** `new Pool`: `db.js`,
+`modules/rocco_university/memory.js` e `rocco/rocco_memoria.js` —
+quest'ultimo **senza `ssl`**, quindi su Render fallisce anche a database
+vivo. Ora ne resta **uno**, in `db.js`.
+
+**Il ripiego va agganciato al fallimento della query, non a `if (!pool)`**:
+`pool` è un oggetto anche col DB morto, quindi quella guardia non scatta.
+Entrambi i moduli usano ora un `tryQuery()` che non lancia e ricade su
+disco; dopo un fallimento aspettano 60 s prima di ritentare, così un DB
+morto non costa un timeout per messaggio.
+
+- `store/universityStore.js` — memoria didattica su disco (ES5, tmp+rename,
+  nessuna eccezione verso la chat). Era l'unica conoscenza di ROCCO che per
+  esistere richiedeva un database: col DB muto ogni caso reale e ogni errore
+  ricorrente andavano persi **in silenzio**, perché le scritture sono
+  fire-and-forget (`.catch(() => {})`).
+- `rocco/rocco_memoria.js` ridotto a quel che solo lui fa: creare lo schema
+  (le tabelle servono agli endpoint `/api/rocco/*` vivi) e dare il
+  **contesto di progetto** (impianto attivo, circuiti calcolati).
+  **Sei funzioni su nove non le chiamava nessuno** e duplicavano SQL che
+  `server.js` fa già sul pool condiviso.
+- **`cerca_casi_simili` ritirata per sostanza, non per pulizia**: leggeva
+  `rocco_knowledge_casi` **senza filtrare `verificato`**, e lì
+  `autoSaveDiagnosi` inserisce con `verificato = FALSE` perché la causa è
+  *ipotizzata da ROCCO*. Una supposizione tornava nel prompt del messaggio
+  dopo intestata "[CASI SIMILI DAL DB ROCCO]", cioè come precedente. Nello
+  stesso handler, venti righe più su, `fetchKnowledgeCasi()` fa la lettura
+  giusta: FTS italiano e `verificato = TRUE`.
+
+`/health` espone `memorie`: chi tiene la didattica (postgres o locale, con
+quanti record), quanti casi chiusi, se il contesto di progetto è
+disponibile. Senza quella riga un DB muto si vedeva solo scorrendo i log
+d'avvio — e con le scritture fire-and-forget non si vedeva affatto.
+
+### Un'ipotesi non è un fatto (auto-conferma)
+Il motore riaccodava le proprie prime tre ipotesi dentro le `osservazioni`.
+Quelle finiscono in `facts_confirmed`, e **da `facts_confirmed` dipendono due
+giudici**: `causal_model.valutaPrevisioni(previsioni, fatti)` con
+`fatti = [].concat(arr(cs.facts_confirmed), …)`, e `buildEvidenceContext()`,
+da cui le confirm rules ricavano i **segnali**. ROCCO trovava quindi le
+proprie supposizioni fra le prove e le dichiarava confermate.
+
+Misurato su FORUM-IT-007 (inverter con ISO Fault): l'ipotesi "Dispersione DC
+verso terra…" arrivava prima con `supporting_evidence: ["Controfattuale: 1
+previsioni confermate dai fatti"]`, e quel fatto era la riga
+`IPOTESI: [NON_VERIFIABLE] Dispersione DC verso terra: …` — l'ipotesi stessa.
+
+**Linea di base `causa_vera_stampata` abbassata 16 → 15**, e questa è
+l'unica ragione per cui una linea si abbassa: la misura era **gonfiata da un
+difetto**, non è una capacità persa. `causa_vera_attiva` resta 16; al primo
+turno i `probable` passano da 3 a 1 — due poggiavano su quella prova.
+
+`confirm_rules.test.js` pretendeva che **ogni** ipotesi confermata facesse
+salire la certezza finale: contraddice la guardia di pertinenza, che rifiuta
+di dire CONFERMATO quando le sole etichette confermate sono inapplicabili.
+Le due regole convivevano grazie a quelle conferme auto-generate. Ora
+l'asserzione dice il contratto vero — la certezza sale su ogni caso con una
+conferma **pertinente** — e stampa i casi che non salgono.
+
+### Niente slug davanti all'elettricista (alla fonte)
+Nelle `osservazioni` si leggeva `Componente riconosciuto [RCD-AC-2P]: rcd.`
+e `30mA (corrente_ma)`. Corretto **alla fonte** (`engine/diagnosticEngine.js`
+consulta `rocco_v2/lexicon.js`, modulo puro senza dipendenze) e non con un
+filtro a valle: un filtro nasconde il difetto, e la stessa riga passa per
+altre due strade — risposta offline e prompt del vecchio `/api/chat` — dove
+quel filtro non c'è. Tre voci aggiunte a `MEASURE_LABELS`: `corrente_ma`
+(**"corrente in mA"**, non "di dispersione": in italiano "30 mA" è quasi
+sempre la *taratura* del differenziale), `frequenza`, `velocita`.
+`"componente riconosciuto"` entra in `ENGINE_INTERNAL_PREFIXES` perché
+duplica COMPONENTI COINVOLTI.
+
+Test: `osservazioni_pulite.test.js` — 34 asserzioni (§4 niente slug alla
+fonte, §5 nessuna ipotesi fra le osservazioni, nessuna etichetta di certezza
+in inglese).
+
+### Due strumenti su cinque non vengono mai selezionati
+`tool_registry.js` registra 5 strumenti, ma `decideToolNeeded()`
+(orchestrator) può restituirne solo 3: `vision_tool`, `calc_tool`,
+`recognition_tool`. **`closed_cases_tool` e `knowledge_lookup_tool` non
+vengono chiamati da nessuno** nel percorso vivo (li invocava solo
+`orchestrator_legacy.js` via `planner.js`). Non sono però conoscenza
+perduta: i casi chiusi arrivano per l'altra strada
+(`ragionaPerAnalogia`) e la knowledge base locale via `ragionaDaKnowledge`.
+**Decisione aperta**: ritirarli, o farli selezionare.
+
 ### Il percorso inverso — come trovare i dati che si fermano
 Il difetto che si ripete in questo codice è **dato calcolato e mai letto**
-(trovato dodici volte). Il modo più efficace di cercarlo è partire dalla
+(trovato tredici volte). Il modo più efficace di cercarlo è partire dalla
 fine: **risposta API ← narratore ← bozza ← case_state ← strumenti**,
 chiedendo a ogni stadio chi legge cosa. Su un caso reale, **4 dei 28 campi
 pieni** del `case_state` non erano letti da nessuno.
@@ -757,6 +910,9 @@ Pure ES5 vanilla JS (no `?.`, no `??`, no `replaceAll`) for maximum browser comp
 | GET | `/api/components` | `?search=&category=&type=&brand=&limit=20` |
 | GET | `/api/components/:id/issues` | |
 | GET | `/api/engine/test` | Testa il ROCCO diagnostic engine con caso hardcoded (no LLM) |
+| POST | `/api/chat/v2` | ROCCO V2 — **il percorso che il frontend usa**; `/api/chat` è il ripiego |
+| POST | `/api/rocco/close-case` | "Caso risolto": scrive il caso nelle **tre** memorie (casi chiusi · didattica · pesi). Risposta: `memorie_scritte[]` |
+| POST | `/api/rocco/correct` | "No, non è quello": pesi + errore ricorrente nella memoria didattica |
 
 ## Database Schema (current)
 
