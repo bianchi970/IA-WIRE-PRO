@@ -44,6 +44,7 @@
 'use strict';
 
 const fs   = require('fs');
+const forme = require('../../rocco_v2/forme_sintomo');
 const path = require('path');
 
 const PERCORSO_BANCA = path.join(__dirname, '..', '..', 'knowledge', 'dispositivi.json');
@@ -103,18 +104,36 @@ function rileveFamigliaInTesto(testo) {
   return null;
 }
 
+// I token di sintomo della banca, letti dalle **forme** dichiarate in
+// `rocco_v2/forme_sintomo.js`.
+//
+// Qui c'erano nove `if` con un elenco di parole tutto suo, e l'altro
+// riconoscitore di sintomo (`neural_simulator`) ne aveva un secondo: ogni
+// buco stava in una lista e non nell'altra — questa conosceva "non resta
+// su" e "ricade", quella conosceva "intervi" e "fermo". Aggiungere una
+// forma voleva dire ricordarsi di due posti.
+//
+// Ora la forma si dichiara una volta e questa funzione fa il solo lavoro
+// che è suo: tradurre una classe di comportamento nel token con cui la
+// banca nomina quel sintomo.
+const CLASSE_A_TOKEN = [
+  ['scatta',        'scatta'],
+  ['botta',         'botta'],
+  ['sovraccarico',  'sovraccarico'],
+  ['cortocircuito', 'cortocircuito'],
+  ['dispersione',   'dispersione'],
+  ['ronza',         'ronza'],
+  ['non_parte',     'non avvia'],
+  ['surriscalda',   'surriscalda'],
+  ['umido',         'umidità']
+];
+
 function rilevaSintomoDalTesto(testo) {
-  const t = String(testo || '').toLowerCase();
+  const presenti = forme.comportamenti(testo);
   const sintomi = [];
-  if (/scatt[ao]|trip|scattato|salta|non resta su|ricade/.test(t)) sintomi.push('scatta');
-  if (/botta|rumore|schiocco/.test(t))          sintomi.push('botta');
-  if (/sovraccarico|sovra[- ]?carico/.test(t))  sintomi.push('sovraccarico');
-  if (/cortocircuito|corto/.test(t))            sintomi.push('cortocircuito');
-  if (/dispersione|perdita|isolamento/.test(t)) sintomi.push('dispersione');
-  if (/ronza|vibra|rumore|vibrazi/.test(t))     sintomi.push('ronza');
-  if (/non parte|non avvia|bloccat/.test(t))    sintomi.push('non avvia');
-  if (/surriscald|caldo|temperatura|brucia/.test(t)) sintomi.push('surriscalda');
-  if (/umidit|pioggia|bagnato|infiltr/.test(t)) sintomi.push('umidità');
+  CLASSE_A_TOKEN.forEach(function ([classe, token]) {
+    if (presenti.indexOf(classe) >= 0) sintomi.push(token);
+  });
   return sintomi;
 }
 

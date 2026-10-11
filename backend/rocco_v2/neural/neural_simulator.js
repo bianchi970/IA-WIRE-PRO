@@ -1,5 +1,8 @@
 "use strict";
 
+// Le forme in cui un guasto si dice: oggetto e comportamento, un posto solo.
+var forme = require("../forme_sintomo");
+
 // ============================================================================
 // SIMULATORE CAUSALE — Il ragionamento del tecnico esperto
 //
@@ -534,20 +537,70 @@ var CATENE = [
 // Riconosce il sintomo dal testo e collega alla tabella esperienza
 // ============================================================================
 
+// Ogni riga dice **che apparecchio** e **che comportamento**, e le due
+// colonne vogliono dire sempre la stessa cosa — vedi `forme_sintomo.js`
+// per il perché questo conta. Le parole vivono tutte lì: qui c'è solo la
+// mappa sintomo → (oggetto, comportamenti).
+//
+// Semantica: l'oggetto deve esserci (se dichiarato) **e** almeno uno dei
+// comportamenti. Si scorre in ordine, i casi specifici prima, e se una riga
+// trova l'oggetto ma non il comportamento si **continua** con la prossima.
+//
+// Una riga che manca di proposito: **la caldaia che fa corto-ciclo.**
+// Su FORUM-SPEC-005 ("parte e si ferma continuamente, 3-4 cicli al minuto")
+// il corpus dichiara `caldaia_non_accende`, ma le cinque cause che ROCCO ha
+// sotto quella chiave parlano di **mancata accensione** — elettrodo, valvola
+// gas, pressione, scheda, ventilatore. Il corto-ciclo è un altro fenomeno
+// (circolazione, valvola a 3 vie, portata) e ROCCO non lo sa. Mappare lì
+// quel caso gli darebbe cinque cause sbagliate con probabilità alte: è
+// **peggio** del non riconoscere. È una lacuna di conoscenza da colmare
+// nella fonte, non un riconoscimento da forzare.
+// Gli apparecchi che hanno una chiave di esperienza **loro**: motore,
+// caldaia e fotovoltaico. Se il cliente ne nomina uno e il comportamento
+// della sua riga non c'è, ROCCO **non sa** che sintomo sia — e deve dirlo,
+// non ripiegare su una famiglia generica.
+//
+// Misurato su FORUM-SPEC-005: la caldaia che fa 3-4 cicli al minuto cadeva
+// su `intermittente`, le cui cause sono contatto allentato, componente
+// termico, isolamento degradato, interferenza — **nessuna** pertinente a un
+// corto-ciclo di caldaia. Senza questa guardia la riscrittura avrebbe
+// scambiato un silenzio onesto con cinque cause sbagliate.
+var APPARECCHI_CON_CHIAVE_PROPRIA = ["motore", "caldaia", "fotovoltaico"];
+
 var RICONOSCIMENTO_SINTOMI = [
-  // SPECIFICI PRIMA — motore, caldaia, FV hanno priorità sui pattern generici
-  { pattern: /motore/, condizione: /non.*part|non.*gir|fermo|bloccato/, chiave: "motore_non_parte" },
-  { pattern: /caldaia|boiler|riscald/, condizione: /non.*accend|blocco|errore|non.*part/, chiave: "caldaia_non_accende" },
-  { pattern: /fotovoltaico|solare|pannell|inverter/, condizione: /non.*produc|zero|bassa|poco|niente/, chiave: "fotovoltaico_non_produce" },
-  // Protezioni
-  { pattern: /differenziale|rcd|salvavita|id\b|fi.schalter|disjoncteur|diferential/, condizione: /scatt|salt|trip|intervi|fliegt|saute|sare|dispar/, chiave: "differenziale_scatta" },
-  { pattern: /magnetotermico|mcb|interruttor|breaker|sicherung|disyuntor|disjuntor/, condizione: /scatt.*subito|scatt.*istantan|subito|immediat|ricade|instantly|trips|fliegt|dispar|salta/, chiave: "magnetotermico_scatta_subito" },
-  { pattern: /magnetotermico|mcb|interruttor|breaker|sicherung/, condizione: /scatt.*dopo|scatt.*tempo|dopo.*minut|dopo.*poco|after.*minut/, chiave: "magnetotermico_scatta_dopo_tempo" },
-  // Surriscaldamento e intermittente prima del generico "niente tensione"
-  { pattern: /cald|scald|surriscald|brucia|bruciato|fuma|odore|burning|smell|etincelle|funke/, condizione: /cavo|morsett|quadro|filo|connession|socket|prise|plug|stecker/, chiave: "surriscaldamento" },
-  { pattern: /intermit|va.*e.*viene|a.*volte|saltuari|ogni.*tanto|sometimes|parfois/, condizione: null, chiave: "intermittente" },
-  // GENERICO — cattura tutto il resto
-  { pattern: /tensione|corrente|non.*funzion|non.*parte|spento|buio|senza|no.*power|kein.*strom|nicht.*funktionier/, condizione: /niente|zero|assente|non.*c.*e|manca|senza|non.*funzion|no.*power|half|kein/, chiave: "niente_tensione" }
+  // SPECIFICI PRIMA — motore, caldaia, FV hanno priorità sul generico
+  { chiave: "motore_non_parte",
+    oggetto: "motore",         comportamenti: ["non_parte"] },
+  { chiave: "caldaia_non_accende",
+    oggetto: "caldaia",        comportamenti: ["non_parte", "in_blocco", "assente"] },
+  { chiave: "fotovoltaico_non_produce",
+    oggetto: "fotovoltaico",   comportamenti: ["riduce", "non_parte", "assente", "cessa"] },
+
+  // PROTEZIONI — lo scatto, e poi il quando
+  { chiave: "differenziale_scatta",
+    oggetto: "differenziale",  comportamenti: ["scatta"] },
+  { chiave: "magnetotermico_scatta_subito",
+    oggetto: "magnetotermico", comportamenti: ["subito"] },
+  { chiave: "magnetotermico_scatta_dopo_tempo",
+    oggetto: "magnetotermico", comportamenti: ["dopo_tempo"] },
+
+  // Il surriscaldamento vuole il punto dove il contatto scalda: una
+  // temperatura alta su un pannello non è un morsetto che scalda. Qui
+  // l'oggetto sta nella colonna dell'oggetto — prima era invertito.
+  { chiave: "surriscaldamento",
+    oggetto: "connessione",    comportamenti: ["surriscalda"] },
+
+  // L'intermittenza non ha un oggetto: è un modo di guastarsi. Le tre
+  // forme — si ripete, succede da solo, succede quando faccio altro — sono
+  // le tre facce con cui il cliente la racconta.
+  { chiave: "intermittente",
+    oggetto: null,             nonSe: APPARECCHI_CON_CHIAVE_PROPRIA,
+    comportamenti: ["ripete", "spontaneo", "correlato"] },
+
+  // GENERICO — cattura il resto: non c'è tensione, o c'era e non c'è più.
+  { chiave: "niente_tensione",
+    oggetto: null,             nonSe: APPARECCHI_CON_CHIAVE_PROPRIA,
+    comportamenti: ["assente", "cessa"] }
 ];
 
 // ============================================================================
@@ -557,20 +610,16 @@ var RICONOSCIMENTO_SINTOMI = [
 // --- Riconosci il sintomo dal testo ---
 function riconosciSintomo(testo) {
   if (!testo) return null;
-  var t = testo.toLowerCase()
-    .replace(/[àáâãä]/g, "a")
-    .replace(/[èéêë]/g, "e")
-    .replace(/[ìíîï]/g, "i")
-    .replace(/[òóôõö]/g, "o")
-    .replace(/[ùúûü]/g, "u");
 
   for (var i = 0; i < RICONOSCIMENTO_SINTOMI.length; i++) {
     var r = RICONOSCIMENTO_SINTOMI[i];
-    if (r.pattern.test(t)) {
-      if (!r.condizione || r.condizione.test(t)) {
-        return r.chiave;
-      }
+    if (r.oggetto && !forme.haOggetto(testo, r.oggetto)) continue;
+    if (r.nonSe && r.nonSe.some(function (o) { return forme.haOggetto(testo, o); })) continue;
+    var trovato = false;
+    for (var j = 0; j < r.comportamenti.length; j++) {
+      if (forme.haComportamento(testo, r.comportamenti[j])) { trovato = true; break; }
     }
+    if (trovato) return r.chiave;
   }
   return null;
 }

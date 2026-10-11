@@ -226,8 +226,42 @@ var BASELINE = {
   //     Ora il token viene espanso nelle parole che la banca usa davvero,
   //     scelte perché discriminano. E il racconto dell'utente non si butta
   //     più: si interroga con i token **e** col testo.
-  causa_vera_stampata:        { valore: 18, verso: "max" },   // su 21
-  causa_vera_attiva:          { valore: 19, verso: "max" },
+  // ALZATE il 2026-10-11 notte: 18 → 21 stampate, 19 → 21 attive, su 21.
+  //
+  // **Il sintomo non arrivava.** `riconosciSintomo` tornava `null` su 6 dei
+  // 21 casi italiani, in silenzio, e con `cs.anomaly_type` undefined le 9
+  // tabelle di esperienza del simulatore — 41 cause scritte a mano, ognuna
+  // con probabilità, verifica ed esclusioni — non venivano **mai** lette su
+  // quei casi. Conoscenza presente che non arrivava a chi risponde: lo
+  // stesso difetto della banca dispositivi, in un altro punto.
+  //
+  // Il riconoscimento viveva in due tabelle con due elenchi di parole
+  // (`neural_simulator` e `device_kb`), e ogni buco stava in una lista e
+  // non nell'altra. Ora le forme sono dichiarate una volta in
+  // `rocco_v2/forme_sintomo.js` come **oggetto × comportamento**, e il
+  // riconoscimento mancato lascia traccia (`sintomo_non_riconosciuto`).
+  // Misurato sui 48 casi: sintomo giusto 25 → 29, italiani 15/21 → 20/21,
+  // e l'unico che resta è una lacuna dichiarata.
+  //
+  // **Perché non è il metro che si gonfia.** Più ipotesi attive alzano per
+  // forza la probabilità che il confronto lessicale largo di `coerente()`
+  // trovi una somiglianza. Ma le ipotesi **stampate** passano da 81 a 84 in
+  // totale: non è diluizione, sono le ipotesi del simulatore che entrano
+  // nelle prime quattro per punteggio. E i due numeri che non perdonano
+  // restano a zero: conferme sbagliate 0, chiusure non dovute 0.
+  //
+  // Verificato anche che il seed del simulatore non contenga le risposte
+  // d'esame: su 48 `causa_reale` solo due frasi si ritrovano nel seed, e
+  // sono di mestiere ("dispersione verso terra", "sullo stesso circuito").
+  causa_vera_stampata:        { valore: 21, verso: "max" },   // su 21
+  causa_vera_attiva:          { valore: 21, verso: "max" },
+  //
+  // Il controllo di onestà sul numero sopra: quante volte il credito sta su
+  // una parola che il cliente **non** aveva già detto. 20 su 21 — l'unica
+  // eccezione è FORUM-SPEC-003, dichiarata in LACUNE_CONOSCENZA. Se un
+  // giorno `causa_vera_stampata` sale e questa no, il guadagno è del metro,
+  // non di ROCCO.
+  causa_vera_stretta:         { valore: 20, verso: "max" },   // su 21
   rumore_fuori_contesto:      { valore: 0,  verso: "min" },
   conferme_senza_misura:      { valore: 0,  verso: "min" },   // certezze regalate
   // ALZATA 9 → 10 l'11/10 sera: una previsione non elimina più una causa.
@@ -261,6 +295,15 @@ var BASELINE = {
   // *sicuro*, deve diventare più *corretto*. Dove il dato decisivo non c'è,
   // il caso deve restare aperto.
   chiusure_non_dovute:        { valore: 0,  verso: "min" },
+  //
+  // Il sintomo è la chiave con cui ROCCO apre la sua esperienza: senza
+  // quello, le 9 tabelle del simulatore (causa, probabilità, come la
+  // verifico, cosa esclude) non vengono lette e il distillatore lavora a
+  // vuoto. Era `undefined` su **6 casi italiani su 21** e nessuna metrica
+  // lo vedeva, perché un riconoscimento mancato non lasciava traccia.
+  // Le lacune dichiarate in LACUNE_CONOSCENZA non contano: lì tacere è la
+  // risposta giusta.
+  sintomo_non_riconosciuto:   { valore: 0,  verso: "min" },
   conferme_sbagliate:         { valore: 0,  verso: "min" },   // causa vera NON fra le confermate
   contesto_perso_multi_turn:  { valore: 0,  verso: "min" },
   // Apprendimento (misurato il 2026-10-11): il caso chiuso torna utile al
@@ -295,7 +338,7 @@ var BASELINE = {
   // provider accesi il totale era 31/48 invece di 28, e i 3 casi in più
   // erano **tutti** in lingue che ROCCO non parla. Sull'italiano:
   // identico, con o senza IA.
-  esame_it_causa_corretta:    { valore: 18, verso: "max" },   // su 21
+  esame_it_causa_corretta:    { valore: 21, verso: "max" },   // su 21
   //
   // `esame_verifica_proposta` è la metà che conta per chi lavora: una
   // diagnosi senza la misura che la decide non si può usare. **48 su 48**,
@@ -366,6 +409,43 @@ var CORPUS_NON_CHIUDIBILE = {
     "racconto e giustifica un PROBABILE, non un confermato."
 };
 
+// Le LACUNE DI CONOSCENZA: i casi in cui ROCCO non sa che fenomeno sia, e
+// in cui tacere è la risposta giusta.
+//
+// FORUM-SPEC-005 — la caldaia che fa 3-4 cicli al minuto. Il corpus la
+// etichetta `caldaia_non_accende`, ma le cinque cause che ROCCO ha sotto
+// quella chiave parlano di **mancata accensione**: elettrodo di
+// rilevazione, valvola gas, pressione acqua, scheda, ventilatore. Il
+// corto-ciclo è un altro fenomeno — circolazione, valvola a 3 vie, portata
+// — e non è in nessuna fonte di ROCCO. Riconoscerlo come mancata accensione
+// gli darebbe cinque cause sbagliate con probabilità alte: **peggio del
+// silenzio.**
+//
+// Si colma nella fonte (una voce di corto-ciclo con la sua verifica), non
+// allargando il riconoscitore.
+var LACUNE_CONOSCENZA = {
+  // L'hot spot non è un'ipotesi di ROCCO. "hot-spot" e "diodo bypass
+  // guasto" compaiono nel curriculum fra i `guasti_tipici` del generatore
+  // DC, e il simulatore ha "stringa con diodo bypass in cortocircuito" —
+  // ma nessuno dei due arriva fra le prime quattro ipotesi, perché il
+  // fenomeno "calo graduale di produzione senza errori" non ha una voce
+  // propria. ROCCO stampa l'inverter in errore e la dispersione DC: piste
+  // plausibili, non quella giusta.
+  //
+  // Si colma nella fonte — una voce di hot spot con la sua verifica
+  // (termografia dei moduli, tensione di stringa) — non allargando una
+  // regola.
+  "FORUM-SPEC-003":
+    "hot spot e diodo bypass: nel curriculum come guasti tipici, ma non " +
+    "come ipotesi con verifica. ROCCO prende il credito del metro largo " +
+    "su una parola della domanda, non sulla causa.",
+
+  "FORUM-SPEC-005":
+    "caldaia in corto-ciclo: ROCCO ha solo le cause della mancata " +
+    "accensione, il corto-ciclo (circolazione, valvola a 3 vie) non è in " +
+    "nessuna fonte. Tacere è giusto."
+};
+
 var METRO_CIECO = {
   "FORUM-IT-010": "conferma 'conduttore interrotto' = la mancanza di fase del caso, detta con altre parole"
 };
@@ -387,6 +467,26 @@ var MISURE = {
   resistenza:  "Ho misurato la resistenza fase-neutro: 0,5 Ohm.",
   continuita:  "Ho fatto la prova di continuita col tester in buzzer: nessuna continuita sul cavo.",
   tensione:    "Ho misurato la tensione ai morsetti col tester: 0 V.",
+
+  // TENSIONE FUORI BANDA — e non è una premessa in più per comodità: è la
+  // premessa che il caso **prescrive**, dove la prescrive.
+  //
+  // Il difetto, della stessa famiglia di "sul morsetto" già corretto qui:
+  // una sola frase generica per tipo di misura mette in bocca all'utente
+  // una lettura che il suo caso contraddice. Su FORUM-SPEC-004 — "dopo i
+  // lavori dell'ENEL la lavatrice è morta e il frigo fa un rumore strano,
+  // **le luci funzionano**" — il banco faceva dire "0 V". Se le luci vanno,
+  // la tensione c'è: è *sbagliata*, non assente. E su quella premessa falsa
+  // ROCCO confermava un'interruzione via CF-04, che `coerente()` contava
+  // come giusta perché "conduttore **interrotto**" somiglia a "neutro
+  // **interrotto**".
+  //
+  // La lettura vera la dice il caso: la sua seconda verifica è "chiamare il
+  // distributore se la tensione non è 230V ±10%". Quindi la premessa è una
+  // tensione **fuori banda**, e il numero viene dalla norma già dichiarata
+  // in `knowledge/limiti.js` (207–253 V, CEI 64-8/1 con la tolleranza di
+  // CEI EN 50160) — non da me.
+  tensione_fuori_banda: "Ho misurato la tensione fase-neutro col tester: 198 V.",
   corrente:    "Ho misurato con la pinza amperometrica: 18 A su un circuito da 16 A.",
   corrente_ma: "Ho misurato con la pinza in mA sulla linea: 42 mA di dispersione.",
   // Senza dire DOVE: il luogo lo dice il caso, non io.
@@ -413,6 +513,10 @@ function misuraPrescritta(caso) {
   if (/in ma\b|corrente dispersione|dispersione con/.test(v)) return "corrente_ma";
   if (/misura corrente|pinza amperometrica/.test(v)) return "corrente";
   if (/3 fasi|tre fasi/.test(v)) return "tensione_trifase";
+  // Prima della tensione generica: se la verifica del caso nomina una
+  // tolleranza intorno alla nominale, quel caso chiede di scoprire una
+  // tensione **fuori banda**, non una tensione assente.
+  if (/230\s?v|tolleranza|\u00b1\s?10|10\s?%/.test(v) && /tension/.test(v)) return "tensione_fuori_banda";
   if (/misura tensione|tensione fase|verifica tensione|tensione sulle/.test(v)) return "tensione";
   return null;   // il caso non prescrive strumenti: niente secondo turno
 }
@@ -425,6 +529,29 @@ function coerente(label, causaReale) {
   var a = norm(label);
   var parole = norm(causaReale).match(/[a-z]{5,}/g) || [];
   return parole.some(function (w) { return a.indexOf(w.slice(0, 6)) >= 0; });
+}
+
+// IL METRO STRETTO — una parola che il cliente non ha già detto lui.
+//
+// `coerente()` è largo per scelta: serve a confrontare prima e dopo sullo
+// stesso metro, non a giudicare una singola ipotesi. Ma largo quanto? Su
+// FORUM-SPEC-003 la causa è "hot spot su un pannello con diodo bypass in
+// cortocircuito + sporcizia" e l'ipotesi "dispersione DC verso terra —
+// **pannelli**, cavi, inverter" prendeva il credito grazie a "pannel": una
+// parola che il cliente aveva scritto lui nella domanda. Ripetere il
+// vocabolario di chi chiede non è identificare una causa.
+//
+// Questo metro pretende la somiglianza su una parola **distintiva**: nella
+// causa reale e **non** nella domanda. Misurato sui 21 italiani: largo
+// 21/21, stretto **20/21**. La differenza è un solo caso, e questo dice due
+// cose — che il metro largo regalava meno di quanto temessi, e che quando
+// regala lo si vede solo misurando.
+function coerenteStretto(label, causa, domanda) {
+  var a = norm(label), d = norm(domanda);
+  var distintive = (norm(causa).match(/[a-z]{5,}/g) || []).filter(function (w) {
+    return d.indexOf(w.slice(0, 6)) < 0;
+  });
+  return distintive.some(function (w) { return a.indexOf(w.slice(0, 6)) >= 0; });
 }
 
 function ipotesiStampate(answer) {
@@ -446,6 +573,7 @@ var m = {
   ipotesi_stampate: 0, rumore_fuori_contesto: 0,
   conferme_senza_misura: 0,
   casi_conclusi_con_misura: 0, conferme_sbagliate: 0, chiusure_non_dovute: 0,
+  sintomo_non_riconosciuto: 0, causa_vera_stretta: 0,
   contesto_perso_multi_turn: 0, casi_senza_misura_prescritta: 0,
   esperienza_riusata: 0, esperienza_in_testa: 0, esperienza_persa: 0,
   esperienza_senza_ragionamento: 0, esperienza_esclusa_da_regola: 0,
@@ -484,6 +612,9 @@ function primoTurno(caso) {
       });
 
       if (stampate.some(function (l) { return coerente(l, caso.causa_reale); })) m.causa_vera_stampata++;
+      if (stampate.some(function (l) {
+        return coerenteStretto(l, caso.causa_reale, caso.domanda);
+      })) m.causa_vera_stretta++;
       if (attive(cs).some(function (h) { return coerente(h.label, caso.causa_reale); })) m.causa_vera_attiva++;
 
       // Sul solo racconto nessuna ipotesi deve risultare confermata.
@@ -491,6 +622,17 @@ function primoTurno(caso) {
       if (confermateSenzaMisura.length) {
         m.conferme_senza_misura += confermateSenzaMisura.length;
         dettagli.push(caso.id + ": confermata senza misura — " + confermateSenzaMisura[0].label.slice(0, 44));
+      }
+
+      // Il sintomo è arrivato? Senza di quello l'esperienza non si apre.
+      var tracciaT1 = (cs.runtime && cs.runtime.trace) || [];
+      if (tracciaT1.some(function (x) { return x.step === "sintomo_non_riconosciuto"; })) {
+        if (LACUNE_CONOSCENZA[caso.id]) {
+          note.push(caso.id + ": lacuna di conoscenza — " + LACUNE_CONOSCENZA[caso.id].slice(0, 90));
+        } else {
+          m.sintomo_non_riconosciuto++;
+          dettagli.push(caso.id + ": SINTOMO NON RICONOSCIUTO — l'esperienza del simulatore non si apre");
+        }
       }
 
       var fc = cs.final_confidence || "?";
@@ -701,15 +843,48 @@ function riga(nome, ottenuto, su) {
   return ok;
 }
 
+// ── Due passate, e l'ordine conta ────────────────────────────────────
+//
+// `ripristinaStato()` rimette i **file** come il seed dichiarato, e per un
+// po' è bastato. Ma i moduli neurali caricano il loro stato in memoria al
+// `require` e lo mutano a ogni diagnosi: pesi, grafo, vocabolario, pattern,
+// regole distillate. Il file torna pulito, **la RAM no.**
+//
+// Finché le tre passate giravano intrecciate per ogni caso, il terzo turno
+// — che è l'apprendimento, e chiude il caso **con la sua `causa_reale`** —
+// girava prima delle misure del caso dopo. Dal secondo caso in poi le
+// metriche fotografavano un motore che aveva già ricevuto le risposte
+// d'esame dei casi precedenti, in memoria. È la contaminazione che la
+// regola unica vieta, rientrata da una porta che il ripristino dei file non
+// chiude.
+//
+// Misurato su FORUM-SPEC-004 (nono caso): 21 ipotesi attive e nessuna
+// confermata dentro il banco, **13 e la causa vera confermata** eseguendo
+// lo stesso caso da solo. Lo stesso codice, due risultati: non era ROCCO a
+// cambiare parere, era il metro.
+//
+// Ora: prima **tutte** le misure, poi **tutto** l'apprendimento. Resta la
+// mutazione che una diagnosi misurata provoca sulle successive — per
+// togliere anche quella servirebbe un processo per caso — ma nessuna misura
+// vede più un motore addestrato sulla risposta attesa.
 var catena = Promise.resolve();
+
+// Passata 1 — le misure. Nessun apprendimento le precede.
 casi.forEach(function (caso) {
   catena = catena.then(function () {
     // Ogni caso parte dallo stesso motore: stesso stato appreso e stesso
     // seme, così la differenza fra due casi è il caso, non la corsa.
     ripristinaStato();
     return primoTurno(caso)
-      .then(function (r) { return secondoTurno(caso, r); })
-      .then(function () { return terzoTurno(caso); });
+      .then(function (r) { return secondoTurno(caso, r); });
+  });
+});
+
+// Passata 2 — l'apprendimento: il caso chiuso torna utile?
+casi.forEach(function (caso) {
+  catena = catena.then(function () {
+    ripristinaStato();
+    return terzoTurno(caso);
   });
 });
 
@@ -730,6 +905,7 @@ catena.then(function () {
   console.log("\nIPOTESI");
   ok = riga("causa_vera_stampata", m.causa_vera_stampata, casi.length) && ok;
   ok = riga("causa_vera_attiva", m.causa_vera_attiva, casi.length) && ok;
+  ok = riga("causa_vera_stretta", m.causa_vera_stretta, casi.length) && ok;
   console.log("    ipotesi stampate in totale              " + String(m.ipotesi_stampate).padStart(4));
   ok = riga("rumore_fuori_contesto", m.rumore_fuori_contesto) && ok;
 
@@ -740,6 +916,11 @@ catena.then(function () {
   ok = riga("casi_conclusi_con_misura", m.casi_conclusi_con_misura, casi.length) && ok;
   ok = riga("conferme_sbagliate", m.conferme_sbagliate) && ok;
   ok = riga("chiusure_non_dovute", m.chiusure_non_dovute) && ok;
+  ok = riga("sintomo_non_riconosciuto", m.sintomo_non_riconosciuto) && ok;
+  Object.keys(LACUNE_CONOSCENZA).forEach(function (id) {
+    console.log("    " + id + ": lacuna di conoscenza dichiarata — " +
+      LACUNE_CONOSCENZA[id].slice(0, 70));
+  });
   Object.keys(CORPUS_NON_CHIUDIBILE).forEach(function (id) {
     console.log("    " + id + ": il corpus non contiene il dato decisivo — deve restare aperto");
   });

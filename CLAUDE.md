@@ -884,6 +884,114 @@ questa correzione, e non si vedeva dai numeri.
 sottrae invece di aggiungere. Va capito **prima** di dare più peso ai
 punteggi appresi.
 
+### Il sintomo è la chiave, e non girava nella toppa
+
+`cs.anomaly_type` era **`undefined` su 6 dei 21 casi italiani**, in silenzio.
+Con quello vuoto le 9 tabelle di esperienza del simulatore — **41 cause
+scritte a mano**, ognuna con probabilità, verifica ed esclusioni — non
+venivano mai lette su quei casi, e con loro restavano a vuoto il distillatore
+e `suggerisciVerifica`. Conoscenza presente che non arriva a chi risponde: lo
+stesso difetto della banca dispositivi, in un altro punto del percorso.
+
+**Il difetto era di metodo, non di una regex.**
+
+Il riconoscimento viveva in **due tabelle con due elenchi di parole**:
+`neural_simulator.RICONOSCIMENTO_SINTOMI` (10 regole, ognuna una congiunzione
+di due indovinelli — `pattern` + `condizione` — e vinceva la prima che
+azzeccava entrambi) e `device_kb.rilevaSintomoDalTesto` (9 `if`). **Ogni buco
+stava in una lista e non nell'altra**: `device_kb` conosceva "non resta su" e
+"ricade", il simulatore conosceva "intervi" e "fermo". E nelle dieci regole le
+due colonne non volevano dire la stessa cosa in ogni riga: in quella del
+surriscaldamento `pattern` era il comportamento e `condizione` era l'oggetto,
+al contrario di tutte le altre.
+
+`rocco_v2/forme_sintomo.js` tiene le forme **una volta sola**, separate per
+natura: **OGGETTO** (che apparecchio) × **COMPORTAMENTO** (che cosa fa). Il
+simulatore dichiara solo la mappa sintomo → (oggetto, comportamenti);
+`device_kb` traduce una classe nel token con cui la banca nomina quel sintomo.
+Chi aggiunge una forma la aggiunge in un posto e la misura sul corpus.
+
+**Le forme che mancavano, e perché**: `cessa` ("la lavatrice **ha smesso di
+funzionare**"), `riduce` ("produce il **30% in meno**" — la vecchia condizione
+pretendeva `non.*produc`, che in quella frase non c'è), `spontaneo` ("le luci
+si accendono **da sole**"), `correlato` ("**quando accendo** l'aspirapolvere la
+TV si spegne"), `in_blocco` ("**va in blocco**"), e `MTD` fra gli oggetti —
+la sigla che un italiano scrive, **che non esisteva in nessun elenco del
+progetto**.
+
+**Il silenzio ora si dichiara**: `sintomo_non_riconosciuto` nella traccia e
+nel banco. Non è un errore — ci sono casi in cui tacere è giusto — ma deve
+vedersi, perché è l'unica ragione per cui questo difetto è vissuto a lungo.
+
+**Due lacune di conoscenza, dichiarate e non coperte** (`LACUNE_CONOSCENZA`):
+- **FORUM-SPEC-005**, la caldaia che fa 3-4 cicli al minuto. Il corpus la
+  etichetta `caldaia_non_accende`, ma le cinque cause sotto quella chiave
+  parlano di *mancata accensione* (elettrodo, valvola gas, pressione, scheda,
+  ventilatore). Il corto-ciclo è un altro fenomeno e ROCCO non lo ha:
+  riconoscerlo lì gli darebbe **cinque cause sbagliate con probabilità alte**,
+  peggio del silenzio. Per questo le righe generiche (`intermittente`,
+  `niente_tensione`) **non rubano** un apparecchio che ha una chiave propria.
+- **FORUM-SPEC-003**, il fotovoltaico che rende il 30% in meno: hot spot e
+  diodo bypass stanno nel curriculum come *guasti tipici* ma non come
+  **ipotesi con verifica**, e ROCCO stampa l'inverter in errore e la
+  dispersione DC — piste plausibili, non quella giusta.
+
+Entrambe si colmano **nella fonte**, non allargando una regola.
+
+**Tre errori miei, trovati dalle frasi negative e non dai numeri**: `sare`
+(pensato per lo spagnolo) trovava "pen-**sare**"; `trip` senza confine di
+chiusura trovava "presa **trip**la"; e una riga conteneva **caratteri
+cirillici** invisibili. Nessuno dei tre si vedeva dal corpus. È la ragione per
+cui §3 di `forme_sintomo.test.js` esiste.
+
+**E il metro, misurato invece di creduto.** `coerente()` è largo per scelta.
+Quanto? Il metro **stretto** pretende la somiglianza su una parola *distintiva*
+— nella causa reale e **non** nella domanda, perché ripetere il vocabolario di
+chi chiede non è identificare una causa. Misurato: largo 21/21, **stretto
+20/21**, e l'unica differenza è SPEC-003. Ora è una metrica del banco: se
+`causa_vera_stampata` sale e `causa_vera_stretta` no, il guadagno è del metro.
+
+**Correzioni al banco trovate per strada:**
+1. **La premessa contraddiceva il caso.** Per la tensione il banco faceva
+   dire "0 V" a tutti. Su FORUM-SPEC-004 — "la lavatrice è morta, il frigo fa
+   un rumore strano, **le luci funzionano**" — se le luci vanno la tensione
+   c'è: è *sbagliata*, non assente. E su quella premessa falsa ROCCO
+   confermava un'interruzione, che il confronto lessicale contava giusta.
+   Ora `misuraPrescritta()` legge la **seconda verifica del caso** ("chiamare
+   il distributore se la tensione non è 230V ±10%") e manda una tensione fuori
+   banda. È la stessa famiglia del "sul morsetto" già corretto: una premessa
+   che il caso non sostiene.
+2. **L'apprendimento girava prima delle misure.** Le tre passate erano
+   intrecciate per caso, e il terzo turno chiude il caso **con la sua
+   `causa_reale`**: dal secondo caso in poi le metriche fotografavano un
+   motore che aveva già ricevuto le risposte d'esame dei precedenti, in
+   memoria — il ripristino rimette i file, non la RAM. Ora: prima tutte le
+   misure, poi tutto l'apprendimento.
+
+| metrica | prima | dopo |
+|---|---|---|
+| sintomo giusto, casi italiani | 15/21 | **20/21** |
+| causa vera stampata | 18/21 | **21/21** |
+| causa vera attiva | 19/21 | **21/21** |
+| causa vera, **metro stretto** | — | **20/21** (nuova) |
+| sintomo non riconosciuto | 6 (invisibile) | **0** (+2 lacune dichiarate) |
+| esame italiano | 18/21 | **21/21** |
+| casi conclusi con la misura | 11/21 | 11/21 |
+| conferme sbagliate · chiusure non dovute | 0 | 0 |
+| ipotesi stampate in totale | 81 | 84 |
+
+Le ipotesi stampate crescono di **tre** mentre la causa vera stampata cresce
+di tre: non è diluizione, sono le ipotesi del simulatore che entrano nelle
+prime quattro per punteggio. E i casi conclusi **non cambiano**: questa strada
+migliora la qualità della diagnosi, non il tasso di chiusura — quello lo
+limitano il corpus e il metro.
+
+Test: `forme_sintomo.test.js` — 45 asserzioni in tre direzioni (il contratto
+ereditato dalla vecchia suite, il corpus, i falsi positivi) più la frequenza
+di ogni classe: una che scatta su tutto è rumore, una che non scatta mai non è
+esercitata da nessun caso reale (`dispersione`, `cortocircuito`,
+`sovraccarico` — servono alla banca dispositivi, che il corpus non prova).
+
 ### G1 — i casi chiudibili, e quelli che il corpus non può chiudere
 
 Cinque casi italiani avevano la causa vera **fra le ipotesi attive** e non si
@@ -983,7 +1091,7 @@ Verificato che va rossa rimettendo a mano la riga del veto.
 
 ### Il percorso inverso — come trovare i dati che si fermano
 Il difetto che si ripete in questo codice è **dato calcolato e mai letto**
-(trovato tredici volte). Il modo più efficace di cercarlo è partire dalla
+(trovato venti volte). Il modo più efficace di cercarlo è partire dalla
 fine: **risposta API ← narratore ← bozza ← case_state ← strumenti**,
 chiedendo a ogni stadio chi legge cosa. Su un caso reale, **4 dei 28 campi
 pieni** del `case_state` non erano letti da nessuno.

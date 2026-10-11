@@ -2452,6 +2452,23 @@ function createOrchestrator(options) {
             // Propaga il sintomo riconosciuto per il distillatore (step 5e) e suggerisciVerifica (step 10)
             if (simResult.sintomo) {
               cs.anomaly_type = simResult.sintomo;
+            } else {
+              // **Un riconoscimento mancato va dichiarato.**
+              //
+              // Senza questa riga `cs.anomaly_type` restava `undefined` in
+              // silenzio e tre lettori — il simulatore causale (le sue 9
+              // tabelle di esperienza, con causa, probabilità, verifica ed
+              // esclusione), il distillatore e `suggerisciVerifica` —
+              // ricevevano il vuoto senza protestare. Misurato sui 48 casi:
+              // 17 senza sintomo, **6 italiani**, e nessuno se ne era mai
+              // accorto perché il silenzio non lasciava traccia.
+              //
+              // Non è un errore: ci sono casi in cui ROCCO davvero non sa
+              // che fenomeno sia, e tacere è giusto (vedi la caldaia in
+              // corto-ciclo in `neural_simulator`). Ma deve **dirlo**.
+              runtimeTrace.record(cs, "sintomo_non_riconosciuto", {
+                testo: s(cs.problem_summary).slice(0, 80)
+              });
             }
             runtimeTrace.record(cs, "simulatore_causale", {
               sintomo: simResult.sintomo,
@@ -2849,11 +2866,35 @@ function createOrchestrator(options) {
             expected_discriminator: cs.safety.allowed_next_step ||
               "Disalimentare e verificare assenza tensione prima di qualsiasi prova"
           };
-          cs.final_confidence = "confirmed";
+          // **La certezza parla della DIAGNOSI, non del pericolo.**
+          //
+          // Qui c'era `cs.final_confidence = "confirmed"`: l'arresto
+          // dichiarava certo il *pericolo* scrivendolo nel campo che
+          // l'elettricista legge come certezza sulla *causa* — un campo con
+          // due mestieri. Il referto si contraddiceva da sé: sotto
+          // LIVELLO DI CERTEZZA stava CONFERMATO e la riga sotto diceva
+          // "Causa probabile da verificare".
+          //
+          // Misurato su FORUM-SPEC-003 (fotovoltaico che produce il 30% in
+          // meno, termografia su un pannello a 85 °C): `final_confidence`
+          // era `confirmed` con **zero ipotesi confermate**. Il banco lo
+          // contava fra le chiusure sbagliate, ed era giusto: una certezza
+          // senza una causa accertata non è una diagnosi.
+          //
+          // Il pericolo non perde niente: ha già due sezioni sue — RISCHI
+          // REALI (da `cs.safety.reasons`) e PROSSIMO PASSO (la prescrizione
+          // qui sopra, che resta e che vale `esame_verifica_proposta` 48/48)
+          // — e apre la diagnosi. Quello che cambia è che la certezza non
+          // afferma più per conto del pericolo.
           var guida = cs.hypotheses.filter(function(h) { return h.status === "active"; })[0];
+          var premessa = cs.final_confidence === "confirmed"
+            ? " Causa accertata dalla misura, da affrontare dopo la messa in sicurezza: "
+            : (cs.final_confidence === "probable"
+                ? " Causa probabile, da verificare dopo la messa in sicurezza: "
+                : " Prima ipotesi da verificare dopo la messa in sicurezza: ");
           cs.final_diagnosis = (cs.safety.reasons[0] ||
             "Condizione pericolosa. Fermare ogni operazione.") +
-            (guida ? " Causa probabile da verificare dopo la messa in sicurezza: " + guida.label + "." : "");
+            (guida ? premessa + guida.label + "." : "");
         }
         // Neural hook: arricchisce la discriminazione dell'azione
         try {
