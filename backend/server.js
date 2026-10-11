@@ -1135,6 +1135,34 @@ app.get("/health", async (req, res) => {
       local: !!convStore,
       active: convStore ? (dbOk ? "postgres" : "local") : "postgres"
     },
+    // Chi tiene le altre memorie adesso. Senza questa riga un DB muto si
+    // vedeva solo scorrendo i log d'avvio — e le scritture della memoria
+    // didattica sono fire-and-forget, quindi non si vedeva affatto.
+    memorie: (function () {
+      var out = {};
+      try {
+        var uni = require('./modules/rocco_university/memory');
+        if (uni.backendInUso) {
+          var b = uni.backendInUso();
+          out.didattica = {
+            active: b.postgres ? "postgres" : "local",
+            locale: b.locale
+          };
+        }
+      } catch (e) { out.didattica = { error: (e && e.message) || "non disponibile" }; }
+      try {
+        var v2mem = require('./rocco_v2/memory');
+        out.casi_chiusi = { count: v2mem.readStore().closed_cases.length };
+      } catch (e) { out.casi_chiusi = { error: (e && e.message) || "non disponibile" }; }
+      try {
+        if (roccoMemoria && roccoMemoria.backendInUso) {
+          out.contesto_progetto = {
+            active: roccoMemoria.backendInUso().postgres ? "postgres" : "non disponibile"
+          };
+        }
+      } catch (e) { out.contesto_progetto = { error: (e && e.message) || "non disponibile" }; }
+      return out;
+    })(),
     ai: {
       connected: aiConnected,
       activeProvider: activeProvider,
@@ -1780,23 +1808,30 @@ app.post("/api/chat", rlChat, uploadAny, async (req, res) => {
       console.warn("⚠️ Device KB non disponibile:", (e && e.message) || e);
     }
 
-    // RAG ROCCO MEMORIA v7 — casi simili dal DB + contesto progetto
+    // ROCCO MEMORIA v8 — contesto di progetto (impianto attivo e circuiti)
+    //
+    // Qui c'era anche `roccoMemoria.cerca_casi_simili(message, 3)`, che
+    // intestava i risultati "[CASI SIMILI DAL DB ROCCO]". Ritirata: leggeva
+    // `rocco_knowledge_casi` **senza filtrare `verificato`**, e in quella
+    // tabella `autoSaveDiagnosi` (sopra, riga ~780) inserisce con
+    // `verificato = FALSE` perché la causa è *ipotizzata da ROCCO*, non
+    // confermata da nessuno. Una supposizione tornava quindi nel prompt del
+    // messaggio dopo come precedente — una supposizione riciclata in
+    // conoscenza.
+    //
+    // La lettura giusta della stessa tabella è venti righe più su,
+    // `fetchKnowledgeCasi()`: FTS italiano e `verificato = TRUE`. E i casi
+    // chiusi dall'elettricista stanno in un posto solo,
+    // `rocco_v2/memory.js`.
     let memoriaContext = "";
     try {
       if (roccoMemoria) {
-        const casiSimili = await roccoMemoria.cerca_casi_simili(message, 3);
         const progettoId = body.progetto_id ? parseInt(body.progetto_id, 10) || null : null;
         const contestoProgetto = await roccoMemoria.get_contesto_memoria(progettoId);
-        if (casiSimili && casiSimili.length > 0) {
-          memoriaContext += "\n[CASI SIMILI DAL DB ROCCO]\n";
-          casiSimili.forEach(function(c, i) {
-            memoriaContext += (i + 1) + ". PROBLEMA: " + c.problema + "\n   CAUSA: " + c.causa + "\n   SOLUZIONE: " + c.soluzione + "\n";
-          });
-        }
         if (contestoProgetto) memoriaContext += contestoProgetto;
       }
     } catch (e) {
-      console.warn("⚠️ ROCCO MEMORIA RAG:", (e && e.message) || e);
+      console.warn("⚠️ ROCCO MEMORIA contesto progetto:", (e && e.message) || e);
     }
 
     // ===== KNOWLEDGE BASE LOCALE + ROCCO ENGINE (FASE 7) =====

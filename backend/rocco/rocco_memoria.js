@@ -1,183 +1,170 @@
 /**
- * ROCCO MEMORIA — Interfaccia PostgreSQL (v7)
- * ROCCO usa queste funzioni per ricordare e imparare dai casi reali.
+ * ROCCO MEMORIA — contesto di progetto da PostgreSQL (v8)
+ *
+ * Cosa resta qui e perché quasi tutto è stato ritirato.
+ *
+ * **Il terzo pool.** Questo file apriva un `new Pool()` suo —
+ * `new Pool({ connectionString: process.env.DATABASE_URL })`, **senza
+ * `ssl`** — mentre `db.js` lo apre con `ssl: { rejectUnauthorized: false }`,
+ * che su Render è obbligatorio. Quindi su Render questo modulo fallisce
+ * anche quando il database è vivo e tutto il resto funziona. Era l'ultimo
+ * errore all'avvio: `[ROCCO MEMORIA] init_schema: read ECONNRESET`. Ora il
+ * pool è quello condiviso: una configurazione sola, un posto solo dove
+ * cambiarla.
+ *
+ * **Sei funzioni su nove non le chiamava nessuno.** Verificato col grafo
+ * delle dipendenze: `salva_progetto`, `get_progetti`, `salva_circuito`,
+ * `salva_diagnosi`, `aggiorna_knowledge`, `salva_calcolo` avevano zero
+ * chiamanti fuori da questo file. Non erano "pronte per il futuro": le
+ * stesse scritture `server.js` le fa già in SQL diretto sul pool condiviso
+ * (`/api/rocco/progetti`, `/api/rocco/diagnosi`, `autoSaveDiagnosi`). Due
+ * implementazioni della stessa tabella, una viva e una mai invocata.
+ *
+ * **`cerca_casi_simili` è stata ritirata per una ragione di sostanza, non
+ * di pulizia.** Leggeva `rocco_knowledge_casi` **senza filtrare
+ * `verificato`**. Quella tabella la riempie anche `autoSaveDiagnosi`, che
+ * inserisce con `verificato = FALSE` perché il caso contiene una causa
+ * *ipotizzata da ROCCO* e non ancora confermata da nessuno. Risultato: una
+ * supposizione di ROCCO tornava nel prompt del messaggio successivo
+ * intestata "CASI SIMILI DAL DB ROCCO", cioè come precedente. È il
+ * riciclaggio di una supposizione in conoscenza — l'invenzione che ROCCO
+ * non deve fare, nella forma più difficile da notare.
+ *
+ * Nello stesso handler `/api/chat`, venti righe più su, c'era già
+ * `fetchKnowledgeCasi()`: stessa tabella, FTS italiano invece di ILIKE, e
+ * `verificato = TRUE`. Quella resta, ed è la lettura giusta.
+ *
+ * I casi chiusi dall'elettricista hanno **un posto solo**:
+ * `rocco_v2/memory.js`, scritto da `/api/rocco/close-case` e letto da
+ * `ragionaPerAnalogia()`. Non si aggiunge una quarta memoria degli stessi
+ * casi.
+ *
+ * Resta quindi: creare lo schema (le tabelle servono agli endpoint vivi) e
+ * il **contesto di progetto**, che è l'unica cosa che questo modulo sa fare
+ * e nessun altro fa — progetto attivo e circuiti calcolati.
  */
 
-const { Pool } = require('pg');
-const fs   = require('fs');
+const fs = require('fs');
 const path = require('path');
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// Pool condiviso. `db.js` lancia se DATABASE_URL non è configurato: non deve
+// far cadere il modulo, si lavora senza contesto di progetto.
+let pool = null;
+try {
+  ({ pool } = require('../db'));
+} catch (_e) {
+  pool = null;
+}
+
+// Dopo un fallimento non si ritenta a ogni messaggio: un DB morto
+// costerebbe un timeout per richiesta. Poi si riprova, perché un'istanza
+// sospesa può tornare.
+const RETRY_AFTER_MS = 60 * 1000;
+let dbDownSince = 0;
+
+function dbUsable() {
+  if (!pool) return false;
+  if (!dbDownSince) return true;
+  return Date.now() - dbDownSince > RETRY_AFTER_MS;
+}
+
+/**
+ * Esegue la query senza lanciare. Il ripiego va agganciato al **fallimento
+ * della query**, non a `if (!pool)`: il pool è un oggetto anche quando il
+ * database non risponde, quindi quella guardia non scatta mai.
+ */
+async function tryQuery(sql, params) {
+  if (!dbUsable()) return { ok: false, rows: [] };
+  try {
+    const result = await pool.query(sql, params);
+    dbDownSince = 0;
+    return { ok: true, rows: result.rows };
+  } catch (_err) {
+    dbDownSince = Date.now();
+    return { ok: false, rows: [] };
+  }
+}
 
 // ----------------------------------------------------------
 // INIZIALIZZAZIONE SCHEMA
 // ----------------------------------------------------------
+//
+// Lo schema crea le tabelle `rocco_progetti`, `rocco_diagnosi`,
+// `rocco_knowledge_casi`, `rocco_circuiti` — usate dagli endpoint
+// `/api/rocco/*` e da `autoSaveDiagnosi`. Per questo init_schema resta,
+// anche se quasi tutto il resto del modulo è stato ritirato.
+//
+// Non lancia più: il database spento non è un errore di avvio, è un modo di
+// funzionare. Ritorna quale stato ha trovato.
 async function init_schema() {
-  const sql = fs.readFileSync(path.join(__dirname, 'rocco_memoria_schema.sql'), 'utf8');
-  await pool.query(sql);
+  let sql;
+  try {
+    sql = fs.readFileSync(path.join(__dirname, 'rocco_memoria_schema.sql'), 'utf8');
+  } catch (err) {
+    console.log('[ROCCO MEMORIA] schema non leggibile: ' + err.message);
+    return { backend: 'nessuno', reason: 'schema_unreadable' };
+  }
+
+  const res = await tryQuery(sql, []);
+  if (!res.ok) {
+    console.log('[ROCCO MEMORIA] Postgres non risponde → contesto di progetto non disponibile');
+    return { backend: 'nessuno', reason: 'db_unavailable' };
+  }
   console.log('[ROCCO MEMORIA] Schema inizializzato ✓');
+  return { backend: 'postgres' };
 }
 
 // ----------------------------------------------------------
-// PROGETTI
+// CONTESTO DI PROGETTO per il system prompt di ROCCO
 // ----------------------------------------------------------
-async function salva_progetto({ cliente, indirizzo, tipo_locale, sistema = 'TT', tensione = 230, note = '' }) {
-  const r = await pool.query(
-    `INSERT INTO rocco_progetti (cliente, indirizzo, tipo_locale, sistema, tensione, note)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-    [cliente, indirizzo, tipo_locale, sistema, tensione, note]
-  );
-  return r.rows[0].id;
-}
-
-async function get_progetti(limit = 20) {
-  const r = await pool.query(
-    `SELECT * FROM rocco_progetti ORDER BY created_at DESC LIMIT $1`, [limit]
-  );
-  return r.rows;
-}
-
-// ----------------------------------------------------------
-// CIRCUITI
-// ----------------------------------------------------------
-async function salva_circuito(impianto_id, dati) {
-  const {
-    nome, P_kW, Ib_A, sezione_mm2, metodo_posa = 'B',
-    lunghezza_m, dV_perc, In_interruttore, curva_interruttore,
-    diff_tipo, diff_Idn_mA, PE_mm2, verifica_ok, note = ''
-  } = dati;
-  const r = await pool.query(
-    `INSERT INTO rocco_circuiti
-     (impianto_id,nome,P_kW,Ib_A,sezione_mm2,metodo_posa,lunghezza_m,
-      dV_perc,In_interruttore,curva_interruttore,diff_tipo,diff_Idn_mA,PE_mm2,verifica_ok,note)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
-    [impianto_id, nome, P_kW, Ib_A, sezione_mm2, metodo_posa, lunghezza_m,
-     dV_perc, In_interruttore, curva_interruttore, diff_tipo, diff_Idn_mA, PE_mm2, verifica_ok, note]
-  );
-  return r.rows[0].id;
-}
-
-// ----------------------------------------------------------
-// DIAGNOSI
-// ----------------------------------------------------------
-async function salva_diagnosi({
-  progetto_id = null, descrizione, sintomi = '', misure_rilevate = [],
-  causa_trovata = '', soluzione = '', norma_riferimento = '',
-  risolto = false, tempo_minuti = null
-}) {
-  const r = await pool.query(
-    `INSERT INTO rocco_diagnosi
-     (progetto_id,descrizione,sintomi,misure_rilevate,causa_trovata,soluzione,norma_riferimento,risolto,tempo_minuti)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
-    [progetto_id, descrizione, sintomi, JSON.stringify(misure_rilevate),
-     causa_trovata, soluzione, norma_riferimento, risolto, tempo_minuti]
-  );
-  if (risolto && causa_trovata && soluzione) {
-    await aggiorna_knowledge(descrizione, causa_trovata, soluzione, norma_riferimento);
-  }
-  return r.rows[0].id;
-}
-
-// ----------------------------------------------------------
-// KNOWLEDGE BASE
-// ----------------------------------------------------------
-async function cerca_casi_simili(problema, limit = 3) {
-  const parole = problema.toLowerCase().split(/\s+/).filter(p => p.length > 3);
-  if (parole.length === 0) return [];
-
-  const condizioni = parole.map((_, i) => `LOWER(problema) LIKE $${i + 1}`).join(' OR ');
-  const valori = parole.map(p => `%${p}%`);
-
-  const r = await pool.query(
-    `SELECT * FROM rocco_knowledge_casi
-     WHERE ${condizioni}
-     ORDER BY n_occorrenze DESC, verificato DESC
-     LIMIT $${parole.length + 1}`,
-    [...valori, limit]
-  );
-  return r.rows;
-}
-
-async function aggiorna_knowledge(problema, causa, soluzione, norma = '') {
-  const esistente = await pool.query(
-    `SELECT id FROM rocco_knowledge_casi WHERE LOWER(problema) LIKE $1 LIMIT 1`,
-    [`%${problema.substring(0, 30).toLowerCase()}%`]
-  );
-  if (esistente.rows.length > 0) {
-    await pool.query(
-      `UPDATE rocco_knowledge_casi SET n_occorrenze = n_occorrenze + 1 WHERE id = $1`,
-      [esistente.rows[0].id]
-    );
-  } else {
-    await pool.query(
-      `INSERT INTO rocco_knowledge_casi (problema, causa, soluzione, norma_riferimento)
-       VALUES ($1,$2,$3,$4)`,
-      [problema, causa, soluzione, norma]
-    );
-  }
-}
-
-// ----------------------------------------------------------
-// SALVA CALCOLO (storico)
-// ----------------------------------------------------------
-async function salva_calcolo(tipo_calcolo, parametri_input, risultato, progetto_id = null) {
-  await pool.query(
-    `INSERT INTO rocco_calcoli (progetto_id, tipo_calcolo, parametri_input, risultato)
-     VALUES ($1,$2,$3,$4)`,
-    [progetto_id, tipo_calcolo, JSON.stringify(parametri_input), JSON.stringify(risultato)]
-  );
-}
-
-// ----------------------------------------------------------
-// CONTESTO MEMORIA per il system prompt di ROCCO
-// ----------------------------------------------------------
+//
+// L'unica cosa che questo modulo sa fare e nessun altro fa: dire su quale
+// impianto si sta lavorando e quali circuiti sono già stati calcolati.
+// Senza database ritorna stringa vuota — niente contesto, nessun errore.
 async function get_contesto_memoria(progetto_id = null) {
   let contesto = '';
 
-  try {
-    const casi = await pool.query(
-      `SELECT problema, causa, soluzione FROM rocco_knowledge_casi
-       WHERE verificato=TRUE ORDER BY n_occorrenze DESC LIMIT 5`
-    );
-    if (casi.rows.length > 0) {
-      contesto += '\n[CASI FREQUENTI ROCCO]\n';
-      casi.rows.forEach((c, i) => {
-        contesto += `${i + 1}. PROBLEMA: ${c.problema}\n   CAUSA: ${c.causa}\n   SOLUZIONE: ${c.soluzione}\n`;
-      });
-    }
+  const casi = await tryQuery(
+    `SELECT problema, causa, soluzione FROM rocco_knowledge_casi
+     WHERE verificato=TRUE ORDER BY n_occorrenze DESC LIMIT 5`, []
+  );
+  if (casi.rows.length > 0) {
+    contesto += '\n[CASI FREQUENTI ROCCO]\n';
+    casi.rows.forEach((c, i) => {
+      contesto += `${i + 1}. PROBLEMA: ${c.problema}\n   CAUSA: ${c.causa}\n   SOLUZIONE: ${c.soluzione}\n`;
+    });
+  }
 
-    if (progetto_id) {
-      const prog = await pool.query(`SELECT * FROM rocco_progetti WHERE id=$1`, [progetto_id]);
-      if (prog.rows.length > 0) {
-        const p = prog.rows[0];
-        contesto += `\n[PROGETTO ATTIVO]\nCliente: ${p.cliente} | Sistema: ${p.sistema} | Tipo: ${p.tipo_locale}\n`;
-      }
-      const circ = await pool.query(
-        `SELECT nome, Ib_A, sezione_mm2, dV_perc, verifica_ok FROM rocco_circuiti
-         WHERE impianto_id IN (SELECT id FROM rocco_impianti WHERE progetto_id=$1)
-         ORDER BY created_at DESC LIMIT 10`, [progetto_id]
-      );
-      if (circ.rows.length > 0) {
-        contesto += '[CIRCUITI]\n';
-        circ.rows.forEach(c => {
-          contesto += `  ${c.nome}: Ib=${c.ib_a}A S=${c.sezione_mm2}mm² ΔV=${c.dv_perc}% ${c.verifica_ok ? '✅' : '❌'}\n`;
-        });
-      }
-    }
-  } catch (err) {
-    // Non bloccare se il DB non è pronto
-    console.warn('[ROCCO MEMORIA] get_contesto_memoria:', err.message);
+  if (!progetto_id) return contesto;
+
+  const prog = await tryQuery(`SELECT * FROM rocco_progetti WHERE id=$1`, [progetto_id]);
+  if (prog.rows.length > 0) {
+    const p = prog.rows[0];
+    contesto += `\n[PROGETTO ATTIVO]\nCliente: ${p.cliente} | Sistema: ${p.sistema} | Tipo: ${p.tipo_locale}\n`;
+  }
+
+  const circ = await tryQuery(
+    `SELECT nome, Ib_A, sezione_mm2, dV_perc, verifica_ok FROM rocco_circuiti
+     WHERE impianto_id IN (SELECT id FROM rocco_impianti WHERE progetto_id=$1)
+     ORDER BY created_at DESC LIMIT 10`, [progetto_id]
+  );
+  if (circ.rows.length > 0) {
+    contesto += '[CIRCUITI]\n';
+    circ.rows.forEach(c => {
+      contesto += `  ${c.nome}: Ib=${c.ib_a}A S=${c.sezione_mm2}mm² ΔV=${c.dv_perc}% ${c.verifica_ok ? '✅' : '❌'}\n`;
+    });
   }
 
   return contesto;
 }
 
+/** Chi tiene il contesto di progetto in questo momento — per /health. */
+function backendInUso() {
+  return { postgres: Boolean(pool) && !dbDownSince };
+}
+
 module.exports = {
   init_schema,
-  salva_progetto, get_progetti,
-  salva_circuito,
-  salva_diagnosi,
-  cerca_casi_simili, aggiorna_knowledge,
-  salva_calcolo,
-  get_contesto_memoria
+  get_contesto_memoria,
+  backendInUso
 };
