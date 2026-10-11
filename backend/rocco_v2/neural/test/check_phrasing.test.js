@@ -126,6 +126,67 @@ var g2 = causalModel.costruisciGrafo({
 ok(g2.nodo_problema === "luci" || g2.nodo_problema === "bagno",
   "altro testo, altro nodo (" + g2.nodo_problema + ")");
 
+section("Un enunciato di stato non è un passo (isInstruction)");
+
+// `toInstruction` traduce una PREVISIONE e torna null su tutto il resto —
+// comprese le istruzioni già scritte bene. Serve la domanda simmetrica,
+// perché scartare i null butterebbe via anche le verifiche giuste.
+//
+// Il difetto misurato: la regola previsione ≠ istruzione era applicata solo
+// alle previsioni del controfattuale. I `confirm_tests` che arrivano dalla
+// banca dispositivi e dai fenomeni no, e all'utente arrivava "inverter
+// funzionante senza allarmi, potenza AC proporzionale a DC" come **prossimo
+// passo** (FORUM-SPEC-003). Un elettricista non sa cosa fargli.
+[
+  "tensione presente ai morsetti del carico ma non funziona",
+  "inverter funzionante senza allarmi, potenza AC proporzionale a DC",
+  "ventola inverter ferma o ostruita",
+  "continuita presente su tutti i conduttori del circuito",
+  "correnti bilanciate e neutro sotto carico nominale"
+].forEach(function (t) {
+  ok(!cp.isInstruction(t), "enunciato, non istruzione: «" + t.slice(0, 44) + "»");
+});
+
+// E le istruzioni vere devono restare tali, comprese quelle che `toInstruction`
+// non traduce (perché sono già un passo) e quelle che nominano
+// un'operazione con un sostantivo, come le scrive il corpus.
+[
+  "misura corrente totale con pinza amperometrica",
+  "misurare tensione di ogni pannello separatamente (o termografia per hot-spot)",
+  "scollegare tutti i carichi, riarmare a vuoto",
+  "controllare il serraggio del neutro nel quadro",
+  "termografia dei pannelli",
+  "ispezione visiva morsetti",
+  "pulizia pannelli",
+  "sezionamento carico",
+  "chiamare il distributore se la tensione non è 230V±10%",
+  "sentire se i radiatori si scaldano"
+].forEach(function (t) {
+  ok(cp.isInstruction(t), "istruzione: «" + t.slice(0, 44) + "»");
+});
+
+section("Un bersaglio è un componente, non una frase");
+
+// `/^(.+?) non funziona$/` prende qualunque cosa precede quelle parole. Su
+// FORUM-IT-002 catturava **tutta la frase** come nome di componente, e nel
+// prossimo passo usciva "**Verifica se Verifica che** le protezioni siano
+// chiuse…": il verbo raddoppiato, visibile all'utente.
+ok(cp.bersaglioValido("Circuito luci"), "un componente è un bersaglio");
+ok(cp.bersaglioValido("Differenziale 30mA"), "con la targa è un bersaglio");
+ok(!cp.bersaglioValido("Verifica che le protezioni siano chiuse e che ci sia tensione a valle"),
+  "una frase non è un bersaglio");
+ok(!cp.bersaglioValido("il carico, con le protezioni chiuse"),
+  "un elenco non è un bersaglio");
+ok(!cp.bersaglioValido("misura la tensione ai morsetti"),
+  "un ordine non è un bersaglio");
+
+var doppio = cp.toInstruction(
+  "Verifica che le protezioni siano chiuse e che ci sia tensione a valle, " +
+  "con il carico collegato il circuito non funziona");
+ok(doppio === null, "la previsione col bersaglio sbagliato viene scartata, non tradotta male");
+ok(/^Verifica se Circuito luci/.test(cp.toInstruction("Circuito luci non funziona")),
+  "e lo schema continua a funzionare sul bersaglio giusto");
+
 console.log("\n" + new Array(61).join("="));
 console.log("CHECK PHRASING: " + passed + " passed, " + failed + " failed");
 console.log(new Array(61).join("="));

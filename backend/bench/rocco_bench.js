@@ -308,6 +308,28 @@ var BASELINE = {
   // Le lacune dichiarate in SINTOMI_SENZA_CHIAVE non contano: lì tacere è la
   // risposta giusta.
   sintomo_non_riconosciuto:   { valore: 0,  verso: "min" },
+  //
+  // Il prossimo passo è la verifica che il caso prescrive — il metro onesto
+  // di `esame_verifica_proposta`, che conta soltanto che una verifica esista.
+  //
+  // Misurata la prima volta: **7 su 18** casi non in arresto. I difetti
+  // trovati stando a guardare le righe una per una:
+  //  1. all'utente arrivavano **previsioni** invece di istruzioni — "inverter
+  //     funzionante senza allarmi, potenza AC proporzionale a DC" come
+  //     *prossimo passo*. La regola previsione ≠ istruzione era applicata
+  //     solo alle previsioni del controfattuale, non ai `confirm_tests` che
+  //     arrivano dalla banca dispositivi e dai fenomeni;
+  //  2. il bonus a `ask_user` premiava proprio quelle: `ask_user` è il cesto
+  //     dove cade il testo che nessuno schema riconosce;
+  //  3. il punteggio di discriminazione confrontava **parole intere**, e
+  //     "pannelli" non trovava "pannello" — la terza volta in una sera;
+  //  4. `/^(.+?) non funziona$/` catturava una frase intera come nome di
+  //     componente, e usciva "**Verifica se Verifica che** le protezioni…".
+  //
+  // Dopo: **10 su 18**. E su FORUM-SPEC-003 il passo è ora "misurare tensione
+  // di ogni pannello separatamente (o termografia per hot-spot)", che è
+  // esattamente quello che il caso prescrive.
+  verifica_giusta:            { valore: 10, verso: "max" },   // sui casi non in arresto
   conferme_sbagliate:         { valore: 0,  verso: "min" },   // causa vera NON fra le confermate
   contesto_perso_multi_turn:  { valore: 0,  verso: "min" },
   // Apprendimento (misurato il 2026-10-11): il caso chiuso torna utile al
@@ -533,6 +555,35 @@ function coerente(label, causaReale) {
   return parole.some(function (w) { return a.indexOf(w.slice(0, 6)) >= 0; });
 }
 
+// LA VERIFICA PROPOSTA È QUELLA CHE IL CASO PRESCRIVE?
+//
+// `esame_verifica_proposta` è 48/48 e dice soltanto che **una** verifica
+// viene proposta — non che sia quella giusta. Era un numero a metà, e lo
+// avevo già dichiarato aperto: questo lo chiude.
+//
+// Si confronta il PROSSIMO PASSO con le `verifiche` che il caso dichiara,
+// per radice troncata, e si pretendono **due** radici in comune con la
+// stessa verifica: una sola ("tensione", "verificare") la condividono quasi
+// tutte le frasi tecniche, e conterebbe come giusto un passo qualsiasi.
+//
+// Gli arresti di sicurezza non si contano: la loro prescrizione è
+// "disalimenta e verifica assenza di tensione", che è la cosa giusta e non
+// è quella che chiude il caso. Vengono stampati come nota.
+function radiciVerifica(t) {
+  return (norm(t).match(/[a-z]{5,}/g) || []).map(function (w) { return w.slice(0, 6); });
+}
+
+function verificaCombacia(proposta, verifiche) {
+  var p = radiciVerifica(proposta);
+  var best = 0, quale = null;
+  (verifiche || []).forEach(function (v) {
+    var r = radiciVerifica(v);
+    var n = r.filter(function (x) { return p.indexOf(x) >= 0; }).length;
+    if (n > best) { best = n; quale = v; }
+  });
+  return { n: best, quale: quale };
+}
+
 // IL METRO STRETTO — una parola che il cliente non ha già detto lui.
 //
 // `coerente()` è largo per scelta: serve a confrontare prima e dopo sullo
@@ -576,6 +627,7 @@ var m = {
   conferme_senza_misura: 0,
   casi_conclusi_con_misura: 0, conferme_sbagliate: 0, chiusure_non_dovute: 0,
   sintomo_non_riconosciuto: 0, causa_vera_stretta: 0,
+  verifica_giusta: 0, verifica_misurabile: 0,
   contesto_perso_multi_turn: 0, casi_senza_misura_prescritta: 0,
   esperienza_riusata: 0, esperienza_in_testa: 0, esperienza_persa: 0,
   esperienza_senza_ragionamento: 0, esperienza_esclusa_da_regola: 0,
@@ -624,6 +676,20 @@ function primoTurno(caso) {
       if (confermateSenzaMisura.length) {
         m.conferme_senza_misura += confermateSenzaMisura.length;
         dettagli.push(caso.id + ": confermata senza misura — " + confermateSenzaMisura[0].label.slice(0, 44));
+      }
+
+      // Il prossimo passo è la verifica che il caso prescrive?
+      var na = cs.next_action || {};
+      var proposta = na.expected_discriminator || na.action || na.reason || "";
+      if (cs.arresto_sicurezza) {
+        note.push(caso.id + ": arresto di sicurezza, la prescrizione è la messa in sicurezza");
+      } else {
+        m.verifica_misurabile++;
+        var vc = verificaCombacia(proposta, caso.verifiche);
+        if (vc.n >= 2) m.verifica_giusta++;
+        else dettagli.push(caso.id + ": il passo proposto non è la verifica del caso — propone «" +
+          String(proposta).slice(0, 44) + "», prescrive «" +
+          (caso.verifiche || [])[0] + "»");
       }
 
       // Il sintomo è arrivato? Senza di quello l'esperienza non si apre.
@@ -919,6 +985,7 @@ catena.then(function () {
   ok = riga("conferme_sbagliate", m.conferme_sbagliate) && ok;
   ok = riga("chiusure_non_dovute", m.chiusure_non_dovute) && ok;
   ok = riga("sintomo_non_riconosciuto", m.sintomo_non_riconosciuto) && ok;
+  ok = riga("verifica_giusta", m.verifica_giusta, m.verifica_misurabile) && ok;
   Object.keys(SINTOMI_SENZA_CHIAVE).forEach(function (id) {
     console.log("    " + id + ": sintomo senza una chiave, dichiarato — " +
       SINTOMI_SENZA_CHIAVE[id].slice(0, 70));

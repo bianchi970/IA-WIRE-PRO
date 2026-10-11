@@ -884,6 +884,102 @@ questa correzione, e non si vedeva dai numeri.
 sottrae invece di aggiungere. Va capito **prima** di dare più peso ai
 punteggi appresi.
 
+### La verifica discriminante — il numero a metà, chiuso
+
+`esame_verifica_proposta` è **48/48** e dice soltanto che *una* verifica
+viene proposta. Il metro onesto confronta il PROSSIMO PASSO con le
+`verifiche` che il caso dichiara, per radice troncata, pretendendo **due**
+radici in comune con la stessa verifica — una sola ("tensione",
+"verificare") la condividono quasi tutte le frasi tecniche. Misurato:
+**7 su 18** casi non in arresto di sicurezza.
+
+Quattro difetti, trovati leggendo le righe una per una.
+
+**1. All'utente arrivavano PREVISIONI invece di istruzioni.** Su
+FORUM-SPEC-003 il prossimo passo era *"inverter funzionante senza allarmi,
+potenza AC proporzionale a DC"*; su FORUM-IT-002 *"tensione presente ai
+morsetti del carico ma non funziona"*; su FORUM-IT-007 *"ventola inverter
+ferma o ostruita"*. Sono enunciati di stato — cosa vedrei se l'ipotesi fosse
+vera — e un elettricista non sa cosa farne. La regola **previsione ≠
+istruzione** esiste da un blocco intero, ma era applicata **solo** alle
+previsioni del controfattuale: i `confirm_tests` che arrivano dalla banca
+dispositivi e dai fenomeni non passavano per `toInstruction()`.
+
+La trappola che rende il fix meno ovvio: `toInstruction` torna `null` anche
+sulle istruzioni **già scritte bene** (è fatta per tradurre previsioni),
+quindi scartare i `null` butterebbe via le verifiche giuste. Serviva la
+domanda simmetrica — `isInstruction()` — e non si risponde col tipo d'azione:
+`inferActionType` manda in `ask_user` sia *"termografia dei pannelli"* (una
+istruzione vera) sia *"ventola inverter ferma"*. Si risponde col **verbo
+d'azione**, o col nome che nomina un'operazione — e le parole vengono dalle
+144 verifiche del corpus, contate: `misura` 18, `ispezione` 8,
+`sostituzione` 8, `verific*` 12, `controllare` 5, più `sezionamento`,
+`termografia`, `pulizia`, `staccare`, `togliere`, `chiamare`, `sentire`.
+Un enunciato non ne ha nessuna. Chi resta enunciato non viene buttato ma
+pesa −30: meglio una verifica debole che nessuna.
+
+**2. Il bonus a `ask_user` premiava proprio quelle.** `ask_user` è il cesto
+dove cade il testo che nessuno schema riconosce, cioè gli enunciati: quel +3
+è il motivo per cui *"inverter funzionante senza allarmi"* batteva
+*"misurare la tensione di ogni pannello o termografia per hot-spot"*.
+Togliato. Il controllo visivo resta preferito a pari merito (+3): costa meno
+e non richiede di rimettere in tensione.
+
+**3. Il punteggio di discriminazione confrontava parole intere.**
+`length > 4` più `indexOf`: "pannelli" non trovava "pannello", la terza volta
+in una sera che l'italiano non combacia con sé stesso. Ora radice troncata a
+sei, come `coerente()` e come la ricerca nella banca.
+
+**E qui l'ablazione mi ha smentito.** Avevo scritto che quel punteggio
+misurava "l'opposto della discriminazione" e l'ho sostituito con un conteggio
+per identità (quante ipotesi elencano *davvero* quel test). Misurato:
+**da 7 a 6 su 21** — peggio. La ragione è che il vecchio segnale misura una
+cosa sensata: *la grandezza su cui più ipotesi poggiano è quella con più
+leva*. Su un differenziale che scatta "isolamento" ricorre nei test di mezze
+ipotesi, e misurare l'isolamento è davvero il passo giusto. I due segnali
+ora convivono e misurano cose diverse: **`separation`** per identità (un test
+che per qualcuna conferma e per qualcun'altra esclude taglia il campo in due:
+è l'informazione migliore, ed è rara), **`coverage`** per radice (euristica
+della leva, sta sotto).
+
+**Scartato e da non riprovare**: lo spareggio "a pari merito chiedi la prova
+dell'ipotesi che guida". Sembra ovvio, è mio, e misurato va **peggio** (5 su
+21): quando in testa non c'è la causa vera manda a chiedere la cosa
+sbagliata con convinzione.
+
+**4. Un bersaglio è un componente, non una frase.**
+`/^(.+?) non funziona$/` prende qualunque cosa precede quelle parole: su
+FORUM-IT-002 catturava la frase intera come nome di componente e usciva
+*"**Verifica se Verifica che** le protezioni siano chiuse…"* — il verbo
+raddoppiato, nella riga più letta della risposta. `bersaglioValido()`
+pretende un bersaglio corto, senza proposizioni, e che non sia a sua volta
+un ordine; quando non lo è lo schema **non si applica**, secondo la regola
+già scritta in quel modulo: *quel che non rientra in uno schema viene
+scartato, non inventato*.
+
+| metrica | prima | dopo |
+|---|---|---|
+| **verifica giusta** (il passo è quello prescritto) | 7/18 | **10/18** |
+| esame verifica proposta | 48/48 | 48/48 |
+| causa vera stampata · attiva · stretta | 21/21 | invariate |
+| casi conclusi con la misura | 11/21 | 11/21 |
+
+Su **FORUM-SPEC-003** il prossimo passo è ora *"misurare tensione di ogni
+pannello separatamente (o termografia per hot-spot)"*: esattamente quello che
+il caso prescrive.
+
+**I tre che restano, e perché**: FORUM-IT-002 propone un primo passo generico
+ma coerente (il caso prescrive di staccare i carichi e misurare la resistenza
+fase-neutro); FORUM-IT-005 prescrive **solo** controlli manuali (aprire la
+cassetta, serrare i morsetti); FORUM-IT-014 è un arresto di sicurezza, e la
+sua prescrizione è la messa in sicurezza — per questo gli arresti non si
+contano e si stampano come nota.
+
+Test: `check_phrasing.test.js` — 57 asserzioni (erano 35), con le due
+famiglie messe a confronto: cinque enunciati che **non** devono passare per
+istruzioni e dieci istruzioni vere che devono restarlo, comprese quelle che
+nominano l'operazione con un sostantivo come le scrive il corpus.
+
 ### La scuola insegnava e il ragionamento non sapeva
 
 **44 guasti, 19 livelli su 22, e nessuno nel percorso diagnostico li**
@@ -984,12 +1080,11 @@ verifiche della banca.
 | casi conclusi con la misura | 11/21 | 11/21 |
 | conferme sbagliate · chiusure non dovute | 0 | 0 |
 
-**Resta aperto, e va detto**: su SPEC-003 il PROSSIMO PASSO è ancora
+**Chiuso nel blocco dopo**: su SPEC-003 il PROSSIMO PASSO era ancora
 *"inverter funzionante senza allarmi"* e non la verifica che decide fra le
-ipotesi (tensione di ogni stringa, o termografia dei moduli). La verifica
-**esiste** nel guasto: è `selectBestAction` che non la sceglie.
-`esame_verifica_proposta` è 48/48 perché *una* verifica viene proposta, non
-perché sia la migliore — ed è il prossimo numero da rendere onesto.
+ipotesi. Era `selectBestAction` a non scegliere la verifica che **esiste** nel
+guasto — vedi "La verifica discriminante". Ora quel passo è "misurare tensione
+di ogni pannello separatamente (o termografia per hot-spot)".
 
 ### Il sintomo è la chiave, e non girava nella toppa
 

@@ -226,6 +226,35 @@ var PATTERNS = [
  * Traduce una previsione in istruzione operativa.
  * @returns {string|null} null se la previsione non è traducibile.
  */
+/**
+ * Il gruppo 1 di questi schemi è il BERSAGLIO: un componente, non una frase.
+ *
+ * `/^(.+?) non funziona$/` prende qualunque cosa precede quelle parole, e su
+ * un testo come *"Verifica che le protezioni siano chiuse e che ci sia
+ * tensione a valle, con il carico collegato il circuito non funziona"*
+ * catturava **tutta la frase** come nome di componente. Usciva: *"**Verifica
+ * se Verifica che** le protezioni siano chiuse…"* — il verbo raddoppiato,
+ * misurato su FORUM-IT-002 e visibile all'utente nella riga del prossimo
+ * passo.
+ *
+ * Un bersaglio valido è corto, non contiene proposizioni e **non è a sua
+ * volta un'istruzione**. Quando non lo è, lo schema non si applica: vale la
+ * regola di questo modulo — quel che non rientra in uno schema **viene
+ * scartato, non inventato**.
+ */
+var BERSAGLIO_MAX = 44;
+
+function bersaglioValido(valore) {
+  var t = cleanTarget(valore);
+  if (!t) return false;
+  if (t.length > BERSAGLIO_MAX) return false;
+  // Proposizioni ed elencazioni: un componente non le ha.
+  if (/[,:;]|\bche\b|\bse\b|\bcon il\b|\bquando\b/i.test(t)) return false;
+  // E un bersaglio non è un ordine.
+  if (isInstruction(t)) return false;
+  return true;
+}
+
 function toInstruction(prediction) {
   var text = s(prediction);
   if (!text) return null;
@@ -233,6 +262,10 @@ function toInstruction(prediction) {
   for (var i = 0; i < PATTERNS.length; i += 1) {
     var m = text.match(PATTERNS[i].test);
     if (m) {
+      // Lo schema più specifico è il primo che combacia: se il suo bersaglio
+      // non è un componente, la previsione non è traducibile — non si passa
+      // allo schema dopo a cercare una traduzione qualsiasi.
+      if (m[1] !== undefined && !bersaglioValido(m[1])) return null;
       try {
         var out = s(PATTERNS[i].build(m));
         return out || null;
@@ -271,7 +304,53 @@ function toInstructions(predictions) {
   return out;
 }
 
+/**
+ * Questo testo È un'istruzione, o è l'enunciato di uno stato?
+ *
+ * `toInstruction` traduce una PREVISIONE in un passo operativo, e torna
+ * `null` su tutto il resto — comprese le istruzioni già scritte bene. Serve
+ * quindi la domanda simmetrica, perché scartare i `null` butterebbe via
+ * anche le verifiche giuste.
+ *
+ * La differenza non è il tipo di azione: `inferActionType` manda in
+ * `ask_user` sia *"termografia dei pannelli"* (un'istruzione vera) sia
+ * *"ventola inverter ferma o ostruita"* (un enunciato). La differenza è il
+ * **verbo d'azione** — o il nome che nomina un'operazione.
+ *
+ * Le parole vengono dalle 144 verifiche del corpus, contate: `misura` 18,
+ * `ispezione` 8, `sostituzione` 8, `verificare`/`verifica` 12,
+ * `controllare` 5, `sezionamento` 3, `aprire` 3, `scollegamento` 2, più
+ * `termografia`, `pulizia`, `staccare`, `togliere`, `pulire`, `separare`,
+ * `chiamare`, `sentire`, `tracciamento`, `prova`. Sono le due famiglie che
+ * questo modulo dichiara in testa: **misure** e **osservazioni**.
+ *
+ * Un enunciato di stato non ha nessuna di queste: *"tensione presente ai
+ * morsetti"*, *"inverter funzionante senza allarmi"*, *"continuità presente
+ * su tutti i conduttori"*. Sono previsioni del modello causale, utili a
+ * confrontare l'ipotesi coi fatti, **inutili come prossimo passo**: un
+ * elettricista non sa cosa fargli.
+ */
+var AZIONI = new RegExp([
+  // verbi, all'imperativo o all'infinito
+  "misur\\w*", "verific\\w*", "controll\\w*", "apri", "aprire", "apre",
+  "scolleg\\w*", "stacc\\w*", "toglier?e?", "sostitui\\w*", "pulir?e?",
+  "separ\\w*", "chiam\\w*", "sentire", "prov\\w*", "ispezion\\w*",
+  "sezion\\w*", "traccia\\w*", "riarm\\w*", "cerca\\w*", "legger?e?",
+  // nomi che nominano un'operazione
+  "termografia", "pulizia", "sostituzione", "ispezione", "sezionamento",
+  "scollegamento", "tracciamento", "misura", "verifica", "controllo",
+  "prova", "test"
+].join("|"), "i");
+
+function isInstruction(testo) {
+  var t = s(testo);
+  if (!t) return false;
+  return AZIONI.test(t.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+}
+
 module.exports = {
+  isInstruction: isInstruction,
+  bersaglioValido: bersaglioValido,
   toInstruction: toInstruction,
   toInstructions: toInstructions,
   patternIdOf: patternIdOf,

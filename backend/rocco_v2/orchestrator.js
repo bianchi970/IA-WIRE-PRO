@@ -1524,22 +1524,72 @@ function applyConfirmRules(cs) {
 // Se restano 4 ipotesi e una misura ne elimina 3, quella misura
 // ha priorità.
 
-function scoreDiscrimination(testText, activeHypotheses) {
-  var tw = normalize(testText).split(" ").filter(function(w) { return w.length > 4; });
-  var confirms = 0, denies = 0;
+/** La chiave di un test: la stessa usata per la deduplicazione. */
+function chiaveTest(testo) {
+  return normalize(s(testo)).substring(0, 60);
+}
+
+/**
+ * Quanto conviene questo test come PROSSIMO PASSO.
+ *
+ * Due segnali, e misurano cose diverse — tenerli distinti è il punto.
+ *
+ * **`separation` — per identità.** Quante ipotesi attive elencano davvero
+ * questo test fra i propri `confirm_tests`, e quante fra i `deny_tests`. Un
+ * test che per qualcuna conferma e per qualcun'altra esclude taglia il campo
+ * in due: `min(confirms, denies)` è quella misura. È l'informazione
+ * migliore, ed è **rara**: quasi sempre un test appartiene a una sola
+ * ipotesi e questo valore è zero.
+ *
+ * **`coverage` — per radice della parola.** Quante ipotesi parlano della
+ * stessa **grandezza**. Avevo scritto che questo segnale era "l'opposto
+ * della discriminazione" e l'ablazione mi ha smentito: sostituirlo con la
+ * sola identità fa scendere da 7 a 6 su 21 le volte in cui il prossimo passo
+ * è la verifica che il caso prescrive. La ragione è che misura una cosa
+ * sensata — *la grandezza su cui più ipotesi poggiano è quella con più
+ * leva*. Su un differenziale che scatta, "isolamento" ricorre nei test di
+ * mezze ipotesi, e misurare l'isolamento è effettivamente il passo giusto.
+ * Non è discriminazione in senso stretto, ed è un'euristica: sta sotto
+ * `separation`, che invece afferma.
+ *
+ * Il confronto per parole aveva però il difetto della serata: parole intere
+ * (`length > 4` più `indexOf`), quindi "pannelli" non trovava "pannello" e
+ * una parola corta si trovava dentro un'altra. Ora **radice troncata a
+ * sei**, come `coerente()` del banco e come la ricerca nella banca
+ * dispositivi.
+ */
+var RADICE_TEST = 6;
+
+function radiciDi(testo) {
+  return normalize(s(testo)).split(/[^a-z0-9]+/)
+    .filter(function(w) { return w.length > 4; })
+    .map(function(w) { return w.slice(0, RADICE_TEST); });
+}
+
+function scoreDiscrimination(chiave, activeHypotheses, testo) {
+  var radici = radiciDi(testo);
+  function parlaDi(t) {
+    var n = normalize(s(t));
+    return radici.some(function(r) { return n.indexOf(r) >= 0; });
+  }
+
+  var confirms = 0, denies = 0, muti = 0, copertura = 0;
 
   activeHypotheses.forEach(function(h) {
-    var c = h.confirm_tests.some(function(t) { return tw.some(function(w) { return normalize(t).indexOf(w) >= 0; }); });
-    var d = h.deny_tests.some(function(t) { return tw.some(function(w) { return normalize(t).indexOf(w) >= 0; }); });
+    // Identità: questa ipotesi elenca proprio questo test?
+    var c = h.confirm_tests.some(function(t) { return chiaveTest(t) === chiave; });
+    var d = h.deny_tests.some(function(t) { return chiaveTest(t) === chiave; });
     if (c) confirms++;
     if (d) denies++;
+    if (!c && !d) muti++;
+    // Grandezza: questa ipotesi parla della stessa cosa?
+    if (h.confirm_tests.some(parlaDi) || h.deny_tests.some(parlaDi)) copertura++;
   });
 
   var separation = Math.min(confirms, denies);
-  var coverage = confirms + denies;
-  return { separation: separation, coverage: coverage, score: separation * 10 + coverage * 3 };
+  return { separation: separation, coverage: copertura, muti: muti,
+    score: separation * 10 + copertura * 3 };
 }
-
 function inferActionType(text) {
   var n = normalize(text);
   if (/misura|tensione|corrente|isolamento|continuita|pinza|multimetro|megger|ohm|volt|ampere/.test(n)) return "measurement";
@@ -1602,22 +1652,55 @@ function selectBestAction(cs) {
       hypothesis: confirmed[0], discrimination: { separation: 0, coverage: 0, score: 999 } };
   }
 
-  // Raccogli tutti i test dalle ipotesi attive
+  // Raccogli tutti i test dalle ipotesi attive.
+  //
+  // `active` arriva già in graduatoria: `verifyConclusion` ordina
+  // `cs.hypotheses` col solo comparatore del motore e gira prima di qui.
+  // Il rango serve come spareggio: a pari potere discriminante si chiede la
+  // prova dell'ipotesi che guida, non quella capitata prima nell'elenco.
+  //
+  // **Previsione ≠ istruzione**, e qui la regola non era applicata. Il
+  // controfattuale passa le sue previsioni per `toInstructions()`, ma i
+  // `confirm_tests` che arrivano dalla banca dispositivi e dai fenomeni no:
+  // all'utente finiva "inverter funzionante senza allarmi, potenza AC
+  // proporzionale a DC" come **prossimo passo**. È un enunciato di stato —
+  // cosa vedrei se l'ipotesi fosse vera — e un elettricista non sa cosa
+  // fargli. Si prova a tradurlo; se resta un enunciato non viene buttato ma
+  // pesa molto meno, perché è meglio una verifica debole che nessuna.
   var cands = [], seen = {};
-  active.forEach(function(h) {
+  active.forEach(function(h, rango) {
     h.confirm_tests.concat(h.deny_tests).forEach(function(t) {
-      var key = normalize(t).substring(0, 60);
+      var key = chiaveTest(t);
       if (!key || seen[key]) return;
       seen[key] = true;
-      cands.push({ action: s(t), actionType: inferActionType(t), source: h.label });
+      var testo = s(t);
+      var tradotta = checkPhrasing.toInstruction(testo);
+      if (tradotta) testo = tradotta;
+      cands.push({
+        action: testo,
+        chiave: key,
+        actionType: inferActionType(testo),
+        source: h.label,
+        rango: rango,
+        enunciato: !checkPhrasing.isInstruction(testo)
+      });
     });
   });
 
   // Scora ogni candidato per potere discriminante
   cands.forEach(function(c) {
-    c.discrimination = scoreDiscrimination(c.action, active);
+    // La discriminazione si misura sul test GREZZO: la traduzione cambia le
+    // parole, non l'identità della prova.
+    c.discrimination = scoreDiscrimination(c.chiave, active, c.action);
     var safety = (cs.safety.level === "danger" || cs.safety.level === "stop") && c.actionType === "measurement" ? -100 : 0;
-    var simple = c.actionType === "visual_check" ? 5 : c.actionType === "ask_user" ? 3 : 0;
+    // Un controllo visivo costa meno e non richiede di rimettere in
+    // tensione: resta preferito a pari merito. Il bonus a `ask_user` invece
+    // è stato **togliato**: `ask_user` è il cesto dove cade il testo che
+    // nessuno schema riconosce, cioè proprio gli enunciati di stato — quel
+    // bonus premiava le non-istruzioni, ed è il motivo per cui su
+    // FORUM-SPEC-003 vinceva "inverter funzionante senza allarmi" contro
+    // "misurare la tensione di ogni pannello o termografia per hot-spot".
+    var simple = c.actionType === "visual_check" ? 3 : 0;
     var dup = cs.checks_requested.some(function(cr) {
       return normalize(cr).substring(0, 40) === normalize(c.action).substring(0, 40);
     }) ? -50 : 0;
@@ -1628,7 +1711,11 @@ function selectBestAction(cs) {
     // quindi ancora vincere.
     var azNorm = normalize(c.action);
     c.alreadyDone = alreadyDone.some(function(re) { return re.test(azNorm); });
-    c.totalScore = c.discrimination.score + safety + simple + dup + (c.alreadyDone ? -40 : 0);
+    c.totalScore = c.discrimination.score + safety + simple + dup
+      + (c.alreadyDone ? -40 : 0)
+      // Un enunciato di stato non è un passo: pesa, ma non vince.
+      + (c.enunciato ? -30 : 0)
+      + 0;
   });
 
   cands.sort(function(a, b) { return b.totalScore - a.totalScore; });
