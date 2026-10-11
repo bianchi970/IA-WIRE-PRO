@@ -123,9 +123,29 @@ test("parole vocabolario > 200", function() {
     "solo " + risultato.stats.parole_vocabolario + " parole");
 });
 
-test("episodi memorizzati > 15", function() {
-  assert(risultato.stats.episodi_memorizzati > 15,
-    "solo " + risultato.stats.episodi_memorizzati + " episodi");
+// Studiare NON è aver visto.
+//
+// Qui si pretendeva `episodi_memorizzati > 15`: studiare il curriculum
+// doveva riempire la memoria episodica. Era la vecchia regola, e costava
+// due cose. Gli esempi svolti del curriculum venivano scritti con
+// `confirmedCause`, cioè indistinguibili da un guasto che l'elettricista ha
+// chiuso e confermato, e soffocavano i casi veri nella memoria che ordina
+// le ipotesi. E crescevano di 18 **a ogni avvio** del server (18 → 36 → 54
+// su tre studi), il che rendeva lo studio non ripetibile — la ragione per
+// cui la scuola veniva saltata del tutto appena esistevano dei pesi.
+//
+// La regola ora è una: il curriculum dà **conoscenza** (nodi, relazioni,
+// vocabolario, formule, norme — le asserzioni qui sopra), l'esperienza
+// arriva **solo** dai casi che l'elettricista chiude.
+test("studiare NON scrive episodi di esperienza", function() {
+  assert(risultato.stats.episodi_memorizzati === 0,
+    "lo studio ha scritto " + risultato.stats.episodi_memorizzati + " episodi: " +
+    "la scuola sta rientrando nella memoria dell'esperienza");
+});
+
+test("lo studio resta ripetibile: i casi studiati si contano", function() {
+  assert(risultato.stats.casi_studiati > 15,
+    "solo " + risultato.stats.casi_studiati + " casi studiati");
 });
 
 // --- Verifica KG dopo studio ---
@@ -173,10 +193,15 @@ test("vocabolario cresciuto", function() {
   assert(stats.vocabolarioSize > 300, "vocabolario solo " + stats.vocabolarioSize);
 });
 
-// --- Verifica memoria ---
-test("memoria ha episodi", function() {
+// --- Verifica memoria: deve restare vuota dopo lo studio ---
+// La memoria episodica è il posto dell'esperienza. Dopo aver studiato — e
+// soltanto studiato — deve essere vuota: se ci sono episodi, qualcosa sta
+// registrando la scuola come un caso visto.
+test("dopo lo studio la memoria dell'esperienza è vuota", function() {
   var stats = nm.stats();
-  assert(stats.episodi_totali > 15, "solo " + stats.episodi_totali + " episodi");
+  assert(stats.episodi_totali === 0,
+    stats.episodi_totali + " episodi dopo il solo studio: la scuola è finita " +
+    "nella memoria dell'esperienza");
 });
 
 // --- Performance ---

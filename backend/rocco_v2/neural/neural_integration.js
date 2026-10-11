@@ -21,8 +21,8 @@ var NeuralSimulator = null;
 try { NeuralSimulator = require("./neural_simulator"); } catch(e) { /* opzionale */ }
 var NeuralVision = null;
 try { NeuralVision = require("./neural_vision"); } catch(e) { /* opzionale */ }
-var CasiRealiForum = null;
-try { CasiRealiForum = require("./casi_reali_forum"); } catch(e) { /* opzionale */ }
+// `casi_reali_forum` NON si importa qui: è il corpus d'esame, e questo è il
+// modulo che addestra. Vedi il passo 7 del warmup e la regola unica.
 var ExperienceDistiller = null;
 try { ExperienceDistiller = require("./experience_distiller"); } catch(e) { /* opzionale */ }
 
@@ -47,19 +47,42 @@ function init(options) {
   // Carica pesi se esistono
   var loaded = loadAll(dataDir);
 
-  // Se non esistono, bootstrap dal knowledge base
-  if (!loaded.language && !loaded.patterns) {
-    if (options.autoWarmup !== false) {
-      warmup(options);
-    }
+  // LA SCUOLA SI RIFÀ A OGNI AVVIO.
+  //
+  // Qui c'era: `if (!loaded.language && !loaded.patterns) warmup(options)`.
+  // Il `warmup` non carica pesi: inietta la **conoscenza** — i 50 componenti
+  // con i loro guasti tipici, i 40 pattern, i FENOMENI, i primi principi, i
+  // 22 livelli di curriculum. Dopo la prima diagnosi `language_state.json` e
+  // `patterns_state.json` esistono, quindi **dal secondo avvio in poi ROCCO
+  // non rifaceva mai la scuola**.
+  //
+  // Misurato: grafo di conoscenza a 777 nodi caricati da disco contro 1305
+  // dopo una scuola vera — congelato al giorno in cui erano stati scritti i
+  // primi pesi. Tutto quel che abbiamo aggiunto dopo (banca dispositivi,
+  // limiti normativi, nuovi pattern) non lo ha mai raggiunto. E con un grafo
+  // vecchio `detectNovelty` non trova nulla di simile: ROCCO dichiarava
+  // nuovo ogni caso (21 su 21) e passava la mano all'IA in 18 casi su 21,
+  // diventando un involucro intorno al provider.
+  //
+  // Sembrava che "l'apprendimento costasse". Costava la scuola che non si
+  // rifaceva.
+  //
+  // Perché ora si può: l'iniezione è **idempotente** — `aggiungiNodo`
+  // riusa il nodo con lo stesso tipo e nome, e il curriculum non scrive più
+  // episodi di memoria né addestra le reti (era scuola registrata come
+  // esperienza). Verificato: tre iniezioni di fila lasciano 1227 nodi e
+  // 1184 archi identici.
+  if (options.autoWarmup !== false) {
+    warmup(options, loaded);
   }
 
   initialized = true;
   return { initialized: true, loaded: loaded, warmupDone: warmupDone };
 }
 
-function warmup(options) {
+function warmup(options, loaded) {
   options = options || {};
+  loaded = loaded || {};
 
   // 1. Carica knowledge base per bootstrap
   var knowledgePath = options.knowledgePath || path.join(__dirname, "..", "..", "knowledge");
@@ -104,8 +127,16 @@ function warmup(options) {
     NeuralKnowledge.bootstrapDaKnowledge(components, failurePatterns);
   }
 
-  // 5. Bootstrap patterns (sintetico)
-  NeuralPatterns.bootstrapSintetico();
+  // 5. Inviluppo del "normale" per le reti: **solo al primo avvio**.
+  //
+  // È l'unico passo che ADDESTRA invece di iniettare conoscenza: costruisce
+  // la forma iniziale di anomalyNet e faultNet dai limiti normativi di
+  // `knowledge/limiti.js`. Rifarlo a ogni avvio sovrascriverebbe con dati
+  // sintetici quel che le reti hanno imparato dai guasti veri chiusi
+  // dall'elettricista — che è l'unica cosa che le deve muovere.
+  if (!loaded.patterns) {
+    NeuralPatterns.bootstrapSintetico();
+  }
 
   // 6. Studio curriculum tecnico — inietta conoscenza strutturata
   try {
@@ -115,41 +146,26 @@ function warmup(options) {
     // curriculum/study_engine non disponibile — bootstrap base sufficiente
   }
 
-  // 7. Bootstrap da casi reali forum — ROCCO impara dai problemi veri
-  //    Nota: trainFromClosedCase richiede initialized=true, ma siamo ancora nel warmup.
-  //    Chiamiamo i moduli direttamente.
-  var forumTrained = 0;
-  if (CasiRealiForum) {
-    var forumCasi = CasiRealiForum.getTutti();
-    for (var fi = 0; fi < forumCasi.length; fi++) {
-      try {
-        var ftr = CasiRealiForum.aTraining(forumCasi[fi]);
-        var fcs = ftr.caseState;
-        var ffb = {
-          confirmedCause: ftr.esito.causa_reale,
-          diagnosi: ftr.esito.causa_reale,
-          componenti: ftr.esito.componenti,
-          come_verificato: ftr.esito.come_verificato
-        };
-        // Language
-        var ftxt = fcs.problem_summary || "";
-        var fent = NeuralLanguage.estraiEntita(ftxt);
-        var fint = NeuralLanguage.classificaIntento(ftxt);
-        NeuralLanguage.imparaDaInterazione(ftxt, fint.intent, fent);
-        // Knowledge
-        NeuralKnowledge.imparaDaCasoChiuso(fcs, ffb);
-        // Memory
-        NeuralMemory.store(fcs, ffb);
-        // Patterns
-        NeuralPatterns.trainDaCasoChiuso(fcs, ffb);
-        // Distillatore — bootstrap regole dall'esperienza forum
-        if (ExperienceDistiller) {
-          try { ExperienceDistiller.distilla(fcs, ffb); } catch(e2) { /* skip */ }
-        }
-        forumTrained++;
-      } catch(e) { /* skip caso problematico */ }
-    }
-  }
+  // 7. I CASI DEL CORPUS NON ADDESTRANO ROCCO.
+  //
+  // Qui veniva ingerito tutto `casi_reali_forum.js` — 48 casi **con la loro
+  // `causa_reale`** — in lingua, grafo, memoria, pattern e distillatore. Lo
+  // stesso file è il metro del banco di prova: ROCCO veniva quindi
+  // interrogato su casi di cui conosceva la risposta, e la ritornava alla
+  // lettera. Misurato: su FORUM-SPEC-004 l'ipotesi vincente arrivava da
+  // `neural_similarita` ed era la stringa `causa_reale` copiata parola per
+  // parola. La metrica "causa reale fra le ipotesi" misurava in parte la
+  // memoria del risultato atteso, non la conoscenza.
+  //
+  // Regola unica, senza eccezioni:
+  //   · i 48 casi del forum sono **esame**;
+  //   · ROCCO impara **solo** dai casi che l'elettricista chiude e conferma
+  //     (`/api/rocco/close-case` → `trainFromClosedCase`), e quello alimenta
+  //     memoria, grafo, distillatore e reti.
+  //
+  // Non si tolgono "solo le causa_reale" lasciando i testi: addestrarsi sul
+  // testo della domanda fa riconoscere a ROCCO la domanda d'esame e gonfia
+  // somiglianza e novità. Una regola sola, nessuna doppia logica.
 
   warmupDone = true;
   return {
@@ -157,8 +173,7 @@ function warmup(options) {
     patterns: NeuralPatterns.getStats(),
     knowledge: NeuralKnowledge.getStats(),
     memory: NeuralMemory.stats(),
-    distiller: ExperienceDistiller ? ExperienceDistiller.getStats() : null,
-    forum_trained: forumTrained
+    distiller: ExperienceDistiller ? ExperienceDistiller.getStats() : null
   };
 }
 
@@ -671,10 +686,11 @@ module.exports = {
   confrontaImmagini: NeuralVision ? NeuralVision.confrontaImmagini : null,
   NeuralVision: NeuralVision,
 
-  // Casi reali forum
-  CasiRealiForum: CasiRealiForum,
-  getForumCases: CasiRealiForum ? CasiRealiForum.getTutti : null,
-  searchForumCases: CasiRealiForum ? CasiRealiForum.cerca : null,
+  // Il corpus del forum NON è esposto da qui, deliberatamente.
+  // Era `CasiRealiForum` + `getForumCases` + `searchForumCases`: strade per
+  // cui le `causa_reale` del corpus d'esame potevano rientrare nel
+  // ragionamento. Chi ha bisogno del corpus — il banco e i test — importa
+  // `./casi_reali_forum` direttamente, dove si vede che sta facendo un esame.
 
   // Distillatore di esperienza
   cercaRegoleDistillate: ExperienceDistiller ? ExperienceDistiller.cercaRegole : null,

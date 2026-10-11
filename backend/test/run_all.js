@@ -94,21 +94,57 @@ var durate = [];
 
 console.log("\nTUTTE LE PROVE — " + PROVE.length + " suite\n");
 
+// L'uscita delle suite va su FILE, non su pipe.
+//
+// Con `stdio` a pipe, su Windows `banca_dispositivi.test.js` moriva con
+// `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)` **dopo** aver
+// stampato "156 passed, 0 failed": è la corsa fra `process.exit()` e lo
+// svuotamento di stdout su una pipe. Da sola la suite passava, dentro il
+// runner no — un falso rosso, il peggiore dei risultati, perché insegna a
+// non fidarsi del comando.
+//
+// Trentadue suite chiamano `process.exit()`: la correzione sta qui, una
+// volta, non in trentadue file. Un file non ha quella corsa, e per di più
+// non ha il limite di `maxBuffer`.
+var DIR_USCITE = fs.mkdtempSync(path.join(require("os").tmpdir(), "rocco-prove-"));
+
 PROVE.forEach(function (rel) {
   var inizio = Date.now();
-  var esito = child.spawnSync(process.execPath, [rel], {
-    cwd: RADICE,
-    encoding: "utf8",
-    timeout: 10 * 60 * 1000
-  });
+  var fileUscita = path.join(DIR_USCITE, path.basename(rel) + ".log");
+  var fd = fs.openSync(fileUscita, "w");
+  // Le suite del motore girano **senza provider**: deterministiche e senza
+  // rete. `test.js` è lo smoke test del servizio vero e resta con i
+  // provider accesi — è l'unico posto dove serve provare la strada reale.
+  //
+  // Non è solo rigore: `banca_dispositivi.test.js` moriva con
+  // `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)` **dopo** aver
+  // stampato "156 passed, 0 failed". Due socket verso il provider restavano
+  // aperti quando la suite chiamava `process.exit()`. Da sola passava,
+  // dentro il runner no: un falso rosso, che è il risultato peggiore.
+  var ambiente = {};
+  Object.keys(process.env).forEach(function (k) { ambiente[k] = process.env[k]; });
+  if (path.basename(rel) !== "test.js") ambiente.ROCCO_NO_PROVIDER = "1";
+
+  var esito;
+  try {
+    esito = child.spawnSync(process.execPath, [rel], {
+      cwd: RADICE,
+      env: ambiente,
+      stdio: ["ignore", fd, fd],
+      timeout: 10 * 60 * 1000
+    });
+  } finally {
+    try { fs.closeSync(fd); } catch (e) {}
+  }
   var secondi = Math.round((Date.now() - inizio) / 100) / 10;
   durate.push([rel, secondi]);
 
   var ok = esito.status === 0;
-  if (!ok) falliti.push([rel, esito]);
 
   // Dalla coda di ogni suite si pesca il riepilogo, se ne stampa uno.
-  var uscita = String(esito.stdout || "") + String(esito.stderr || "");
+  var uscita = "";
+  try { uscita = fs.readFileSync(fileUscita, "utf8"); } catch (e) { uscita = ""; }
+  if (!ok) falliti.push([rel, { uscita: uscita }]);
   var riepilogo = (uscita.match(/[0-9]+ passed, [0-9]+ failed|Risultato: [0-9]+\/[0-9]+ PASS/g) || []).pop() || "";
 
   console.log("  " + (ok ? "✓" : "✗") + " " +
@@ -122,9 +158,8 @@ console.log("============================================================");
 
 falliti.forEach(function (f) {
   console.log("\n✗ " + f[0]);
-  var uscita = String(f[1].stdout || "") + String(f[1].stderr || "");
   // Le ultime righe: lì sta il motivo.
-  uscita.split(/\r?\n/).slice(-22).forEach(function (r) {
+  String(f[1].uscita || "").split(/\r?\n/).slice(-22).forEach(function (r) {
     if (r.trim()) console.log("    " + r);
   });
 });

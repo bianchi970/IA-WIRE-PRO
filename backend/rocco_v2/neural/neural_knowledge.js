@@ -7,7 +7,27 @@
 
 var nc = require("./neural_core");
 
+// Vocabolario: slug → italiano tecnico. Modulo puro, senza dipendenze.
+// Serve a dare ai nodi "componente" il nome che l'elettricista usa, perché
+// il grafo si confronta per similarità con le etichette delle ipotesi, che
+// sono in italiano: un nodo chiamato `comp_17` non assomiglia a niente.
+var lexicon = null;
+try { lexicon = require("../lexicon"); } catch (_e) { lexicon = null; }
+
 var DIM_NODO = 32;
+
+/** Nome del nodo di un componente: italiano se il vocabolario lo conosce. */
+function nomeComponente(comp, indice) {
+  var c = comp && typeof comp === "object" ? comp : {};
+  if (c.name) return String(c.name);
+  var id = String(c.id === undefined || c.id === null ? "" : c.id);
+  if (id && lexicon && lexicon.humanizeComponent) {
+    var nome = lexicon.humanizeComponent(id);
+    if (nome) return nome;
+  }
+  if (id) return id.replace(/[-_]/g, " ");
+  return c.category ? String(c.category) : ("comp_" + indice);
+}
 
 // --- Tipi di nodo ---
 var TIPI_NODO = ["concetto", "componente", "fenomeno", "causa", "verifica", "principio", "sintomo"];
@@ -56,10 +76,45 @@ function ArcoConoscenza(da, a, relazione, peso) {
 // Operazioni su grafi
 // ============================================================================
 
+// Un concetto, un nodo.
+//
+// `aggiungiNodo` creava SEMPRE un nodo nuovo (`"kn_" + nextNodeId++`), quindi
+// nessuna iniezione di conoscenza era ripetibile: rifare la scuola a ogni
+// avvio avrebbe duplicato tutto. Ed è il motivo per cui la scuola **non si
+// rifaceva**: `init()` saltava il warmup appena trovava dei pesi salvati, e
+// il grafo restava congelato al giorno in cui i primi pesi erano stati
+// scritti — 777 nodi invece di 1305, con la banca dispositivi e i limiti
+// normativi aggiunti dopo che non ci sono mai entrati.
+//
+// Due nodi con lo stesso tipo e lo stesso nome sono un difetto, non una
+// caratteristica: la conoscenza va rinforzata, non duplicata. Era già la
+// regola che `imparaDaCasoChiuso` seguiva a mano (`trovaNodoPerNome` prima
+// di creare); ora è la regola della funzione.
+//
+// L'indice tiene la ricerca O(1): con 1300 nodi e migliaia di inserimenti
+// una scansione lineare per ogni aggiunta costerebbe milioni di confronti.
+var indiceNodi = {};   // tipo \n nome(minuscolo) → id
+
+function chiaveNodo(tipo, nome) {
+  return String(tipo) + "\n" + String(nome === undefined || nome === null ? "" : nome).toLowerCase();
+}
+
+function ricostruisciIndice() {
+  indiceNodi = {};
+  for (var id in nodi) {
+    indiceNodi[chiaveNodo(nodi[id].tipo, nodi[id].nome)] = id;
+  }
+}
+
 function aggiungiNodo(tipo, nome, embedding) {
+  var chiave = chiaveNodo(tipo, nome);
+  var esistente = indiceNodi[chiave];
+  if (esistente !== undefined && nodi[esistente]) return esistente;
+
   var id = "kn_" + (nextNodeId++);
   var nodo = new NodoConoscenza(id, tipo, nome, embedding);
   nodi[id] = nodo;
+  indiceNodi[chiave] = id;
   return id;
 }
 
@@ -67,6 +122,7 @@ function aggiungiNodoConId(id, tipo, nome, embedding) {
   if (nodi[id]) return id; // già esiste
   var nodo = new NodoConoscenza(id, tipo, nome, embedding);
   nodi[id] = nodo;
+  indiceNodi[chiaveNodo(tipo, nome)] = id;
   if (parseInt(id.replace("kn_", "")) >= nextNodeId) {
     nextNodeId = parseInt(id.replace("kn_", "")) + 1;
   }
@@ -375,14 +431,34 @@ function bootstrapDaFenomeni(fenomeni) {
   return count;
 }
 
+// I tredici primi principi, col loro nome.
+//
+// `CONCETTI` è un **array**, e qui veniva scorso con `for (var key in …)`:
+// `key` era l'indice, quindi nel grafo finivano 13 nodi chiamati
+// "0","1",…,"12", e il campo `legge` — *"L'energia si conserva. Se non
+// arriva al carico, va altrove: dispersione, calore, perdita"* — non veniva
+// salvato da nessuna parte. ROCCO aveva i primi principi in memoria come
+// numeri senza testo, e le stesse cifre finivano nel vocabolario della
+// lingua (`0,1,2,…,12` fra le 496 parole imparate).
 function bootstrapDaConcetti(concetti) {
   if (!concetti) return 0;
   var count = 0;
   var conceptIds = {};
 
-  for (var key in concetti) {
-    var c = concetti[key];
+  // Tollera entrambe le forme: array di `{id, legge}` oppure mappa
+  // `nome → concetto`. Il nome del nodo è il concetto, non la sua posizione.
+  var elenco = Array.isArray(concetti)
+    ? concetti.map(function (c) { return { chiave: c && (c.id || c.nome), concetto: c }; })
+    : Object.keys(concetti).map(function (k) { return { chiave: k, concetto: concetti[k] }; });
+
+  for (var ci = 0; ci < elenco.length; ci++) {
+    var key = elenco[ci].chiave;
+    var c = elenco[ci].concetto;
+    if (!key) continue;
     var id = aggiungiNodo("concetto", key);
+    // La legge del principio va conservata: è il testo che lo rende
+    // consultabile, e senza di esso il nodo è un'etichetta vuota.
+    if (c && c.legge && nodi[id]) nodi[id].metadata.legge = c.legge;
     conceptIds[key] = id;
     count++;
 
@@ -399,13 +475,37 @@ function bootstrapDaConcetti(concetti) {
   return count;
 }
 
+// La base di conoscenza entra nel grafo — prima non entrava affatto.
+//
+// Questa funzione riceveva da `warmup()` gli **oggetti JSON interi**:
+// `components.json` è `{version, description, items}` e
+// `failure_patterns.json` è `{version, description, patterns}`. Il ciclo
+// `for (i = 0; i < components.length; i++)` con `length` undefined **non
+// girava mai**: i 50 componenti con i loro 219 guasti tipici e le verifiche
+// di campo, e i 40 pattern di guasto, non sono mai entrati nel grafo di
+// conoscenza. I due file più grandi del progetto, invisibili al neurale.
+//
+// Qui si normalizza la forma invece di correggere solo il chiamante: la
+// funzione è API pubblica, usata anche dai test, e deve accettare sia
+// l'involucro sia l'array nudo.
+//
+// E il nome del nodo: i componenti non hanno un campo `name`, quindi
+// `comp.name || ("comp_" + i)` li chiamava `comp_0`, `comp_1`, … Il nodo
+// serve a confrontarsi per similarità con le etichette delle ipotesi, che
+// sono in italiano: si usa il nome italiano del vocabolario, con l'id come
+// ripiego.
 function bootstrapDaKnowledge(components, failurePatterns) {
   var count = 0;
 
-  if (components) {
-    for (var i = 0; i < components.length; i++) {
-      var comp = components[i];
-      var compId = aggiungiNodo("componente", comp.name || ("comp_" + i));
+  var listaComponenti = !components ? null
+    : (Array.isArray(components) ? components : (components.items || components.components || null));
+  var listaPattern = !failurePatterns ? null
+    : (Array.isArray(failurePatterns) ? failurePatterns : (failurePatterns.patterns || failurePatterns.items || null));
+
+  if (listaComponenti) {
+    for (var i = 0; i < listaComponenti.length; i++) {
+      var comp = listaComponenti[i];
+      var compId = aggiungiNodo("componente", nomeComponente(comp, i));
       count++;
 
       // Guasti tipici
@@ -434,9 +534,9 @@ function bootstrapDaKnowledge(components, failurePatterns) {
     }
   }
 
-  if (failurePatterns) {
-    for (var i = 0; i < failurePatterns.length; i++) {
-      var fp = failurePatterns[i];
+  if (listaPattern) {
+    for (var i = 0; i < listaPattern.length; i++) {
+      var fp = listaPattern[i];
       var patId = aggiungiNodo("causa", fp.name || fp.id || ("pattern_" + i));
       count++;
 
@@ -556,6 +656,7 @@ function carica(data) {
   if (!data || data.version !== 1) return false;
   nodi = {};
   archi = [];
+  indiceNodi = {};
   nextNodeId = data.nextNodeId || 0;
 
   for (var id in data.nodi) {
@@ -573,6 +674,11 @@ function carica(data) {
     archi.push(arco);
   }
 
+  // Senza questo, un grafo caricato da disco avrebbe l'indice vuoto e la
+  // prima iniezione di conoscenza duplicherebbe tutti i nodi già presenti —
+  // esattamente il caso che si verifica a ogni avvio in produzione.
+  ricostruisciIndice();
+
   return true;
 }
 
@@ -580,6 +686,7 @@ function reset() {
   nodi = {};
   archi = [];
   nextNodeId = 0;
+  indiceNodi = {};
 }
 
 function getStats() {

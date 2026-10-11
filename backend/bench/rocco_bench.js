@@ -30,6 +30,10 @@
  */
 
 process.env.ROCCO_NARRATOR = process.env.ROCCO_NARRATOR || "0";
+// La pagella misura ROCCO da solo: nessuna chiamata a un modello remoto.
+// Girava con i provider attivi e ROCCO consultava l'IA in 18 casi su 21,
+// quindi il numero finale dipendeva dal modello, dal giorno e dalla rete.
+process.env.ROCCO_NO_PROVIDER = process.env.ROCCO_NO_PROVIDER || "1";
 require("dotenv").config({ path: require("path").join(__dirname, "..", ".env"), quiet: true });
 
 var fs = require("fs");
@@ -69,16 +73,19 @@ var path = require("path");
 // davano due pagelle diverse per lo stesso codice. È la non-determinatezza
 // per cui il banco è stato costruito, rientrata da un'altra porta.
 //
-// Misurato l'11/10: con lo stato accumulato in repo, causa vera stampata
-// 15/21 e attiva 16/21; **ripartendo dal solo seed dichiarato, 16/21 e
-// 18/21**. Lo stato appreso non era un patrimonio, su questo corpus era un
-// costo. (Perché l'apprendimento peggiori invece di migliorare è una
-// domanda aperta e più grande di una riga di codice: vedi la nota in fondo
-// alla pagella.)
+// Una pagella deve misurare il **codice**, non quanti guasti ha visto chi
+// la lancia. Quindi: il seed di conoscenza resta (è versionato), i file
+// accumulati vengono messi da parte per tutta la corsa e rimessi esattamente
+// come erano alla fine. Nessun dato dell'utente viene perso — verificato
+// confrontando gli md5 prima e dopo.
 //
-// Quindi: i file di SEED restano (sono conoscenza scritta a mano, versionata),
-// i file ACCUMULATI vengono messi da parte per tutta la corsa e rimessi
-// esattamente come erano alla fine. Nessun dato dell'utente viene perso.
+// Nota storica, perché il numero in fondo è cambiato due volte in un
+// giorno: fino all'11/10 l'avvio del neurale ingeriva tutto
+// `casi_reali_forum.js` **con le `causa_reale`**, cioè l'elenco delle
+// risposte di questo stesso esame — e la scuola veniva saltata appena
+// esistevano dei pesi. Le due cose insieme facevano sembrare che lo stato
+// appreso "costasse". Ora il corpus è solo esame e la scuola si rifà a ogni
+// avvio: i numeri qui sotto sono i primi non contaminati.
 var DIR_DATA = path.join(__dirname, "..", "data");
 var DIR_NEURAL = path.join(DIR_DATA, "neural");
 
@@ -177,12 +184,22 @@ var BASELINE = {
   // una prova che ROCCO si era scritto da sé. `causa_vera_attiva` resta 16:
   // l'ipotesi giusta ROCCO continua a formularla, non la mette più davanti
   // per una prova inventata.
-  // ALZATE 15 → 16 e 16 → 18 il 2026-10-11, **senza toccare il motore**:
-  // da questa data il banco misura dallo stato DICHIARATO e non da quello
-  // che la macchina ha accumulato (vedi sopra). I numeri di prima erano
-  // quelli di un motore zavorrato dai propri pesi.
-  causa_vera_stampata:        { valore: 16, verso: "max" },   // su 21
-  causa_vera_attiva:          { valore: 18, verso: "max" },
+  // 2026-10-11, I PRIMI NUMERI ONESTI: 15 e 16 su 21.
+  //
+  // Erano 16 e 18 qualche ora prima, **ma ROCCO aveva l'elenco delle
+  // risposte**: l'avvio del neurale ingeriva tutti i 48 casi di
+  // `casi_reali_forum.js` con la loro `causa_reale` in grafo, memoria,
+  // pattern e lingua, e questo file è il metro dell'esame. Su FORUM-SPEC-004
+  // l'ipotesi vincente arrivava da `neural_similarita` ed era la stringa
+  // `causa_reale` copiata parola per parola.
+  //
+  // Da oggi vale una regola sola: **il corpus è esame, ROCCO impara solo dai
+  // casi che l'elettricista chiude e conferma.** Il calo — un caso stampato
+  // e due attivi — è il prezzo della contaminazione che c'era, non una
+  // capacità perduta: è la prima volta che questi due numeri misurano
+  // conoscenza invece di memoria del risultato atteso.
+  causa_vera_stampata:        { valore: 15, verso: "max" },   // su 21
+  causa_vera_attiva:          { valore: 16, verso: "max" },
   rumore_fuori_contesto:      { valore: 0,  verso: "min" },
   conferme_senza_misura:      { valore: 0,  verso: "min" },   // certezze regalate
   casi_conclusi_con_misura:   { valore: 9,  verso: "max" },   // su 13 casi che prescrivono una misura
@@ -194,7 +211,27 @@ var BASELINE = {
   // i 17 restanti sono il massimo raggiungibile su questo corpus.
   esperienza_riusata:         { valore: 17, verso: "max" },   // il precedente è fra le stampate
   esperienza_in_testa:        { valore: 17, verso: "max" },   // ed è la prima
-  esperienza_persa:           { valore: 0,  verso: "min" }    // salvata e non ritrovata
+  esperienza_persa:           { valore: 0,  verso: "min" },   // salvata e non ritrovata
+  // Esame completo sui 48 casi, 8 lingue — misurate il 2026-10-11, con
+  // il corpus ormai usato SOLO come esame.
+  //
+  // `esame_verifica_proposta` è la metà che conta per chi lavora: una
+  // diagnosi senza la misura che la decide non si può usare. 45 su 48 —
+  // i 3 che mancano sono arresti di sicurezza, dove il prossimo passo è
+  // "stacca e chiama", non una verifica.
+  //
+  // `esame_causa_corretta` è 28/48 e NON è un voto sulle altre sette
+  // lingue: ROCCO risponde in italiano e il metro confronta parole
+  // italiane. Per lingua: it 15/21, en 6/8, de 2/6, es 1/4, fr 2/4,
+  // pt 2/3, ar 0/1, ro 0/1.
+  //
+  // Era 31 con i provider accesi. Spegnendoli il calo è **tutto fuori
+  // dall'italiano** (en 7→6, de 4→2): sull'italiano 15/21 identico, con
+  // o senza IA. Dice esattamente cosa aggiunge il modello remoto —
+  // niente dove ROCCO è tarato, qualcosa dove non lo è. Diciotto
+  // chiamate per tre casi, tutti in lingue che ROCCO non parla.
+  esame_causa_corretta:       { valore: 28, verso: "max" },
+  esame_verifica_proposta:    { valore: 45, verso: "max" }
 };
 
 // ── Etichettatura a mano dei componenti inesistenti ───────────────────
@@ -299,6 +336,7 @@ var m = {
   contesto_perso_multi_turn: 0, casi_senza_misura_prescritta: 0,
   esperienza_riusata: 0, esperienza_in_testa: 0, esperienza_persa: 0,
   esperienza_senza_ragionamento: 0, esperienza_esclusa_da_regola: 0,
+  esame: {},
   certezza_t1: {}, certezza_t2: {}
 };
 var dettagli = [];
@@ -475,6 +513,56 @@ function terzoTurno(caso) {
     });
 }
 
+// ── L'esame completo: tutti i 48 casi, 8 lingue ───────────────────────
+//
+// Le metriche sopra girano sui 21 casi italiani, perché ROCCO è tarato
+// sull'italiano e su quelli si confrontano prima e dopo sullo stesso metro.
+// Qui si misura l'esame intero, e si misurano tre cose per caso:
+//
+//  · **causa corretta** — la causa reale è fra le ipotesi stampate;
+//  · **passi** — quanti passi di ragionamento ROCCO ha percorso (la traccia
+//    runtime): dice se arriva alla risposta o gira a vuoto;
+//  · **verifica proposta** — c'è un prossimo passo concreto, con uno
+//    strumento e una soglia. Per un elettricista è la metà che conta: una
+//    diagnosi senza la misura che la decide non si può usare.
+//
+// Non è un voto sulle altre sette lingue: ROCCO risponde in italiano e il
+// metro `coerente()` confronta parole italiane. Serve a vedere **quanto
+// degrada** fuori dalla lingua in cui è tarato.
+function esameCompleto() {
+  var tutti = corpus.CASI_FORUM;
+  var perLingua = {};
+  var catena = Promise.resolve();
+
+  tutti.forEach(function (caso) {
+    catena = catena.then(function () {
+      ripristinaStato();
+      return orch.runDiagnosis({ message: caso.domanda, user_id: "esame", max_steps: 5 })
+        .then(function (r) {
+          var cs = r.case_state;
+          var lingua = caso.lingua || "?";
+          if (!perLingua[lingua]) perLingua[lingua] = { n: 0, causa: 0, verifica: 0, passi: 0 };
+          var L = perLingua[lingua];
+          L.n++;
+
+          if (ipotesiStampate(r.answer).some(function (l) { return coerente(l, caso.causa_reale); })) L.causa++;
+
+          var azione = cs.next_action || null;
+          var testoAzione = azione ? String(azione.expected_discriminator || azione.action || "") : "";
+          if (testoAzione && testoAzione.length > 12) L.verifica++;
+
+          L.passi += (cs.runtime && Array.isArray(cs.runtime.trace)) ? cs.runtime.trace.length : 0;
+        }, function () {
+          var lingua = caso.lingua || "?";
+          if (!perLingua[lingua]) perLingua[lingua] = { n: 0, causa: 0, verifica: 0, passi: 0 };
+          perLingua[lingua].n++;
+        });
+    });
+  });
+
+  return catena.then(function () { return perLingua; });
+}
+
 function riga(nome, ottenuto, su) {
   var base = BASELINE[nome];
   var ok = !base ? true
@@ -501,6 +589,10 @@ casi.forEach(function (caso) {
 });
 
 catena.then(function () {
+  return esameCompleto();
+}).then(function (perLingua) {
+  m.esame = perLingua;
+}).then(function () {
   console.log("\n╔════════════════════════════════════════════════════════════╗");
   console.log("║  BANCO DI PROVA ROCCO — " + casi.length + " domande reali italiane          ║");
   console.log("╚════════════════════════════════════════════════════════════╝");
@@ -548,14 +640,38 @@ catena.then(function () {
   console.log("    regola di linguaggio è tarata su questi casi. Il modo di");
   console.log("    migliorare ROCCO è farlo crescere, non aggiungere regole.");
 
-  console.log("\nUNA DOMANDA APERTA — l'apprendimento costa");
-  console.log("    Questa pagella parte dallo stato DICHIARATO: il seed di");
-  console.log("    conoscenza, senza i pesi accumulati. Misurato l'11/10 sulla");
-  console.log("    stessa corsa, con lo stato accumulato in repo: causa vera");
-  console.log("    stampata 15/21 e attiva 16/21 — cioè un caso stampato e due");
-  console.log("    attivi IN MENO. Il \"ha visto\" sta sottraendo, non aggiungendo.");
-  console.log("    Non è stato toccato: capire perché è un lavoro a sé, e va");
-  console.log("    fatto prima di dare più peso ai punteggi appresi.");
+  console.log("\nESAME COMPLETO — tutti i " + corpus.CASI_FORUM.length + " casi, per lingua");
+  console.log("    lingua   casi   causa corretta   verifica proposta   passi medi");
+  var lingue = Object.keys(m.esame || {}).sort(function (a, b) {
+    return (m.esame[b].n - m.esame[a].n) || (a < b ? -1 : 1);
+  });
+  var totE = { n: 0, causa: 0, verifica: 0, passi: 0 };
+  lingue.forEach(function (lg) {
+    var e = m.esame[lg];
+    totE.n += e.n; totE.causa += e.causa; totE.verifica += e.verifica; totE.passi += e.passi;
+    console.log("    " + lg.padEnd(8) + String(e.n).padStart(4) +
+      String(e.causa + "/" + e.n).padStart(15) +
+      String(e.verifica + "/" + e.n).padStart(20) +
+      String(e.n ? (e.passi / e.n).toFixed(1) : "-").padStart(13));
+  });
+  console.log("    " + "TOTALE".padEnd(8) + String(totE.n).padStart(4) +
+    String(totE.causa + "/" + totE.n).padStart(15) +
+    String(totE.verifica + "/" + totE.n).padStart(20) +
+    String(totE.n ? (totE.passi / totE.n).toFixed(1) : "-").padStart(13));
+  console.log("\n    ROCCO risponde in italiano e `coerente()` confronta parole");
+  console.log("    italiane: fuori dall'italiano questo non è un voto, è la");
+  console.log("    misura di quanto degrada fuori dalla lingua in cui è tarato.");
+  ok = riga("esame_causa_corretta", totE.causa, totE.n) && ok;
+  ok = riga("esame_verifica_proposta", totE.verifica, totE.n) && ok;
+
+  console.log("\nIL CORPUS È ESAME, NON MATERIA DI STUDIO");
+  console.log("    ROCCO non si addestra su questi casi: non sulle causa_reale");
+  console.log("    e nemmeno sui testi delle domande. Impara soltanto dai guasti");
+  console.log("    che l'elettricista chiude e conferma. Fino all'11/10 non era");
+  console.log("    così — l'avvio del neurale ingeriva tutti i 48 casi con le");
+  console.log("    loro risposte — e questi numeri misuravano in parte la memoria");
+  console.log("    del risultato atteso. Se qualcuno li vede salire di colpo,");
+  console.log("    la prima cosa da sospettare è che la contaminazione sia tornata.");
 
   if (note.length) {
     console.log("\nNOTE SUL METRO (" + note.length + ") — non sono difetti di ROCCO");

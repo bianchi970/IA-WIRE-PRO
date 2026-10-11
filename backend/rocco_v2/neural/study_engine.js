@@ -309,23 +309,23 @@ function studiaCasi(livello) {
   for (var i = 0; i < casi.length; i++) {
     var caso = casi[i];
 
-    // Memorizza come episodio
-    var caseState = {
-      problem_summary: caso.scenario,
-      domain: "elettrico",
-      components_detected: [],
-      facts_confirmed: [],
-      measurements: caso.misure ? flattenMisure(caso.misure) : []
-    };
-
-    var feedback = {
-      confirmedCause: caso.causa,
-      decisiveChecks: caso.soluzione ? [caso.soluzione] : [],
-      rejectedCauses: []
-    };
-
-    nm.store(caseState, feedback);
-    studyStats.episodi_memorizzati++;
+    // Un esempio svolto del curriculum NON è un caso chiuso.
+    //
+    // Qui veniva costruito un `feedback = { confirmedCause: caso.causa }` e
+    // scritto in memoria episodica con `nm.store()`: lo studio entrava nella
+    // memoria dell'**esperienza**, indistinguibile da un guasto che
+    // l'elettricista ha chiuso e confermato. Due conseguenze misurate:
+    //
+    //  · 18 episodi in più **a ogni avvio** del server (18 → 36 → 54 su tre
+    //    studi), quindi gli esempi di scuola soffocavano progressivamente i
+    //    casi veri nella memoria che ordina le ipotesi;
+    //  · e `studiaCompleto()` non era ripetibile, che è la ragione per cui
+    //    la scuola veniva saltata del tutto appena esistevano dei pesi.
+    //
+    // La regola è una: ROCCO impara dai casi che l'elettricista chiude. Il
+    // curriculum gli dà **conoscenza** — i nodi, le relazioni, il
+    // vocabolario, le formule, le norme qui sotto — non esperienza.
+    studyStats.casi_studiati++;
 
     // Nodo caso nel KG
     var casoId = nk.aggiungiNodo("causa", caso.causa);
@@ -396,30 +396,19 @@ function studiaPatterns(livello) {
   var misure = livello.misure || [];
   var trained = 0;
 
-  // Addestra da casi con misure
-  for (var i = 0; i < casi.length; i++) {
-    var caso = casi[i];
-    if (!caso.misure) continue;
-
-    var caseState = {
-      problem_summary: caso.scenario,
-      domain: "elettrico",
-      components_detected: [],
-      facts_confirmed: [],
-      measurements: flattenMisure(caso.misure)
-    };
-
-    var feedback = {
-      confirmedCause: caso.causa
-    };
-
-    try {
-      np.trainDaCasoChiuso(caseState, feedback);
-      trained++;
-    } catch(e) {
-      // Caso senza features estraibili — ok, non tutti i casi hanno misure
-    }
-  }
+  // Il classificatore di guasto NON si addestra sugli esempi di scuola.
+  //
+  // Qui si chiamava `np.trainDaCasoChiuso()` passando `confirmedCause:
+  // caso.causa`: gli esempi svolti del curriculum addestravano le reti come
+  // se fossero casi chiusi dall'elettricista. Stessa ragione di `studiaCasi`
+  // — e con un costo in più: a ogni avvio le reti venivano ri-spinte verso
+  // gli esempi di scuola, cancellando un po' di quel che avevano imparato
+  // dai guasti veri.
+  //
+  // Il punto di partenza delle reti resta `NeuralPatterns.bootstrapSintetico()`,
+  // che costruisce l'inviluppo del "normale" dai limiti normativi di
+  // `knowledge/limiti.js` — conoscenza, non esperienza. Da lì in poi le reti
+  // le muovono soltanto i casi chiusi e confermati.
 
   return trained;
 }

@@ -17,6 +17,10 @@ cd backend && npm test
 # Banco di prova: una pagella, esce con errore se una metrica peggiora
 cd backend && node bench/rocco_bench.js
 
+# Pulisce dallo stato appreso i residui del corpus d'esame
+cd backend && node tools/pulisci_residui_corpus.js          # dice cosa farebbe
+cd backend && node tools/pulisci_residui_corpus.js --applica
+
 # Rigenera la banca dispositivi dalle cinque fonti
 cd backend && node knowledge/build_dispositivi.js
 
@@ -541,7 +545,7 @@ blocco: senza una pagella stabile non si vede né un miglioramento né una
 regressione, e con 21 casi il rischio non è sbagliare una regola — è tararla
 su 21 esempi senza accorgersene.
 
-**Linea di base (2026-10-11, deterministica):**
+**Linea di base (2026-10-11, deterministica — ROCCO da solo, senza provider):**
 
 | metrica | valore |
 |---|---|
@@ -550,11 +554,13 @@ su 21 esempi senza accorgersene.
 | certezze senza misura | 0 |
 | conferme fuori bersaglio | 0 |
 | contesto multi-turn perso | 0 |
-| causa reale fra le ipotesi stampate | **16/21** |
-| causa reale fra le attive | **18/21** |
+| causa reale fra le ipotesi stampate | **15/21** |
+| causa reale fra le attive | **16/21** |
 | casi conclusi con la misura | 9/21 (su 13 che la prescrivono) |
 | precedente riusato · in testa | **17/21 · 17/21** |
 | esperienza persa | 0 |
+| esame 48 casi: causa corretta | **28/48** |
+| esame 48 casi: verifica proposta | **45/48** |
 
 **Si alzano quando una misura le supera, non si abbassano per far passare
 una modifica.** Se una scende è una regressione: va spiegata.
@@ -896,6 +902,112 @@ Trovati così, e corretti:
 Dichiarati e non toccati: `cs.narration` (copia morta), `cs.simulazione_causale`
 (risultato completo del simulatore, sopravvive solo `anomaly_type`),
 `cs.user_goal` (**nel contratto**, letto da nessuno), `h.neural_cf`.
+
+### La regola unica dell'apprendimento (11/10)
+```
+CASI DEL FORUM  →  esame
+CASI CHIUSI DA TE  →  esperienza  →  apprendimento
+```
+**ROCCO non si addestra sui 48 casi di `casi_reali_forum.js`**: né sulle
+`causa_reale`, né sui testi delle domande. Impara **solo** dai guasti che
+l'elettricista chiude e conferma (`/api/rocco/close-case` →
+`trainFromClosedCase` → memoria · grafo · distillatore · reti).
+
+Perché c'è voluta una regola: il warmup del neurale ingeriva tutti i 48
+casi **con la loro risposta**, e lo stesso file è il metro del banco. Su
+FORUM-SPEC-004 l'ipotesi vincente arrivava da `neural_similarita` ed era la
+stringa `causa_reale` copiata parola per parola. La pagella misurava la
+memoria del risultato atteso. Non si toglie "solo la risposta" lasciando il
+testo: addestrarsi sul testo della domanda fa riconoscere la domanda
+d'esame e gonfia somiglianza e novità.
+
+Ritirati anche i residui: `neural_integration` non importa né espone più il
+corpus (`CasiRealiForum`, `getForumCases`, `searchForumCases` erano strade
+per cui le risposte potevano rientrare). Per lo stato già scritto su disco:
+`node tools/pulisci_residui_corpus.js` (`--applica`, `--azzera`) — rimuove
+gli episodi la cui `confirmed_cause` è una risposta d'esame e non tocca mai
+i casi chiusi veri.
+
+**Anche il curriculum non è esperienza.** `study_engine` scriveva gli esempi
+svolti in memoria episodica con `confirmedCause` e addestrava il
+classificatore di guasto: scuola registrata come casi chiusi, +18 episodi **a
+ogni avvio** (18 → 36 → 54 su tre studi). Ora il curriculum dà nodi,
+relazioni, vocabolario, formule e norme; l'esperienza arriva solo dai casi
+chiusi. Le reti partono da `bootstrapSintetico()` (inviluppo del normale dai
+limiti di `knowledge/limiti.js`) e da lì le muovono solo i casi veri.
+
+### La scuola si rifà a ogni avvio
+`init()` del neurale faceva:
+```js
+if (!loaded.language && !loaded.patterns) warmup(options);
+```
+Il warmup non carica pesi: **inietta la conoscenza** — 50 componenti con 219
+guasti tipici, 40 pattern, FENOMENI, primi principi, 22 livelli di
+curriculum. Dopo la prima diagnosi quei due file esistono, quindi **dal
+secondo avvio ROCCO non rifaceva mai la scuola**. Misurato: grafo a 777 nodi
+caricati da disco contro 1305 di una scuola vera — **congelato al giorno in
+cui erano stati scritti i primi pesi**, e tutto ciò che abbiamo aggiunto dopo
+(banca dispositivi, limiti normativi, pattern nuovi) non lo ha mai
+raggiunto. Con un grafo vecchio `detectNovelty` non trova nulla di simile:
+ROCCO dichiarava nuovo **ogni** caso (21/21) e passava la mano all'IA in
+18/21, diventando un involucro intorno al provider.
+
+Sembrava che "l'apprendimento costasse". Costava la scuola che non si
+rifaceva. Ora la scuola gira sempre, e un ROCCO che ha lavorato ha **più**
+conoscenza di uno nuovo (1841 nodi contro 1227): la sua esperienza più il
+curriculum di oggi.
+
+**Tre difetti che lo rendevano impossibile**, tutti "conoscenza che non
+arriva":
+1. **`aggiungiNodo` non deduplicava mai** (`"kn_" + nextNodeId++`): nessuna
+   iniezione era ripetibile. Ora un concetto = un nodo, con un indice
+   `tipo\nnome` per restare O(1). Verificato: tre iniezioni di fila lasciano
+   1227 nodi e 1184 archi **identici**.
+2. **`bootstrapDaKnowledge` riceveva gli oggetti JSON interi**
+   (`{version, description, items}`): `for (i = 0; i < components.length; …)`
+   con `length` undefined **non girava mai**. I 50 componenti e i 40 pattern
+   — i due file di conoscenza più grandi del progetto — non sono mai entrati
+   nel grafo. Stesso difetto in `NeuralLanguage.bootstrap`: le keyword dei
+   componenti non sono mai entrate nel vocabolario.
+3. **I 13 primi principi si chiamavano "0".."12"**: `CONCETTI` è un array e
+   veniva scorso con `for (var key in …)`, quindi il nome del nodo era
+   l'indice e il campo `legge` non veniva salvato. Le stesse cifre si
+   ritrovano in testa alle 496 parole del vocabolario appreso.
+
+### L'IDF faceva l'opposto del suo mestiere
+```js
+idf[w] = (idf[w] || 0) + 1;                            // conteggio
+for (w in idf) idf[w] = Math.log(docCount / idf[w]) + 1;  // peso
+```
+Un campo per due mestieri: la seconda riga **sovrascriveva il conteggio col
+peso**, e dalla seconda apparizione di una parola l'incremento si sommava a
+un logaritmo. Misurato: `differenziale` in 9 documenti su 10 doveva pesare
+1,105 e pesava 2,563; nel file vero `ciao` (3,610) pesava **più** di
+`differenziale` (3,597). Colpiva solo le parole presenti in più di un
+documento — cioè il vocabolario tecnico ricorrente — e quel peso pesa gli
+embedding di ogni frase. Ora `docFreq` tiene il conteggio e `idf` il peso,
+ricalcolato sempre dal conteggio: verificato 1,105 e 3,303, identici alla
+teoria.
+
+### La pagella misura ROCCO da solo
+`ROCCO_NO_PROVIDER=1` spegne gli adattatori: nessuna rete. Il banco girava
+coi provider attivi e ROCCO consultava l'IA in **18 casi su 21**, quindi il
+numero finale dipendeva dal modello, dal giorno e dalla connessione — lo
+stesso difetto per cui il banco accantona lo stato appreso e spegne il
+narratore.
+
+Misurato spegnendoli: sui 21 italiani **identico** (15/21 e 16/21, con o
+senza IA); sull'esame completo 31 → 28 su 48, e il calo è **tutto fuori
+dall'italiano** (en 7→6, de 4→2). Diciotto chiamate per tre casi, tutti in
+lingue che ROCCO non parla.
+
+`npm test` passa `ROCCO_NO_PROVIDER=1` a tutte le suite tranne `test.js`,
+che è lo smoke test del servizio vero. Due effetti: la batteria scende da
+~3 minuti a ~40 secondi (`confirm_rules` 101s → 7s), ed è spariti un falso
+rosso — `banca_dispositivi.test.js` moriva con `Assertion failed:
+!(handle->flags & UV_HANDLE_CLOSING)` **dopo** aver stampato "156 passed",
+perché due socket verso il provider restavano aperti quando la suite
+chiamava `process.exit()`.
 
 ### Codice non raggiungibile da `server.js` (aggiornato 11/10)
 Verificato col grafo delle dipendenze (risolutore di Node): **2.806 righe in

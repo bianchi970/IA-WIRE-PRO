@@ -9,6 +9,23 @@ var Ollama = require("ollama").Ollama;
 
 function buildDefaultAdapters() {
   var adapters = [];
+
+  // ROCCO_NO_PROVIDER=1 → nessun adattatore, nessuna rete.
+  //
+  // Serve alle misure. Il banco di prova girava con i provider attivi e
+  // ROCCO consultava l'IA in **18 casi su 21**: la pagella misurava quindi
+  // ROCCO *più* un modello remoto, con un risultato che cambia col modello,
+  // col giorno e con la connessione. È lo stesso difetto per cui il banco
+  // accantona lo stato appreso e spegne il narratore — una misura deve
+  // dipendere dal codice, non dall'ambiente.
+  //
+  // Senza adattatori il ragionatore fallisce e l'orchestratore ricade sul
+  // suo ragionamento deterministico, dichiarandolo in `fallback_used`. È la
+  // condizione "ROCCO da solo", che è quella che la pagella deve misurare.
+  if (String(process.env.ROCCO_NO_PROVIDER || "") === "1") {
+    return adapters;
+  }
+
   var openaiKey = String(process.env.OPENAI_API_KEY || "").trim();
   var anthropicKey = String(process.env.ANTHROPIC_API_KEY || "").trim();
   var ollamaUrl = String(process.env.OLLAMA_URL || "http://localhost:11434").trim();

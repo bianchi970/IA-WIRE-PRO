@@ -30,7 +30,8 @@ var STOPWORDS = new Set([
 var vocabolario = {};  // parola → indice
 var inverso = [];      // indice → parola
 var embeddings = [];   // indice → vettore [DIM_EMBEDDING]
-var idf = {};          // parola → inverse document frequency
+var docFreq = {};      // parola → in quanti documenti compare (il CONTEGGIO)
+var idf = {};          // parola → peso IDF, calcolato da docFreq (il PESO)
 var docCount = 0;      // numero totale di documenti (interazioni)
 
 // --- Intent classes ---
@@ -439,17 +440,32 @@ function imparaDaInterazione(testo, intentLabel, entita) {
   var tokens = tokenizza(testo);
   docCount++;
 
-  // Aggiorna IDF
-  var seen = new Set();
+  // Il conteggio dei documenti e il peso IDF sono due cose, e stavano nello
+  // stesso campo:
+  //
+  //     idf[w] = (idf[w] || 0) + 1;                       // conteggio
+  //     for (w in idf) idf[w] = Math.log(docCount/idf[w]) + 1;   // peso
+  //
+  // La seconda riga **sovrascriveva il conteggio col peso**. Dalla seconda
+  // volta che una parola compariva, l'incremento si sommava a un logaritmo:
+  // il numero di documenti era perduto per sempre. Misurato — `differenziale`
+  // presente in 9 documenti su 10 doveva pesare 1,105 e pesava 2,563; e nel
+  // file vero `ciao` (3,610) pesava **più** di `differenziale` (3,597).
+  //
+  // Il difetto colpiva solo le parole presenti in più di un documento, cioè
+  // esattamente il vocabolario tecnico ricorrente: l'IDF faceva l'opposto
+  // del suo mestiere, appiattendo la differenza fra una parola del mestiere
+  // e un saluto. E quel peso pesa gli embedding di ogni frase.
+  var seen = {};
   for (var i = 0; i < tokens.length; i++) {
-    if (!seen.has(tokens[i])) {
-      idf[tokens[i]] = (idf[tokens[i]] || 0) + 1;
-      seen.add(tokens[i]);
+    if (!seen[tokens[i]]) {
+      docFreq[tokens[i]] = (docFreq[tokens[i]] || 0) + 1;
+      seen[tokens[i]] = true;
     }
   }
-  // Ricalcola IDF values
-  for (var word in idf) {
-    idf[word] = Math.log(docCount / idf[word]) + 1;
+  // Il peso si ricalcola SEMPRE dal conteggio, che non viene mai toccato.
+  for (var word in docFreq) {
+    idf[word] = Math.log(docCount / docFreq[word]) + 1;
   }
 
   // Rinforza associazioni tra parole co-occorrenti
@@ -499,23 +515,43 @@ function bootstrap(fenomeni, concetti, componenti) {
     }
   }
 
+  // `CONCETTI` è un ARRAY di `{id, legge}`, e qui veniva scorso con
+  // `for (var key in concetti)`: `key` era l'indice, quindi nel vocabolario
+  // di ROCCO entravano le parole "0","1",…,"12" — le si ritrova in testa
+  // alle 496 voci imparate. E il testo del principio non entrava: si
+  // cercava `c.descr`, campo che non esiste (si chiama `legge`).
   if (concetti) {
-    for (var key in concetti) {
-      aggiungiAlVocabolario(key);
-      var c = concetti[key];
-      if (c.descr) {
-        var tokens = tokenizza(c.descr);
-        for (var t = 0; t < tokens.length; t++) aggiungiAlVocabolario(tokens[t]);
+    var elenco = Array.isArray(concetti)
+      ? concetti.map(function (c) { return { chiave: c && (c.id || c.nome), concetto: c }; })
+      : Object.keys(concetti).map(function (k) { return { chiave: k, concetto: concetti[k] }; });
+
+    for (var ci = 0; ci < elenco.length; ci++) {
+      var chiave = elenco[ci].chiave;
+      var c = elenco[ci].concetto || {};
+      if (chiave) aggiungiAlVocabolario(chiave);
+      var testo = c.legge || c.descr || "";
+      if (testo) {
+        var tokensC = tokenizza(testo);
+        for (var t = 0; t < tokensC.length; t++) aggiungiAlVocabolario(tokensC[t]);
       }
     }
   }
 
-  if (componenti) {
-    for (var i = 0; i < componenti.length; i++) {
-      var comp = componenti[i];
-      if (comp.name) {
-        var tokens = tokenizza(comp.name);
-        for (var t = 0; t < tokens.length; t++) aggiungiAlVocabolario(tokens[t]);
+  // `components.json` è `{version, description, items}`: qui arrivava
+  // l'oggetto intero, `componenti.length` era `undefined` e il ciclo non
+  // girava mai. Le keyword dei 50 componenti — differenziale, salvavita,
+  // magnetotermico, le parole con cui il cliente nomina le cose — non sono
+  // mai entrate nel vocabolario di ROCCO.
+  var listaComponenti = !componenti ? null
+    : (Array.isArray(componenti) ? componenti : (componenti.items || componenti.components || null));
+
+  if (listaComponenti) {
+    for (var i = 0; i < listaComponenti.length; i++) {
+      var comp = listaComponenti[i] || {};
+      var nome = comp.name || comp.id || "";
+      if (nome) {
+        var tokens = tokenizza(String(nome).replace(/[-_]/g, " "));
+        for (var t2 = 0; t2 < tokens.length; t2++) aggiungiAlVocabolario(tokens[t2]);
       }
       if (comp.keywords) {
         for (var k = 0; k < comp.keywords.length; k++) {
@@ -540,6 +576,7 @@ function salva() {
     vocabolario: vocabolario,
     inverso: inverso,
     embeddings: embeddings,
+    docFreq: docFreq,
     idf: idf,
     docCount: docCount,
     intentNet: intentData,
@@ -554,6 +591,11 @@ function carica(data) {
   embeddings = data.embeddings || [];
   idf = data.idf || {};
   docCount = data.docCount || 0;
+  // Gli stati salvati prima della correzione non hanno `docFreq`: il
+  // conteggio era stato distrutto dal peso e non è ricostruibile. Si
+  // riparte con i conteggi vuoti — i pesi vecchi restano fino alla prima
+  // interazione, poi vengono rifatti dai conteggi veri.
+  docFreq = data.docFreq || {};
   if (data.intentNet) {
     initIntentNet();
     intentNet.load(data.intentNet);
@@ -565,6 +607,7 @@ function reset() {
   vocabolario = {};
   inverso = [];
   embeddings = [];
+  docFreq = {};
   idf = {};
   docCount = 0;
   intentNet = null;
