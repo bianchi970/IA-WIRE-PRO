@@ -8,7 +8,12 @@
     "dev": "node server.js",
     "test": "node test/run_all.js",
     "smoke": "node test.js",
-    "bench": "node bench/rocco_bench.js"
+    "bench": "node bench/rocco_bench.js",
+    "migrate": "node migrate.js",
+    "ingest:manuali": "node ingest.js",
+    "ingest:enciclopedia": "node ingest_encyclopedia.js",
+    "build:dispositivi": "node knowledge/build_dispositivi.js",
+    "pulisci:residui": "node tools/pulisci_residui_corpus.js"
   },
   "keywords": [
     "ai",

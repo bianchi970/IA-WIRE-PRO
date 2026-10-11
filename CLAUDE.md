@@ -4,42 +4,45 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
+**Tutto si lancia da `backend/`** (il `.env` si carica con un percorso
+esplicito, vedi sotto) e **tutto è dichiarato in `package.json`**: non ci
+sono file da lanciare a memoria. Se aggiungi uno strumento, dichiaralo —
+`test/niente_strade_morte.test.js` diventa rosso se resta orfano.
+
 ```bash
-# Start backend (always from backend/ dir to load .env correctly)
-cd backend && node server.js
+cd backend
 
-# Run DB migration (idempotent, transactional)
-cd backend && node migrate.js
+npm start                   # avvia il server
+npm test                    # 37 suite, esce ≠ 0 se una fallisce (~85s, senza rete)
+npm run bench               # la pagella: esce ≠ 0 se una metrica peggiora (~19s)
+npm run smoke               # 5 chiamate HTTP sul servizio vero (con i provider)
 
-# Tutte le prove: 36 suite, esce con errore se una fallisce
-cd backend && npm test
+npm run migrate             # schema DB — idempotente, transazionale
+npm run ingest:manuali      # RAG doc_chunks — idempotente
+npm run ingest:enciclopedia # components + issues — idempotente
+npm run build:dispositivi   # rigenera knowledge/dispositivi.json dalle 5 fonti
+npm run pulisci:residui     # residui del corpus d'esame nello stato appreso
 
-# Banco di prova: una pagella, esce con errore se una metrica peggiora
-cd backend && node bench/rocco_bench.js
+npm install                 # dipendenze
+```
 
-# Pulisce dallo stato appreso i residui del corpus d'esame
-cd backend && node tools/pulisci_residui_corpus.js          # dice cosa farebbe
-cd backend && node tools/pulisci_residui_corpus.js --applica
+Tre interruttori per le misure. I primi due sono gemelli — uno dice "mai",
+l'altro "sempre" — e servono a sapere quanto l'IA aggiunge:
 
-# Rigenera la banca dispositivi dalle cinque fonti
-cd backend && node knowledge/build_dispositivi.js
+```bash
+ROCCO_NO_PROVIDER=1      # nessuna chiamata a un modello remoto: ROCCO da solo
+ROCCO_ALWAYS_REASONER=1  # consulta sempre il ragionatore
+ROCCO_NARRATOR=0         # solo la bozza deterministica, niente redazione
+```
 
-# Health check
+A mano, sul server avviato:
+
+```bash
 curl http://localhost:3000/health
 
-# Test chat API
-curl -X POST http://localhost:3000/api/chat \
+curl -X POST http://localhost:3000/api/chat/v2 \
   -H "Content-Type: application/json" \
-  -d '{"message":"testo","user_id":"test"}'
-
-# Ingest doc_chunks (RAG manuale — idempotente, ri-eseguibile)
-cd backend && node ingest.js
-
-# Ingest enciclopedia tecnica components+issues (idempotente)
-cd backend && node ingest_encyclopedia.js
-
-# Install backend dependencies
-cd backend && npm install
+  -d '{"message":"il differenziale salta con la lavatrice","user_id":"test"}'
 ```
 
 ## Architecture
@@ -1018,11 +1021,39 @@ in testa a questo file: `ingest.js`, `ingest_encyclopedia.js`, `migrate.js`,
 `knowledge/build_dispositivi.js` (un generatore), più `test.js` che è lo
 smoke test di `npm run smoke`.
 
-**Da decidere ancora** (963 righe): `rocco/rocco_learn_online.js`,
-`rocco/rocco_study_session.js`, `rocco/rocco_tools.js`,
-`rocco/rocco_tools_test.js`. Non sono citati come comandi e non li raggiunge
-nessuno: o diventano comandi dichiarati, o si ritirano. Sono strumenti di
-studio dell'università, quindi la scelta è di dominio.
+**Ritirati l'11/10 — 838 righe di strumenti di studio.** Non per pulizia: due
+di loro violavano la regola decisa lo stesso giorno, e il terzo era una terza
+copia di conoscenza già viva.
+
+| file | perché |
+|---|---|
+| `rocco_learn_online.js` (390) | generava casistiche con Anthropic e *"le salvava nella memoria di ROCCO come esperienza accumulata sul campo"*. Casi inventati da un modello registrati come esperienza: eseguirlo oggi **ricontaminerebbe** |
+| `rocco_study_session.js` (241) | segnava le 10 materie studiate a livello 100, **superava tutti gli esami** e registrava i principi diagnostici come `caso_reale`. Progresso finto, e scuola scritta come esperienza |
+| `rocco_tools.js` (180) | gemello più vecchio di `rocco/calcEngine.js` (800 righe, vivo, usato da `/api/calc` e dalla chat). Le 5 funzioni in più — potenza, rifasamento, corrente motore, diagnosi numerica, output tecnico — sono **tutte** in `formula_engine` (26 formule, vive su `/api/university/formule`) e in `reasoning.diagnosiNumerica` |
+| `rocco_tools_test.js` (27) | lo smoke test del gemello |
+
+**Gli strumenti che restano sono comandi dichiarati**, non file da lanciare a
+memoria: `npm run migrate`, `ingest:manuali`, `ingest:enciclopedia`,
+`build:dispositivi`, `pulisci:residui`, `smoke`, `bench`, `test`.
+
+Misurato: non raggiungibile da `server.js` **3.598 → 2.756 righe**, 11 file
+→ 7, e i 7 che restano sono **tutti comandi dichiarati** più
+`casi_reali_forum.js`, che è il corpus d'esame usato da banco e test. Righe
+vive invariate (35.712): quei file non erano mai nel flusso.
+
+### `niente_strade_morte.test.js` — la mappa si ricostruisce da sé
+Ogni file `.js` del backend deve essere **una** di queste cose: raggiungibile
+da `server.js`, un comando dichiarato in `package.json`, una prova, o il
+corpus d'esame. Nient'altro.
+
+Perché è un test e non una consuetudine: nel ritiro del loop legacy (3.924
+righe) e in questo (838) il problema non era che il codice fosse sbagliato —
+era che **nessuno sapeva che non girava**. Il test ricostruisce il grafo col
+risolutore di Node, segue anche i `require` dei comandi e delle prove, e
+stampa gli orfani con le loro righe. Verificato che diventi rosso: creando un
+file che nessuno raggiunge, lo trova.
+
+Se aggiungi uno strumento, dichiaralo in `package.json` — una riga — e tace.
 
 ### Formato risposta (RISOLTO)
 `rocco/index.js` produce `TECH_REPORT_V1` con sezioni: OSSERVAZIONI, COMPONENTI COINVOLTI, IPOTESI, LIVELLO DI CERTEZZA, VERIFICHE OPERATIVE, RISCHI REALI, PROSSIMO PASSO.
