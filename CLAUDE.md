@@ -11,6 +11,9 @@ cd backend && node server.js
 # Run DB migration (idempotent, transactional)
 cd backend && node migrate.js
 
+# Tutte le prove: 36 suite, esce con errore se una fallisce
+cd backend && npm test
+
 # Banco di prova: una pagella, esce con errore se una metrica peggiora
 cd backend && node bench/rocco_bench.js
 
@@ -547,8 +550,8 @@ su 21 esempi senza accorgersene.
 | certezze senza misura | 0 |
 | conferme fuori bersaglio | 0 |
 | contesto multi-turn perso | 0 |
-| causa reale fra le ipotesi stampate | **15/21** (era 16, vedi auto-conferma) |
-| causa reale fra le attive | 16/21 |
+| causa reale fra le ipotesi stampate | **16/21** |
+| causa reale fra le attive | **18/21** |
 | casi conclusi con la misura | 9/21 (su 13 che la prescrivono) |
 | precedente riusato · in testa | **17/21 · 17/21** |
 | esperienza persa | 0 |
@@ -782,15 +785,95 @@ Test: `osservazioni_pulite.test.js` — 34 asserzioni (§4 niente slug alla
 fonte, §5 nessuna ipotesi fra le osservazioni, nessuna etichetta di certezza
 in inglese).
 
-### Due strumenti su cinque non vengono mai selezionati
-`tool_registry.js` registra 5 strumenti, ma `decideToolNeeded()`
-(orchestrator) può restituirne solo 3: `vision_tool`, `calc_tool`,
-`recognition_tool`. **`closed_cases_tool` e `knowledge_lookup_tool` non
-vengono chiamati da nessuno** nel percorso vivo (li invocava solo
-`orchestrator_legacy.js` via `planner.js`). Non sono però conoscenza
-perduta: i casi chiusi arrivano per l'altra strada
-(`ragionaPerAnalogia`) e la knowledge base locale via `ragionaDaKnowledge`.
-**Decisione aperta**: ritirarli, o farli selezionare.
+### Il loop morto, i due strumenti e la suite rossa: ritirati (11/10)
+`tool_registry.js` registrava 5 strumenti, ma `decideToolNeeded()` può
+restituirne solo 3: `vision_tool`, `calc_tool`, `recognition_tool`.
+`closed_cases_tool` e `knowledge_lookup_tool` **non li chiamava nessuno** nel
+percorso vivo — li invocava solo `orchestrator_legacy.js` via `planner.js`.
+Non erano conoscenza perduta, erano doppie strade: i casi chiusi entrano da
+`ragionaPerAnalogia()` (stessa memoria, `rocco_v2/memory.js`) e la knowledge
+base da `ragionaDaKnowledge()`. **Uno strumento registrato e non
+raggiungibile è peggio di nessuno strumento: fa credere che una capacità ci
+sia.**
+
+Legacy + planner + verifier + i due strumenti erano **un'isola chiusa**, e
+`test/rocco-v2-core.test.js` l'unica cosa che la toccava da fuori. Ritirati
+insieme: **3.924 righe**. Non raggiungibile da `server.js`: 5.010 → 2.806
+righe, e quel che resta sono i comandi CLI documentati (`ingest`, `migrate`,
+`build_dispositivi`) più `test.js`, che è lo smoke test di `npm run smoke`.
+
+**La suite non è stata buttata, è stata misurata.** Provando ogni funzione
+in isolamento contro il motore attuale: **8 verdi su 52**. Le 44 rosse
+chiamano funzioni che sul modulo attuale non esistono (`derivePrimaryGap`,
+`selectNextBestAction`, `scoreEvidenceWeight`, `resolveEvidenceConflicts`,
+`buildCanonicalSuggestedCheck`, `isAmbiguousLowContextCase`) o pretendono il
+vocabolario di traccia del loop (`loop_start`, `loop_stop`, `model_result`).
+Le 52 non erano copertura latente: **il runner si fermava al primo
+fallimento**, quindi 35 funzioni non venivano mai eseguite e 22 lanciavano
+`TypeError` sulla prima riga.
+
+Le 8 valide vivono in `test/motore_attuale.test.js`, con il testo delle
+asserzioni **estratto, non riscritto**. Due di loro avevano trovato i difetti
+dei metadati (`runtime_trace` null, `fallback_used` mai dichiarato), ed è
+l'unico posto che verifica il contratto del `case_state` e che il
+formattatore non alteri la diagnosi. `verifier.verifyFormatterNeutrality()`
+era un `JSON.stringify` travestito da modulo del motore: è diventato
+un'asserzione.
+
+**`settings.neuralIntegration` è ora iniettabile** come `providerGateway` e
+`toolRegistry`. Serviva a rendere deterministico un contratto: il ripiego del
+ragionatore si prova solo se ROCCO decide di consultare l'IA, e quella
+decisione la influenza il punteggio di novità del neurale — che cambia con lo
+stato appreso sul disco. Quelle due asserzioni passavano **per fortuna**: con
+`data/neural/` vuota fallivano.
+
+### `npm test` esegue tutto, e non tocca la memoria di chi lavora
+`npm test` eseguiva solo `test.js`: cinque chiamate HTTP, verdi. Le 30 suite
+del motore non le lanciava **nessun comando**. Per mesi "i test passano" ha
+voluto dire che il server rispondeva.
+
+`test/run_all.js` (→ `npm test`) esegue le **36 suite**, poi conta, e **esce
+diverso da zero** se una fallisce. Fermarsi al primo rosso è il motivo per
+cui 35 funzioni sono rimaste invisibili. `npm run smoke` resta lo smoke test,
+`npm run bench` la pagella.
+
+E isola lo stato appreso: le suite neurali si addestrano e **salvano**, quindi
+un `npm test` riscriveva pesi, embedding, episodi e grafo di chi lavora su
+quella macchina. Misurato: sei file su otto diversi dopo una corsa. Ora
+vengono accantonati e rimessi identici — verificato con md5 — e le suite sono
+anche più veloci (`confirm_rules` 39s → 11s: non carica più un grafo da
+827 KB).
+
+### Lo stato appreso non va in git, e il banco parte dal seed dichiarato
+`data/neural/*.json`, `data/rocco-learning.json` e `data/rocco-v2-memory.json`
+erano **versionati**. Tre danni:
+- ogni diagnosi sporcava il working tree con un diff da ~1 MB
+  (`knowledge_graph.json` da solo è 827 KB, riscritto ogni volta);
+- **falsa durabilità**: il server non committa niente, quindi in produzione
+  quei file non erano salvati da git comunque;
+- il banco misurava quel che *quella macchina* aveva accumulato: due
+  computer, due pagelle — la non-determinatezza per cui il banco esiste,
+  rientrata da un'altra porta.
+
+Ora sono in `.gitignore`. Restano versionati `simulator_state.json`
+(conoscenza scritta a mano: per chiavi i sintomi in italiano, per valori le
+cause con probabilità, verifica ed esclusioni) e `encyclopedia.json`.
+Verificato: un clone nuovo parte, diagnostica con tutte e 7 le sezioni e si
+ricrea i file di runtime da sé.
+
+Il banco accantona lo stato accumulato per tutta la corsa e lo rimette
+identico alla fine. **L'accantonamento va fatto prima dei `require`**: il
+neurale carica il suo stato in memoria quando l'orchestratore viene
+richiesto, quindi rimuovere i file dopo non cambia nulla — prima versione di
+questa correzione, e non si vedeva dai numeri.
+
+**Linee di base alzate senza toccare il motore**: causa vera stampata
+15 → **16/21**, attiva 16 → **18/21**. Lo stato appreso, su questo corpus,
+**costava** un caso stampato e due attivi.
+
+**Domanda aperta, stampata in fondo alla pagella**: perché il "ha visto"
+sottrae invece di aggiungere. Va capito **prima** di dare più peso ai
+punteggi appresi.
 
 ### Il percorso inverso — come trovare i dati che si fermano
 Il difetto che si ripete in questo codice è **dato calcolato e mai letto**
@@ -814,25 +897,20 @@ Dichiarati e non toccati: `cs.narration` (copia morta), `cs.simulazione_causale`
 (risultato completo del simulatore, sopravvive solo `anomaly_type`),
 `cs.user_goal` (**nel contratto**, letto da nessuno), `h.neural_cf`.
 
-### `test/rocco-v2-core.test.js` è il contratto del loop MORTO
-Rossa da sempre, e non si poteva aggiustare toccando il motore: i 10 passi
-di traccia che pretende (`loop_start`, `loop_tool_selected`, `loop_stop`,
-`model_result`…) sono emessi **soltanto** da `orchestrator_legacy.js`.
-L'orchestratore attuale ne emette 35, completamente diversi: **zero
-sovrapposizione**.
+### Codice non raggiungibile da `server.js` (aggiornato 11/10)
+Verificato col grafo delle dipendenze (risolutore di Node): **2.806 righe in
+9 file**, da 5.010 prima del ritiro del loop legacy.
 
-Due sue asserzioni codificavano però contratti che il motore attuale deve
-rispettare, e hanno trovato i due difetti sui metadati sopra.
+Quel che resta è in gran parte **voluto**, e sono i comandi CLI documentati
+in testa a questo file: `ingest.js`, `ingest_encyclopedia.js`, `migrate.js`,
+`knowledge/build_dispositivi.js` (un generatore), più `test.js` che è lo
+smoke test di `npm run smoke`.
 
-**Codice non raggiungibile da `server.js`** (verificato col grafo delle
-dipendenze, risolutore di Node): `orchestrator_legacy.js` (2.129 righe),
-`planner.js`, `verifier.js` (usati solo dal legacy e da questa suite),
-`rocco/rocco_learn_online.js`, `rocco/rocco_study_session.js`,
-`rocco/rocco_tools.js`, `test.js`. In totale ~2.500 righe.
-
-**Decisione aperta**: riscrivere quelle asserzioni nel vocabolario attuale,
-o ritirare insieme il loop legacy e la sua suite. Tenere una suite rossa in
-repo è peggio di entrambe: insegna a ignorare i fallimenti.
+**Da decidere ancora** (963 righe): `rocco/rocco_learn_online.js`,
+`rocco/rocco_study_session.js`, `rocco/rocco_tools.js`,
+`rocco/rocco_tools_test.js`. Non sono citati come comandi e non li raggiunge
+nessuno: o diventano comandi dichiarati, o si ritirano. Sono strumenti di
+studio dell'università, quindi la scelta è di dominio.
 
 ### Formato risposta (RISOLTO)
 `rocco/index.js` produce `TECH_REPORT_V1` con sezioni: OSSERVAZIONI, COMPONENTI COINVOLTI, IPOTESI, LIVELLO DI CERTEZZA, VERIFICHE OPERATIVE, RISCHI REALI, PROSSIMO PASSO.

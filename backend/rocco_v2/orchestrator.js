@@ -43,11 +43,24 @@ var reasoner = require("./reasoner");
 var causalModel = require("./causal_model");
 
 // Neural Integration — sensore cognitivo (graceful degradation)
-var neuralIntegration = null;
+//
+// Si chiama `neuralIntegrationModule` e non `neuralIntegration` perché
+// `createOrchestrator()` lo **ombreggia** con un locale, così può essere
+// iniettato da `settings` come già si fa con `providerGateway` e
+// `toolRegistry`. Serve a rendere verificabile un contratto che altrimenti
+// dipende dal caso: il ripiego del ragionatore si prova solo se ROCCO
+// decide di consultare l'IA, e quella decisione la influenza il punteggio
+// di novità del neurale — che cambia con lo stato appreso sul disco. Due
+// asserzioni sui metadati del ripiego passavano o fallivano in base a
+// quanto quella macchina aveva accumulato.
+var neuralIntegrationModule = null;
 try {
-  neuralIntegration = require("./neural/neural_integration");
-  neuralIntegration.init({ autoWarmup: true });
+  neuralIntegrationModule = require("./neural/neural_integration");
+  neuralIntegrationModule.init({ autoWarmup: true });
 } catch(e) { /* neural non disponibile — ROCCO funziona come prima */ }
+
+// Alias per il codice fuori da createOrchestrator (ragiona, percepire, …).
+var neuralIntegration = neuralIntegrationModule;
 
 // ====== UTILITÀ ======
 
@@ -2053,6 +2066,11 @@ function createOrchestrator(options) {
   var settings = options || {};
   var providerGateway = settings.providerGateway || providerGatewayFactory.createDefaultGateway();
   var toolRegistry = settings.toolRegistry || toolRegistryFactory.createRegistry();
+  // Terzo collaboratore iniettabile, come i due sopra. In produzione è
+  // sempre il modulo vero; un test può passarne uno finto per rendere
+  // deterministica la decisione "serve l'IA?" (vedi il commento sopra
+  // `neuralIntegrationModule`).
+  var neuralIntegration = settings.neuralIntegration || neuralIntegrationModule;
 
   function runDiagnosis(input) {
     var inp = input || {};

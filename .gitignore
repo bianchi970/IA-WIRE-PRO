@@ -17,3 +17,26 @@ backend/data/conversations-local.json
 backend/data/conversations-local.json.tmp
 backend/data/university-memory-local.json
 backend/data/university-memory-local.json.tmp
+
+# Stato APPRESO: cresce a ogni diagnosi, non è codice e non è conoscenza
+# scritta. Era versionato, e questo faceva tre danni:
+#   · ogni diagnosi sporcava il working tree con un diff da ~1 MB
+#     (knowledge_graph.json da solo è 827 KB, riscritto ogni volta);
+#   · dava una falsa durabilità: il server non committa niente, quindi in
+#     produzione questi file NON erano salvati da git comunque;
+#   · faceva girare il banco di prova su quel che la macchina aveva
+#     accumulato, non su uno stato dichiarato: due computer, due pagelle.
+# Misurato l'11/10: ripartendo dal solo seed, causa vera stampata 15 → 16/21
+# e attiva 16 → 18/21. Non era un patrimonio, era una zavorra.
+#
+# NON ignorato, e deve restare versionato:
+#   backend/data/neural/simulator_state.json  ← conoscenza scritta a mano
+#   backend/data/encyclopedia.json            ← dato di conoscenza
+backend/data/neural/distiller_rules.json
+backend/data/neural/evolution_state.json
+backend/data/neural/knowledge_graph.json
+backend/data/neural/language_state.json
+backend/data/neural/memory_state.json
+backend/data/neural/patterns_state.json
+backend/data/rocco-learning.json
+backend/data/rocco-v2-memory.json

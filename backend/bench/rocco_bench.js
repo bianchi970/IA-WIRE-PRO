@@ -48,14 +48,6 @@ var path = require("path");
 // come gira in produzione, senza manometterlo — che è l'unico modo perché i
 // numeri vogliano dire qualcosa.
 
-var de = require("../engine/diagnosticEngine");
-var componenti = require("../knowledge/components.json").items;
-var corpus = require("../rocco_v2/neural/casi_reali_forum.js");
-var orch = require("../rocco_v2/orchestrator");
-var v2memory = require("../rocco_v2/memory");
-
-var casi = corpus.CASI_FORUM.filter(function (c) { return c.lingua === "it"; });
-
 // ── Isolamento dello stato appreso ────────────────────────────────────
 //
 // Durante una diagnosi ROCCO scrive quello che impara in
@@ -68,33 +60,96 @@ var casi = corpus.CASI_FORUM.filter(function (c) { return c.lingua === "it"; });
 // Qui lo stato viene fotografato all'avvio, ripristinato **prima di ogni
 // caso** — così ogni caso è misurato sullo stesso motore — e rimesso come
 // era alla fine.
-var FILE_STATO = [];
-(function raccogliStato() {
-  var dirs = [path.join(__dirname, "..", "data"), path.join(__dirname, "..", "data", "neural")];
-  dirs.forEach(function (d) {
+//
+// ── E si misura dallo stato DICHIARATO, non da quello accumulato ──
+//
+// Non bastava fotografare: la fotografia ritraeva *questa* macchina. Lo
+// stato appreso (pesi, embedding, episodi, grafo) cresce a ogni diagnosi,
+// quindi due computer — o lo stesso computer a due settimane di distanza —
+// davano due pagelle diverse per lo stesso codice. È la non-determinatezza
+// per cui il banco è stato costruito, rientrata da un'altra porta.
+//
+// Misurato l'11/10: con lo stato accumulato in repo, causa vera stampata
+// 15/21 e attiva 16/21; **ripartendo dal solo seed dichiarato, 16/21 e
+// 18/21**. Lo stato appreso non era un patrimonio, su questo corpus era un
+// costo. (Perché l'apprendimento peggiori invece di migliorare è una
+// domanda aperta e più grande di una riga di codice: vedi la nota in fondo
+// alla pagella.)
+//
+// Quindi: i file di SEED restano (sono conoscenza scritta a mano, versionata),
+// i file ACCUMULATI vengono messi da parte per tutta la corsa e rimessi
+// esattamente come erano alla fine. Nessun dato dell'utente viene perso.
+var DIR_DATA = path.join(__dirname, "..", "data");
+var DIR_NEURAL = path.join(DIR_DATA, "neural");
+
+// Seed: conoscenza scritta a mano, non accumulata. `simulator_state.json` ha
+// per chiavi i sintomi in italiano e per valori le cause, con probabilità,
+// verifica ed esclusioni: è curriculum, non esperienza.
+var SEED = ["simulator_state.json"];
+
+function elencaStato() {
+  var out = [];
+  [DIR_DATA, DIR_NEURAL].forEach(function (d) {
     if (!fs.existsSync(d)) return;
     fs.readdirSync(d).forEach(function (f) {
       if (!/\.json$/.test(f)) return;
+      if (f === "encyclopedia.json") return;        // dato di conoscenza, non stato
       var p = path.join(d, f);
-      if (fs.statSync(p).isFile()) FILE_STATO.push(p);
+      if (fs.statSync(p).isFile()) out.push(p);
     });
   });
-})();
+  return out;
+}
 
-var SNAPSHOT = {};
-FILE_STATO.forEach(function (p) {
-  try { SNAPSHOT[p] = fs.readFileSync(p, "utf8"); } catch (e) { /* illeggibile: si ignora */ }
+// Lo stato accumulato viene messo da parte in memoria per tutta la corsa.
+var ACCANTONATO = {};
+elencaStato().forEach(function (p) {
+  if (SEED.indexOf(path.basename(p)) >= 0) return;
+  try {
+    ACCANTONATO[p] = fs.readFileSync(p, "utf8");
+    fs.unlinkSync(p);
+  } catch (e) { /* non bloccare il banco per un file */ }
 });
 
+// Fotografia di quel che resta: il seed. È la linea di partenza di ogni caso.
+var SNAPSHOT = {};
+elencaStato().forEach(function (p) {
+  try { SNAPSHOT[p] = fs.readFileSync(p, "utf8"); } catch (e) { /* illeggibile */ }
+});
+
+// Prima di ogni caso: il seed torna identico e **tutto ciò che il caso
+// precedente ha creato viene rimosso**. Rimetterlo e non rimuoverlo era un
+// buco: un file nato durante il caso N restava per il caso N+1.
 function ripristinaStato() {
   Object.keys(SNAPSHOT).forEach(function (p) {
     try {
       if (fs.readFileSync(p, "utf8") !== SNAPSHOT[p]) fs.writeFileSync(p, SNAPSHOT[p], "utf8");
     } catch (e) { /* non bloccare il banco per un file */ }
   });
+  elencaStato().forEach(function (p) {
+    if (SNAPSHOT[p] !== undefined) return;
+    try { fs.unlinkSync(p); } catch (e) { /* idem */ }
+  });
 }
 
-process.on("exit", ripristinaStato);
+// Alla fine lo stato dell'utente torna esattamente come era.
+function rimettiAccantonato() {
+  ripristinaStato();
+  Object.keys(ACCANTONATO).forEach(function (p) {
+    try { fs.writeFileSync(p, ACCANTONATO[p], "utf8"); } catch (e) { /* idem */ }
+  });
+}
+
+process.on("exit", rimettiAccantonato);
+
+var de = require("../engine/diagnosticEngine");
+var componenti = require("../knowledge/components.json").items;
+var corpus = require("../rocco_v2/neural/casi_reali_forum.js");
+var orch = require("../rocco_v2/orchestrator");
+var v2memory = require("../rocco_v2/memory");
+
+var casi = corpus.CASI_FORUM.filter(function (c) { return c.lingua === "it"; });
+
 
 // ── Linee di base misurate (2026-10-10) ───────────────────────────────
 var BASELINE = {
@@ -122,8 +177,12 @@ var BASELINE = {
   // una prova che ROCCO si era scritto da sé. `causa_vera_attiva` resta 16:
   // l'ipotesi giusta ROCCO continua a formularla, non la mette più davanti
   // per una prova inventata.
-  causa_vera_stampata:        { valore: 15, verso: "max" },   // su 21
-  causa_vera_attiva:          { valore: 16, verso: "max" },
+  // ALZATE 15 → 16 e 16 → 18 il 2026-10-11, **senza toccare il motore**:
+  // da questa data il banco misura dallo stato DICHIARATO e non da quello
+  // che la macchina ha accumulato (vedi sopra). I numeri di prima erano
+  // quelli di un motore zavorrato dai propri pesi.
+  causa_vera_stampata:        { valore: 16, verso: "max" },   // su 21
+  causa_vera_attiva:          { valore: 18, verso: "max" },
   rumore_fuori_contesto:      { valore: 0,  verso: "min" },
   conferme_senza_misura:      { valore: 0,  verso: "min" },   // certezze regalate
   casi_conclusi_con_misura:   { valore: 9,  verso: "max" },   // su 13 casi che prescrivono una misura
@@ -488,6 +547,15 @@ catena.then(function () {
   console.log("\n    È il numero che limita tutto il resto: ogni soglia e ogni");
   console.log("    regola di linguaggio è tarata su questi casi. Il modo di");
   console.log("    migliorare ROCCO è farlo crescere, non aggiungere regole.");
+
+  console.log("\nUNA DOMANDA APERTA — l'apprendimento costa");
+  console.log("    Questa pagella parte dallo stato DICHIARATO: il seed di");
+  console.log("    conoscenza, senza i pesi accumulati. Misurato l'11/10 sulla");
+  console.log("    stessa corsa, con lo stato accumulato in repo: causa vera");
+  console.log("    stampata 15/21 e attiva 16/21 — cioè un caso stampato e due");
+  console.log("    attivi IN MENO. Il \"ha visto\" sta sottraendo, non aggiungendo.");
+  console.log("    Non è stato toccato: capire perché è un lavoro a sé, e va");
+  console.log("    fatto prima di dare più peso ai punteggi appresi.");
 
   if (note.length) {
     console.log("\nNOTE SUL METRO (" + note.length + ") — non sono difetti di ROCCO");

@@ -4,16 +4,22 @@ var contracts = require("./contracts");
 var calcTool = require("./tools/calc_tool");
 var visionTool = require("./tools/vision_tool");
 var recognitionTool = require("./tools/recognition_tool");
-var closedCasesTool = require("./tools/closed_cases_tool");
-var knowledgeLookupTool = require("./tools/knowledge_lookup_tool");
 
+// Qui erano registrati anche `closed_cases_tool` e `knowledge_lookup_tool`.
+// Ritirati: `decideToolNeeded()` nell'orchestratore può restituire soltanto
+// vision/calc/recognition, quindi quei due non venivano **mai** selezionati —
+// li invocava solo il loop legacy, attraverso `planner.js`.
+//
+// Non è conoscenza persa, sono doppie strade: i casi chiusi entrano nel
+// ragionamento da `ragionaPerAnalogia()` (che li legge dalla stessa memoria,
+// `rocco_v2/memory.js`) e la knowledge base locale da `ragionaDaKnowledge()`.
+// Uno strumento registrato e non raggiungibile è peggio di nessuno
+// strumento: fa credere che una capacità ci sia.
 function createRegistry() {
   var tools = {
     calc_tool: calcTool,
     vision_tool: visionTool,
-    recognition_tool: recognitionTool,
-    closed_cases_tool: closedCasesTool,
-    knowledge_lookup_tool: knowledgeLookupTool
+    recognition_tool: recognitionTool
   };
 
   return {
