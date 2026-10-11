@@ -230,15 +230,23 @@ var BASELINE = {
   causa_vera_attiva:          { valore: 19, verso: "max" },
   rumore_fuori_contesto:      { valore: 0,  verso: "min" },
   conferme_senza_misura:      { valore: 0,  verso: "min" },   // certezze regalate
-  casi_conclusi_con_misura:   { valore: 9,  verso: "max" },   // su 13 casi che prescrivono una misura
+  // ALZATA 9 → 10 l'11/10 sera: una previsione non elimina più una causa.
+  // Il controfattuale mette `unlikely` — penalizzazione piena, l'ipotesi
+  // finisce in fondo al comparatore — ma un blocco dopo `killImpossible`
+  // promuoveva quella penalizzazione a `rejected`. Solo un'evidenza reale
+  // esclude: una previsione ordina.
+  casi_conclusi_con_misura:   { valore: 10, verso: "max" },   // su 13 casi che prescrivono una misura
   conferme_sbagliate:         { valore: 0,  verso: "min" },   // causa vera NON fra le confermate
   contesto_perso_multi_turn:  { valore: 0,  verso: "min" },
   // Apprendimento (misurato il 2026-10-11): il caso chiuso torna utile al
   // caso successivo. Su 21 casi, 3 si fermano per sicurezza prima di
   // ragionare e 1 vede il precedente escluso da una regola del motore:
   // i 17 restanti sono il massimo raggiungibile su questo corpus.
-  esperienza_riusata:         { valore: 17, verso: "max" },   // il precedente è fra le stampate
-  esperienza_in_testa:        { valore: 17, verso: "max" },   // ed è la prima
+  // ALZATE 17 → 18: il controfattuale non uccide più nemmeno il precedente
+  // di un caso chiuso. La nota "1 precedente escluso da una regola" è
+  // sparita da sé.
+  esperienza_riusata:         { valore: 18, verso: "max" },   // il precedente è fra le stampate
+  esperienza_in_testa:        { valore: 18, verso: "max" },   // ed è la prima
   esperienza_persa:           { valore: 0,  verso: "min" },   // salvata e non ritrovata
   // Esame completo sui 48 casi, 8 lingue — misurate il 2026-10-11, con
   // il corpus ormai usato SOLO come esame.

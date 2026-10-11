@@ -362,8 +362,26 @@ var FENOMENI = [
         catena: ["Carichi concentrati su una fase → I_neutro alta", "Neutro sovraccaricato → surriscaldamento"],
         conferma: ["misura correnti sulle 3 fasi e sul neutro", "una fase assorbe molto piu delle altre"],
         esclude: ["correnti bilanciate e neutro sotto carico nominale"] },
-      { causa: "Neutro interrotto in sistema trifase",
-        catena: ["Senza neutro le tensioni monofasi fluttuano", "Carichi leggeri vedono sovratensione, carichi pesanti vedono sottotensione", "Molto pericoloso per gli apparecchi collegati"],
+      // Si chiamava "Neutro interrotto in sistema **trifase**", e quella
+      // parola la faceva escludere da KR-11 su ogni impianto civile
+      // monofase — che è esattamente dove il guasto si manifesta.
+      //
+      // Un neutro interrotto nasce quasi sempre **a monte**, nella rete del
+      // distributore, che è trifase; la casa che ne subisce le conseguenze è
+      // monofase. La catena qui sotto lo dice già: carichi leggeri in
+      // sovratensione, carichi pesanti in sottotensione. È il racconto
+      // parola per parola di FORUM-SPEC-004 — "dopo che l'ENEL ha fatto i
+      // lavori sul palo la lavatrice ha smesso di funzionare e il
+      // frigorifero fa un rumore strano, le luci funzionano" — dove la
+      // causa reale è il neutro interrotto dal distributore.
+      //
+      // La conoscenza era giusta: sbagliava il nome. Restringere l'etichetta
+      // al trifase faceva buttare l'ipotesi proprio nei casi domestici, ed è
+      // il motivo per cui la correzione sta qui e non in una guardia
+      // aggiunta a KR-11: la regola fa il suo lavoro, era l'etichetta a
+      // mentire sull'ambito.
+      { causa: "Neutro interrotto nella rete di alimentazione",
+        catena: ["Senza neutro le tensioni monofasi fluttuano", "Carichi leggeri vedono sovratensione, carichi pesanti vedono sottotensione", "Molto pericoloso per gli apparecchi collegati", "Il guasto è spesso a monte del contatore: lavori del distributore, giunzione sul palo, morsettiera del montante"],
         conferma: ["tensioni monofasi anomale (alcune alte, alcune basse)", "continuita neutro assente"],
         esclude: ["tensioni monofasi normali (230V ±10%) e neutro integro"] }
     ]
@@ -1229,6 +1247,24 @@ function buildEvidenceContext(cs) {
     extractUserExclusions(cs.problem_summary)
   ].join(" "));
 
+  // Le prove, una per una e non appiattite.
+  //
+  // `text` è il sacco: tutte le prove in un'unica stringa. Serve alle regole
+  // che cercano un segnale singolo, e va bene. Ma un **test escludente** è
+  // una frase che descrive un'osservazione — "correnti bilanciate e neutro
+  // sotto carico nominale" — e cercarne le parole nel sacco significa
+  // dichiarare fatta un'osservazione assemblata da pezzi diversi.
+  // Un'osservazione è dichiarata in **una** frase, non ricomposta.
+  var righe = [];
+  arr(cs.facts_confirmed).concat(arr(cs.facts_uncertain), arr(cs.visual_findings))
+    .forEach(function(f) { var t = normalize(s(f)); if (t) righe.push(t); });
+  arr(cs.measurements).forEach(function(m) {
+    var t = normalize(typeof m === "string" ? m : (s(m && m.raw) || s(m && m.value) + s(m && m.unit)));
+    if (t) righe.push(t);
+  });
+  normalize(extractUserExclusions(cs.problem_summary)).split(/\s*\|\s*|\. /)
+    .forEach(function(f) { var t = s(f).trim(); if (t) righe.push(t); });
+
   var story = normalize([
     s(cs.problem_summary),
     arr(cs.facts_confirmed).join(" "),
@@ -1237,6 +1273,7 @@ function buildEvidenceContext(cs) {
 
   return {
     text: text,
+    righe: righe,
     story: story,
     facts: facts,
     measures: measures,
@@ -1310,11 +1347,36 @@ function killImpossible(cs) {
 
     // Deny tests soddisfatti
     if (h.status !== "rejected") {
+      // Un test escludente va trovato in UNA frase di prova, non nel sacco.
+      //
+      // Qui si cercavano le parole del test in `ctx.text`, che è tutte le
+      // prove appiattite in un'unica stringa, e bastava il **60%**: per
+      // "correnti bilanciate e neutro sotto carico nominale" significava
+      // quattro parole su sei — e "correnti", "neutro", "carico",
+      // "nominale" compaiono sparse in qualunque testo elettrico. Nessuno
+      // aveva osservato correnti bilanciate: le parole si erano incontrate
+      // per caso.
+      //
+      // Misurato su FORUM-SPEC-004 ("dopo i lavori dell'ENEL sul palo la
+      // lavatrice è morta e il frigo fa rumore, le luci funzionano", causa
+      // reale: **neutro interrotto dal distributore**): ROCCO escludeva
+      // "distribuzione carichi sbilanciata tra fasi" per un test sul
+      // neutro che nessuno aveva eseguito — e il neutro era il colpevole.
+      // Una condizione che il guasto stesso falsa non può escludere il
+      // guasto.
+      //
+      // È la stessa disciplina di `hypothesisClaim` e delle esclusioni
+      // dichiarate dall'utente: il match va preteso dove la frase
+      // **afferma**, non dove le parole si trovano insieme.
       h.deny_tests.forEach(function(test) {
         if (h.status === "rejected") return;
         var tw = normalize(test).split(" ").filter(function(w) { return w.length > 4; });
         var hits = 0;
-        tw.forEach(function(w) { if (ctx.text.indexOf(w) >= 0) hits++; });
+        arr(ctx.righe).forEach(function(riga) {
+          var n = 0;
+          tw.forEach(function(w) { if (riga.indexOf(w) >= 0) n++; });
+          if (n > hits) hits = n;
+        });
         if (tw.length > 0 && hits >= Math.ceil(tw.length * 0.6)) {
           if (activeCount() <= 1) {
             runtimeTrace.record(cs, "kill_skipped", { label: h.label, reason: "ultima ipotesi attiva" });
@@ -2543,15 +2605,42 @@ function createOrchestrator(options) {
       }
 
       // ═══ 6. DISCRIMINARE — eliminare l'impossibile ═══
+      //
+      // Solo un'evidenza reale esclude una causa. Una previsione la ordina.
+      //
+      // Qui c'era, subito dopo `killImpossible`:
+      //
+      //     cs.hypotheses.forEach(function(h) {
+      //       if (h.confidence === "unlikely" && h.status === "active") {
+      //         h.status = "rejected";
+      //         h.rejection_reason = "Controfattuale: le previsioni non
+      //           corrispondono ai fatti";
+      //       }
+      //     });
+      //
+      // Il controfattuale è un **simulatore**: dice "se questa causa fosse
+      // vera dovrei osservare X", e quando X non si osserva mette
+      // `confidence = "unlikely"`. Giusto — ed è già una penalizzazione
+      // piena, perché `CONFIDENCE_RANK.unlikely` è 0 e nel comparatore
+      // l'ipotesi finisce in fondo. Questo blocco però **promuoveva la
+      // penalizzazione a esclusione**: una previsione che elimina una causa.
+      //
+      // Misurato sui 21 casi italiani, gruppo G2 — causa vera persa durante
+      // il ragionamento: su 3 casi la causa reale finiva `rejected`, e in
+      // **due** (FORUM-IT-006, FORUM-IT-012) la ragione era esattamente
+      // questa riga. Su FORUM-IT-012 ROCCO buttava "dispersione verso terra
+      // su carico o cavo sempre presente" — la causa vera — perché una
+      // previsione non combaciava con un racconto che non conteneva ancora
+      // nessuna misura.
+      //
+      // È lo stesso errore di categoria dell'auto-conferma, visto
+      // dall'altro lato: là una previsione **confermava**, qui
+      // **escludeva**. Solo una misura, o un fatto che l'utente dichiara di
+      // aver osservato, fa l'una e l'altra cosa.
+      //
+      // Resta `killImpossible`, che esclude per impossibilità fisica
+      // leggendo le **prove**: misure e fatti dichiarati, non previsioni.
       killImpossible(cs);
-      // Elimina anche le "unlikely" dal controfattuale
-      cs.hypotheses.forEach(function(h) {
-        if (h.confidence === "unlikely" && h.status === "active") {
-          h.status = "rejected";
-          h.rejection_reason = "Controfattuale: le previsioni non corrispondono ai fatti";
-          runtimeTrace.record(cs, "hypothesis_killed_cf", { label: h.label });
-        }
-      });
       var alive = cs.hypotheses.filter(function(h) { return h.status === "active"; }).length;
       runtimeTrace.record(cs, "kill", { active: alive, killed: cs.hypotheses.length - alive });
 
