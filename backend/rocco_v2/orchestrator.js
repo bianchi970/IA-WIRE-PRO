@@ -1576,7 +1576,13 @@ function buildAIPrompt(cs) {
   if (rejected.length) {
     parts.push("IPOTESI GIA ESCLUSE: " + rejected.map(function(h) { return h.label + " (" + (h.rejection_reason || "") + ")"; }).join("; "));
   }
-  // M2: arricchimento dal neural
+  // M2: arricchimento dal neural.
+  // La novità si calcola qui, dove è l'unico posto che la legge — prima
+  // girava su ogni diagnosi anche quando l'IA non veniva consultata.
+  if (!cs.neural_novelty && neuralIntegration && neuralIntegration.detectNovelty) {
+    try { cs.neural_novelty = neuralIntegration.detectNovelty(null, cs); }
+    catch (e) { /* neural graceful degradation */ }
+  }
   if (cs.neural_novelty && cs.neural_novelty.novel) {
     parts.push("ATTENZIONE: caso NUOVO — nessun precedente simile. Ragiona dai primi principi.");
   } else if (cs.neural_novelty && cs.neural_novelty.closest_known) {
@@ -2120,15 +2126,18 @@ function createOrchestrator(options) {
       temporale: percezione.condizione_temporale
     });
 
-    // ═══ 2b. NEURAL — rilevamento novità ═══
-    try {
-      if (neuralIntegration) {
-        cs.neural_novelty = neuralIntegration.detectNovelty(percezione, cs);
-        if (cs.neural_novelty.novel) {
-          runtimeTrace.record(cs, "neural_novelty", { score: cs.neural_novelty.novelty_score, closest: cs.neural_novelty.closest_known });
-        }
-      }
-    } catch(e) { /* neural graceful degradation */ }
+    // La novità si calcola dove serve, non a ogni diagnosi.
+    //
+    // `detectNovelty` girava qui, su **ogni** caso: costruisce l'embedding
+    // della frase e lo confronta con tutti i nodi del grafo. L'unico lettore
+    // di `cs.neural_novelty` è `buildAIPrompt()` — serve a dire al modello
+    // "caso nuovo, ragiona dai primi principi" oppure "caso simile noto: X".
+    // Da quando l'IA si consulta solo se ROCCO non ha nessuna ipotesi, quel
+    // prompt non si costruisce quasi mai: il calcolo era lavoro per niente.
+    //
+    // Ora lo fa `buildAIPrompt` quando serve. Resta in `evidence_meta`
+    // (null se l'IA non è stata consultata), ed è giusto così: dice che non
+    // c'è stato bisogno di chiedere.
 
     // ═══ 3. SICUREZZA ═══
     return safetyGuard.run(inp).then(function(out) {
@@ -2443,15 +2452,16 @@ function createOrchestrator(options) {
           if (h.confirm_tests.indexOf(v) < 0) h.confirm_tests.push(v);
         });
 
-        // Neural: arricchisci il controfattuale con world model
-        try {
-          if (neuralIntegration && neuralIntegration.enhanceCounterfactual) {
-            var ncf = neuralIntegration.enhanceCounterfactual(h, cf, cs);
-            if (ncf && ncf.neural_predictions) {
-              h.neural_cf = ncf.neural_predictions;
-            }
-          }
-        } catch(e) { /* enhanceCounterfactual graceful degradation */ }
+        // Qui si chiamava `neuralIntegration.enhanceCounterfactual(h, cf, cs)`
+        // e il risultato finiva in `h.neural_cf`. **Nessuno leggeva quel
+        // campo**: né il comparatore, né le regole, né la bozza, né il
+        // narratore, né la risposta API. Previsioni neurali del
+        // controfattuale calcolate per ogni ipotesi di ogni diagnosi e
+        // buttate — è il difetto ricorrente di questo codice, e stava in
+        // elenco fra gli aperti da ieri.
+        //
+        // Misurato spegnendolo: nessuna differenza su nessuna metrica.
+        // Se un giorno serve, va ricollegato a un lettore, non riacceso.
       });
 
       if (cs.controfattuale_risultati.length > 0) {
