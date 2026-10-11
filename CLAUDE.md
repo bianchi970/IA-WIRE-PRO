@@ -884,6 +884,103 @@ questa correzione, e non si vedeva dai numeri.
 sottrae invece di aggiungere. Va capito **prima** di dare più peso ai
 punteggi appresi.
 
+### G1 — i casi chiudibili, e quelli che il corpus non può chiudere
+
+Cinque casi italiani avevano la causa vera **fra le ipotesi attive** e non si
+chiudevano. Prima di toccare una soglia, la domanda giusta era una sola: con
+i dati già presenti nel corpus esiste una prova reale sufficiente per
+chiudere la causa **senza inventare informazioni**?
+
+| caso | prova prescritta dal corpus | verdetto |
+|---|---|---|
+| FORUM-IT-003 | continuità del cavo dalla cassetta alla presa | **chiudibile** — limite di ROCCO |
+| FORUM-IT-006 | corrente con la pinza amperometrica | **chiudibile** — limite di ROCCO |
+| FORUM-SPEC-004 | tensione fase-neutro e fase-terra | **chiudibile** — limite di ROCCO |
+| FORUM-IT-012 | pinza in mA **su ogni linea** + sostituzione RCD | **non chiudibile col corpus** |
+| FORUM-IT-016 | dispersione **bagnato vs asciutto** + tipo di RCD a targa | **solo con verifica manuale** |
+
+Gli ultimi due non sono stati toccati, ed è il punto del blocco: il dato
+decisivo è un **confronto** (fra linee, fra condizioni) o una **targa da
+leggere**, non una misura singola. Una lettura globale di 28 mA accerta al più
+una dispersione diffusa vicina alla soglia: non dice che la somma venga dai
+filtri EMI, né che il differenziale sia obsoleto. Sono dichiarati in
+`CORPUS_NON_CHIUDIBILE` nel banco, e `chiusure_non_dovute` diventa rossa se
+ROCCO li chiude: **ROCCO non deve diventare più sicuro, deve diventare più
+corretto.** Dato sufficiente → può concludere; dato insufficiente → deve
+restare aperto. Quei due casi tornano chiudibili quando il corpus guadagna
+l'esito della verifica manuale, non quando una regola si allarga.
+
+**Tre limiti di ROCCO, tutti "dato presente e mai letto".**
+
+1. **Una previsione annullava una misura.** Il blocco G2 aveva chiuso la
+   strada del veto (`unlikely → rejected`), ma il controfattuale ne aveva una
+   seconda, silenziosa: scriveva in `contradicting_evidence`, e
+   `verifyConclusion` pretende quel campo vuoto per accettare una conferma.
+   Su FORUM-IT-006, con 19 A letti alla pinza, CF-05 confermava la causa vera
+   — **in testa, `confirmed`, da una misura strumentale** — e il referto
+   diceva *"21 ipotesi possibili. Serve verifica discriminante"*. Il peso si
+   abbassa comunque (`confidence` → `unlikely`, che il comparatore legge), e
+   la frase resta nella catena perché l'utente legga il dissenso.
+   `contradicting_evidence` torna a significare quello che dichiara: un fatto
+   **osservato** che contraddice l'ipotesi.
+
+2. **CF-06 — la tensione fuori tolleranza.** La banda 207–253 V (230 V ±10%,
+   CEI 64-8/1 con la tolleranza di CEI EN 50160) era in `limiti.js` e il
+   motore derivava già `voltage_anomaly` **a 0.95 da una misura vera**:
+   nessuno leggeva né l'una né l'altro. L'unica regola sulla tensione era
+   CF-04, che guarda i 50 V — la tensione *assente*, che è un'altra cosa.
+   198 V non è assente: è sbagliata.
+   **Conferma solo quello che la misura prova**: l'alimentazione è anomala,
+   non che il neutro sia interrotto (quello lo direbbe lo squilibrio fra le
+   fasi, ed è perché il caso prescrive fase-neutro *e* fase-terra). La prima
+   versione includeva `rete.*instabil` e ROCCO chiudeva nominando *"rete
+   instabile con micro-interruzioni, zona rurale"* — una storia che 198 V
+   stabili non dimostrano. Una misura conferma il fenomeno che misura, non la
+   narrazione che lo spiega.
+
+3. **CF-07 — la prova di continuità è un esito, non un numero.**
+   `extractedValues` estrae valori: dove l'elettricista riferisce l'esito di
+   una prova senza una cifra (*"il buzzer non suona"*), nel seme non arrivava
+   niente — `measurements` restava vuoto su un caso che prescrive proprio
+   quella verifica. `safety_guard.letturePerEsito()` registra la lettura
+   **senza inventare un valore**: scrivere "0 Ω" direbbe l'opposto di quello
+   che l'utente ha letto (continuità assente = resistenza alta).
+   Sta in `safety_guard` e non in `tools/recognition_tool.js` per l'ordine
+   dei passi: il riconoscitore gira al passo `tool`, **dopo** le regole — una
+   misura che arriva lì non viene letta da nessuna regola in quel giro.
+   E si registra **solo l'esito negativo**, che ha un lettore: la continuità
+   presente, che nessuna regola legge, sarebbe un altro dato calcolato e mai
+   letto.
+
+**Il metro era inflazionato di uno.** `casi_conclusi_con_misura` contava i
+casi in cui *un'ipotesi attiva* risultava `confirmed`, non quello che
+l'elettricista legge: IT-006 era contato come chiuso mentre la risposta
+chiedeva ancora una verifica. Ora conta `final_confidence`, **meno gli
+arresti di sicurezza**, dove `confirmed` vuol dire «il pericolo è certo» e
+non «il guasto è diagnosticato» (FORUM-SPEC-003 — un campo con due mestieri).
+Misurati i tre metri: ipotesi confermata 11, referto 12, referto senza
+arresti 11 — e i due estremi ora coincidono **caso per caso**, cosa che prima
+del punto 1 non era vera.
+
+**I 14 casi italiani che prescrivono una misura, per esteso:** 11 chiusi con
+la causa giusta, 1 metro cieco (IT-010), 1 arresto di sicurezza (SPEC-003), 2
+che il corpus non può chiudere. **Il massimo realistico senza barare è 12 su
+14** — e per alzarlo si fa crescere il corpus, non si allarga una regola.
+
+| metrica | prima | dopo |
+|---|---|---|
+| casi conclusi con la misura | 10 (metro gonfio) | **11** (metro onesto) |
+| conferme sbagliate | 0 | 0 |
+| chiusure non dovute | — | **0** (nuova) |
+| causa vera stampata / attiva | 18 / 19 | 18 / 19 |
+| esame it causa corretta | 18/21 | 18/21 |
+| esame verifica proposta | 48/48 | 48/48 |
+
+Test: `confirm_rules.test.js` — 74 asserzioni (era 53), con §6c, §6d e §6e.
+§6e contiene **due** prove opposte: una conferma per misura sopravvive al
+dissenso del controfattuale, e un fatto osservato contrario la blocca ancora.
+Verificato che va rossa rimettendo a mano la riga del veto.
+
 ### Il percorso inverso — come trovare i dati che si fermano
 Il difetto che si ripete in questo codice è **dato calcolato e mai letto**
 (trovato tredici volte). Il modo più efficace di cercarlo è partire dalla

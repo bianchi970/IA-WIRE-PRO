@@ -349,6 +349,152 @@ csProve.hypotheses[1].probabilita = 0.9;
 orchestrator.verifyConclusion(csProve);
 check("fra due confermate decide la probabilità", /più probabile/.test(csProve.final_diagnosis));
 
+// ─── §6c CF-06: la tensione fuori tolleranza, non solo quella assente ──
+//
+// La banda 207–253 V (230 V ±10%, CEI 64-8/1 con la tolleranza di CEI EN
+// 50160) era dichiarata in `limiti.js` e il motore derivava già
+// `voltage_anomaly` a 0.95 da una misura vera: nessuno leggeva né l'una né
+// l'altro. L'unica regola sulla tensione era CF-04, che guarda i 50 V —
+// cioè la tensione *assente*, che è un'altra cosa.
+console.log("\n§6c — CF-06 tensione fuori tolleranza");
+
+var csV198 = makeCase({
+  message: "dopo i lavori del distributore la lavatrice non parte e il frigo fa rumore",
+  hypotheses: [
+    { label: "Anomalia alimentazione o problema di neutro/riferimento" },
+    { label: "Carico guasto internamente" }
+  ],
+  measurements: [{ type: "tensione", value: 198, unit: "V", raw: "198 v" }]
+});
+orchestrator.applyConfirmRules(csV198);
+eq("198 V conferma l'anomalia di alimentazione", csV198.hypotheses[0].confidence, "confirmed");
+check("la prova cita CF-06", /CF-06/.test(csV198.hypotheses[0].supporting_evidence.join(" ")));
+eq("non conferma il carico guasto", csV198.hypotheses[1].confidence, "possible");
+
+// 230 V è la rete sana: non conferma niente.
+var csV230 = makeCase({
+  hypotheses: [{ label: "Anomalia alimentazione o problema di neutro/riferimento" }],
+  measurements: [{ type: "tensione", value: 230, unit: "V", raw: "230 v" }]
+});
+orchestrator.applyConfirmRules(csV230);
+eq("230 V non conferma nessuna anomalia", csV230.hypotheses[0].confidence, "possible");
+
+// Sotto i 50 V è il territorio di CF-04, col suo contesto sulle protezioni
+// scattate: CF-06 non deve entrarci.
+var csV0 = makeCase({
+  hypotheses: [{ label: "Anomalia alimentazione o problema di neutro/riferimento" }],
+  measurements: [{ type: "tensione", value: 0, unit: "V", raw: "0 v" }]
+});
+orchestrator.applyConfirmRules(csV0);
+eq("0 V non è 'alimentazione anomala': è assente, e la governa CF-04",
+  csV0.hypotheses[0].confidence, "possible");
+
+// Il confine che conta: una tensione bassa NON prova il racconto che una
+// certa ipotesi fa sul perché. Prima versione di CF-06: `confirms` includeva
+// `rete.*instabil`, e su FORUM-SPEC-004 ROCCO chiudeva nominando "Rete
+// instabile con frequenti micro-interruzioni: zona rurale o cantiere con
+// generatore mal regolato" — una storia che 198 V stabili non dimostrano.
+// Una misura conferma il fenomeno che misura, non la narrazione che lo
+// spiega.
+var csRurale = makeCase({
+  hypotheses: [{ label: "Rete instabile con frequenti micro-interruzioni: zona rurale o cantiere con generatore mal regolato" }],
+  measurements: [{ type: "tensione", value: 198, unit: "V", raw: "198 v" }]
+});
+orchestrator.applyConfirmRules(csRurale);
+eq("198 V non confermano le micro-interruzioni in zona rurale",
+  csRurale.hypotheses[0].confidence, "possible");
+
+// ─── §6d CF-07: la prova di continuità è un esito, non un numero ───────
+//
+// Il corpus prescrive su FORUM-IT-003 "misura continuità del cavo dalla
+// cassetta alla presa": l'elettricista risponde "il buzzer non suona", e il
+// dato si fermava alla percezione. `safety_guard.letturePerEsito()` lo
+// registra fra le misure **senza inventare un valore** — scrivere "0 Ω"
+// direbbe il contrario di quello che l'utente ha letto.
+console.log("\n§6d — CF-07 continuità assente");
+
+var safetyGuard = require("../../safety_guard");
+var letture = safetyGuard.letturePerEsito(
+  "Ho fatto la prova di continuita col tester in buzzer: nessuna continuita sul cavo.");
+eq("la lettura senza numero viene riconosciuta", letture.length, 1);
+eq("è una continuità", letture[0] && letture[0].type, "continuita");
+eq("e non porta un valore numerico inventato", letture[0] && letture[0].value, "assente");
+check("il raw è leggibile fra le prove", /continuit/.test(letture[0] && letture[0].raw));
+eq("una frase senza esito non produce letture",
+  safetyGuard.letturePerEsito("devo fare la prova di continuita, come si fa?").length, 0);
+eq("la continuità PRESENTE non viene registrata: nessuna regola la legge",
+  safetyGuard.letturePerEsito("ho continuita sul cavo, il buzzer suona").length, 0);
+
+var csCont = makeCase({
+  message: "ho forato il muro e la presa del soggiorno non va, le altre vanno",
+  hypotheses: [
+    { label: "conduttore interrotto" },
+    { label: "Lampada/carico bruciato" }
+  ],
+  measurements: letture
+});
+orchestrator.applyConfirmRules(csCont);
+eq("nessuna continuità conferma il conduttore interrotto",
+  csCont.hypotheses[0].confidence, "confirmed");
+check("la prova cita CF-07", /CF-07/.test(csCont.hypotheses[0].supporting_evidence.join(" ")));
+eq("non conferma la lampada bruciata", csCont.hypotheses[1].confidence, "possible");
+
+// La misura qualitativa non inquina `measures`, che serve alle soglie.
+var ctxCont = orchestrator.buildEvidenceContext(csCont);
+eq("measure('continuita') resta null: non c'è un numero",
+  ctxCont.measure("continuita"), null);
+
+// ─── §6e Una previsione non annulla una misura ─────────────────────────
+//
+// La regola della gerarchia delle evidenze, nella sua forma più stretta:
+// **solo un'evidenza reale può escludere una causa; una previsione può solo
+// abbassarne il peso.** Il controfattuale aveva due strade per il veto. La
+// prima — promuovere a `rejected` — è stata chiusa nel blocco G2. La seconda
+// era silenziosa: scriveva in `contradicting_evidence`, e `verifyConclusion`
+// pretende quel campo vuoto per accettare una conferma.
+//
+// Misurato su FORUM-IT-006 (il condizionatore che fa scattare il
+// magnetotermico dopo dieci minuti): con la pinza a 19 A la causa vera era
+// `confirmed` **in testa, da una misura strumentale**, e il referto diceva
+// "21 ipotesi possibili. Serve verifica discriminante".
+console.log("\n§6e — il controfattuale ordina, non annulla");
+
+var sorgente = require("fs").readFileSync(require("path").join(__dirname, "..", "..", "orchestrator.js"), "utf8");
+check("nessuno scrive più in contradicting_evidence dal controfattuale",
+  sorgente.indexOf("contradicting_evidence.push") < 0);
+
+// E la proprietà, non solo l'assenza della riga: una conferma per misura
+// sopravvive a una contraddizione che non sia un fatto osservato.
+var csPrev = makeCase({
+  message: "il condizionatore fa scattare il magnetotermico dopo dieci minuti",
+  hypotheses: [{
+    label: "sovraccarico: corrente assorbita superiore a In",
+    confidence: "confirmed",
+    supporting_evidence: ["CF-05: corrente oltre il riferimento di calibro"]
+  }],
+  measurements: [{ type: "corrente", value: 19, unit: "A", raw: "19 a" }]
+});
+csPrev.hypotheses[0].catena = ["Controfattuale: previsioni contraddicono i fatti (2 contraddizioni)"];
+orchestrator.verifyConclusion(csPrev);
+eq("il caso si chiude nonostante il dissenso del controfattuale",
+  csPrev.final_confidence, "confirmed");
+
+// Il simmetrico, che deve restare vero: un fatto OSSERVATO che contraddice
+// l'ipotesi blocca ancora la conferma. Il campo non ha perso il suo mestiere.
+var csContro = makeCase({
+  message: "il condizionatore fa scattare il magnetotermico dopo dieci minuti",
+  hypotheses: [{
+    label: "sovraccarico: corrente assorbita superiore a In",
+    confidence: "confirmed",
+    supporting_evidence: ["CF-05: corrente oltre il riferimento di calibro"],
+    contradicting_evidence: ["Misurata la corrente a carico pieno: 6 A"]
+  }],
+  measurements: [{ type: "corrente", value: 19, unit: "A", raw: "19 a" }]
+});
+orchestrator.verifyConclusion(csContro);
+check("un fatto osservato contrario blocca ancora la conferma",
+  csContro.final_confidence !== "confirmed");
+
 // ─── §7 Idempotenza ───────────────────────────────────────────────────
 console.log("\n§7 — idempotenza");
 var csIdem = makeCase({

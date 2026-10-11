@@ -235,7 +235,32 @@ var BASELINE = {
   // finisce in fondo al comparatore — ma un blocco dopo `killImpossible`
   // promuoveva quella penalizzazione a `rejected`. Solo un'evidenza reale
   // esclude: una previsione ordina.
-  casi_conclusi_con_misura:   { valore: 10, verso: "max" },   // su 13 casi che prescrivono una misura
+  // ALZATA il 2026-10-11 notte: 10 → 11, **e il metro è cambiato**.
+  //
+  // Contava i casi in cui *un'ipotesi attiva* risultava `confirmed`. Non è
+  // quello che l'elettricista legge: su FORUM-IT-006 la causa vera era
+  // confermata da una misura strumentale e la risposta diceva "21 ipotesi
+  // possibili. Serve verifica discriminante" — il banco lo contava come
+  // chiuso. Ora conta `final_confidence`, cioè il referto, **meno gli
+  // arresti di sicurezza**: lì "confermato" vuol dire «il pericolo è certo»,
+  // non «il guasto è diagnosticato» (FORUM-SPEC-003).
+  //
+  // Misurati i tre metri sui 14 casi italiani che prescrivono una misura:
+  // ipotesi confermata 11, referto confermato 12, referto senza arresti 11 —
+  // e i due metri estremi ora coincidono **caso per caso**. Coincidevano già
+  // prima? No: era proprio IT-006 a separarli, ed è il difetto corretto in
+  // questo blocco (il controfattuale non annulla più una misura).
+  //
+  // I 14 casi, per esteso: 11 chiusi con la causa giusta, 1 metro cieco
+  // (IT-010), 1 arresto di sicurezza (SPEC-003), 2 lasciati aperti perché il
+  // corpus non contiene il dato che li deciderebbe (vedi
+  // CORPUS_NON_CHIUDIBILE). Il massimo realistico senza barare è 12 su 14.
+  casi_conclusi_con_misura:   { valore: 11, verso: "max" },   // su 14 casi che prescrivono una misura
+  //
+  // Il simmetrico, e vale quanto l'altro: ROCCO non deve diventare più
+  // *sicuro*, deve diventare più *corretto*. Dove il dato decisivo non c'è,
+  // il caso deve restare aperto.
+  chiusure_non_dovute:        { valore: 0,  verso: "min" },
   conferme_sbagliate:         { valore: 0,  verso: "min" },   // causa vera NON fra le confermate
   contesto_perso_multi_turn:  { valore: 0,  verso: "min" },
   // Apprendimento (misurato il 2026-10-11): il caso chiuso torna utile al
@@ -309,6 +334,38 @@ var FANTASMA = {
 // Questi casi sono esclusi dal conteggio e **stampati come nota**: così una
 // conferma davvero fuori bersaglio resta visibile, invece di sparire in un
 // numero che nessuno guarda più perché è sempre rosso.
+// I casi che il corpus NON può chiudere, e perché.
+//
+// Verificati uno per uno il 2026-10-11 rispondendo a una sola domanda: con i
+// dati già presenti nel corpus esiste una prova reale sufficiente per
+// chiudere la causa senza inventare informazioni? Per questi due no — e il
+// limite è del corpus, non di ROCCO. Sono dichiarati qui perché la tentazione
+// di "sistemarli" allentando una soglia tornerà: `chiusure_non_dovute`
+// diventa rossa se ROCCO li chiude, che è esattamente il comportamento da
+// impedire.
+//
+// Se un giorno il corpus guadagna l'esito della verifica manuale ("ho
+// sostituito il differenziale con un tipo A e non scatta più"), questi casi
+// escono da qui e diventano chiudibili: è il corpus che va cresciuto, non la
+// regola che va allargata.
+var CORPUS_NON_CHIUDIBILE = {
+  "FORUM-IT-012":
+    "la causa è la dispersione CUMULATIVA di più apparecchi in standby: il " +
+    "corpus prescrive la pinza in mA **su ogni linea** (un confronto fra " +
+    "linee) e come seconda verifica la sostituzione del differenziale, che " +
+    "è un rimedio, non una prova. Un singolo valore globale di 28 mA " +
+    "accerta al più una dispersione diffusa vicina alla soglia: non dice " +
+    "che la somma venga dai filtri EMI né che il differenziale sia obsoleto.",
+  "FORUM-IT-016":
+    "la prova discriminante è DIFFERENZIALE nel tempo — dispersione con i " +
+    "pannelli bagnati contro asciutti — e il tipo di differenziale " +
+    "installato è un dato di targa che si legge, non si misura. Una sola " +
+    "lettura in una sola condizione non separa la dispersione capacitiva " +
+    "dei moduli bagnati da un guasto d'isolamento permanente. La " +
+    "correlazione con la pioggia e con l'inizio della produzione è nel " +
+    "racconto e giustifica un PROBABILE, non un confermato."
+};
+
 var METRO_CIECO = {
   "FORUM-IT-010": "conferma 'conduttore interrotto' = la mancanza di fase del caso, detta con altre parole"
 };
@@ -388,7 +445,7 @@ var m = {
   causa_vera_stampata: 0, causa_vera_attiva: 0,
   ipotesi_stampate: 0, rumore_fuori_contesto: 0,
   conferme_senza_misura: 0,
-  casi_conclusi_con_misura: 0, conferme_sbagliate: 0,
+  casi_conclusi_con_misura: 0, conferme_sbagliate: 0, chiusure_non_dovute: 0,
   contesto_perso_multi_turn: 0, casi_senza_misura_prescritta: 0,
   esperienza_riusata: 0, esperienza_in_testa: 0, esperienza_persa: 0,
   esperienza_senza_ragionamento: 0, esperienza_esclusa_da_regola: 0,
@@ -459,7 +516,19 @@ function secondoTurno(caso, rT1) {
     }
 
     var confermate = attive(cs).filter(function (h) { return h.confidence === "confirmed"; });
-    if (confermate.length) {
+
+    // Il referto, non il campo interno: vedi la nota sulla linea di base.
+    // L'arresto di sicurezza dichiara `confirmed` per il pericolo, non per
+    // la diagnosi, e non è un caso chiuso.
+    var chiuso = cs.final_confidence === "confirmed" && !cs.arresto_sicurezza;
+
+    if (CORPUS_NON_CHIUDIBILE[caso.id] && chiuso) {
+      m.chiusure_non_dovute++;
+      dettagli.push(caso.id + ": CHIUSO SENZA IL DATO DECISIVO — " +
+        CORPUS_NON_CHIUDIBILE[caso.id].slice(0, 90));
+    }
+
+    if (chiuso) {
       m.casi_conclusi_con_misura++;
       if (!confermate.some(function (h) { return coerente(h.label, caso.causa_reale); })) {
         if (METRO_CIECO[caso.id]) {
@@ -670,6 +739,10 @@ catena.then(function () {
   console.log("    2º turno, con la misura:  " + JSON.stringify(m.certezza_t2));
   ok = riga("casi_conclusi_con_misura", m.casi_conclusi_con_misura, casi.length) && ok;
   ok = riga("conferme_sbagliate", m.conferme_sbagliate) && ok;
+  ok = riga("chiusure_non_dovute", m.chiusure_non_dovute) && ok;
+  Object.keys(CORPUS_NON_CHIUDIBILE).forEach(function (id) {
+    console.log("    " + id + ": il corpus non contiene il dato decisivo — deve restare aperto");
+  });
 
   console.log("\nMULTI-TURN");
   ok = riga("contesto_perso_multi_turn", m.contesto_perso_multi_turn) && ok;

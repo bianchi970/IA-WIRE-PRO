@@ -1091,7 +1091,66 @@ var CONFIRM_RULES = [
   { id: "CF-05",
     fact: "high_current",
     confirms: /sovraccarico|carico.*eccessiv|sovracorrente/,
-    reason: "Corrente misurata oltre il riferimento di calibro: sovraccarico accertato" }
+    reason: "Corrente misurata oltre il riferimento di calibro: sovraccarico accertato" },
+
+  // Tensione FUORI TOLLERANZA: 230 V ±10% (CEI 64-8/1, tolleranza CEI EN
+  // 50160). Il numero non è nuovo: `limiti.intervallo("tensione_fase_neutro")`
+  // vale [207, 253] da quando le norme sono state messe in un posto solo, e
+  // il motore deriva già `voltage_anomaly` **a 0.95 da una misura vera**.
+  // Nessuno leggeva né l'uno né l'altro: l'unica regola sulla tensione era
+  // CF-04, che guarda la soglia dei 50 V, cioè la tensione *assente*. Una
+  // tensione di 198 V non è assente — è sbagliata, ed è un'altra cosa.
+  //
+  // Misurato su FORUM-SPEC-004 ("dopo che l'ENEL ha fatto i lavori sul palo
+  // la lavatrice ha smesso di funzionare e il frigorifero fa un rumore
+  // strano, le luci funzionano"): tredici ipotesi attive, **tutte
+  // `possible`, tutte con zero prove**, con 198 V fase-neutro già parsati e
+  // la frase "Tensione misurata fuori dal range 207-253V" già scritta fra i
+  // warning. Il caso prescrive esattamente questa misura, e il corpus
+  // prescrive anche la conseguenza: "chiamare il distributore se la tensione
+  // non è 230V ±10%".
+  //
+  // **Conferma solo quello che la misura prova.** Una tensione fuori
+  // tolleranza accerta che l'alimentazione è anomala; NON dice che il neutro
+  // sia interrotto — quello lo direbbe lo squilibrio fra le fasi, ed è per
+  // questo che il caso prescrive fase-neutro **e** fase-terra. Per lo stesso
+  // motivo `confirms` non nomina il neutro: accertato il fenomeno,
+  // `verifyConclusion` dichiara da sé che resta da localizzare.
+  { id: "CF-06",
+    when: function(ctx) {
+      var v = ctx.measure("tensione");
+      if (v === null) return false;
+      // Sotto i 50 V è tensione assente: la governa CF-04, con il suo
+      // contesto sulle protezioni scattate. Qui la rete c'è, ma è fuori
+      // tolleranza.
+      if (v < limiti.valore("tensione_contatto_limite")) return false;
+      var banda = limiti.intervallo("tensione_fase_neutro");
+      return v < banda[0] || v > banda[1];
+    },
+    confirms: /anomalia.*alimentazione|alimentazione.*anomal|tensione.*anomal|sovratension|sottotension|caduta.*tension/,
+    reason: "Tensione misurata fuori da " + limiti.etichetta("tensione_fase_neutro")
+      + ": alimentazione anomala accertata, origine da localizzare" },
+
+  // CONTINUITÀ ASSENTE su un conduttore: è una lettura strumentale, e il
+  // riferimento esiste già — `continuita_conduttore`, 1 Ω, CEI 64-8/6, letto
+  // fin qui soltanto da CF-03.
+  //
+  // Il segnale è una frase e non un numero perché la prova di continuità non
+  // produce un numero: produce un esito. Entra fra le `measurements` come
+  // lettura dichiarata (`recognition_tool`), **senza un valore inventato**.
+  //
+  // Misurato su FORUM-IT-003 ("ho forato il muro per appendere un quadro e
+  // adesso non funziona più la presa del soggiorno, le altre vanno", causa
+  // reale: **conduttore tranciato dal tassello**). Il caso prescrive "misura
+  // continuità del cavo dalla cassetta alla presa": la risposta arrivava,
+  // `measurements` restava **vuoto** e nessuna regola aveva un occhio per
+  // quella frase. Con le altre prese funzionanti, nessuna continuità sul
+  // cavo è la prova discriminante del caso.
+  { id: "CF-07",
+    signal: /continuita assente|nessuna continuita|non c e continuita|buzzer non suona/,
+    confirms: /conduttore.*interrott|cavo.*interrott|interruzione|connessione.*interrott|circuito.*apert/,
+    reason: "Prova di continuità negativa sul conduttore: interruzione accertata ("
+      + limiti.etichetta("continuita_conduttore") + " il riferimento del conduttore sano)" }
 ];
 
 var KILL_RULES = [
@@ -2559,12 +2618,35 @@ function createOrchestrator(options) {
           contradicting: cf.valutazione.contradicting
         });
 
-        // Se il controfattuale contraddice l'ipotesi → abbassa confidenza
+        // Se il controfattuale contraddice l'ipotesi → abbassa il PESO.
+        //
+        // La gerarchia delle evidenze: **solo un'evidenza reale può
+        // escludere una causa; una previsione può solo abbassarne il peso.**
+        // Nel blocco G2 è stata ritirata la promozione `unlikely →
+        // rejected`, ma il controfattuale aveva una **seconda strada** per lo
+        // stesso veto, più silenziosa: scriveva in `contradicting_evidence`,
+        // e `verifyConclusion` pretende quel campo vuoto per accettare una
+        // conferma. Una previsione annullava una misura.
+        //
+        // Misurato su FORUM-IT-006 (il condizionatore che fa scattare il
+        // magnetotermico dopo dieci minuti, causa reale: **sovraccarico**):
+        // con la pinza a 19 A, CF-05 confermava quattro ipotesi di
+        // sovraccarico — la causa vera **in testa, conf=confirmed, da una
+        // misura strumentale** — e la certezza finale restava
+        // `non_verifiable` perché il controfattuale aveva contato due
+        // previsioni discordanti. ROCCO aveva la prova in mano e chiedeva di
+        // rifare la misura.
+        //
+        // Il peso si abbassa comunque: `confidence` scende a `unlikely`, che
+        // il comparatore legge come CONFIDENCE_RANK, e la frase resta nella
+        // catena perché l'utente legga il dissenso. Non scende sotto una
+        // conferma per misura, per la stessa ragione.
+        // `contradicting_evidence` resta riservato a ciò che il campo
+        // dichiara: un fatto **osservato** che contraddice l'ipotesi.
         if (cf.valutazione.contradicting > cf.valutazione.matching && cf.valutazione.contradicting > 0) {
-          h.confidence = "unlikely";
-          var contro = "Controfattuale: previsioni contraddicono i fatti (" + cf.valutazione.contradicting + " contraddizioni)";
-          h.catena.push(contro);
-          h.contradicting_evidence.push(contro);
+          if (h.confidence !== "confirmed") h.confidence = "unlikely";
+          h.catena.push("Controfattuale: previsioni contraddicono i fatti ("
+            + cf.valutazione.contradicting + " contraddizioni)");
         }
         // Se il controfattuale conferma → alza confidenza
         else if (cf.valutazione.matching > 0 && cf.valutazione.contradicting === 0) {
