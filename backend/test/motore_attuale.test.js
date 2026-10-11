@@ -285,22 +285,23 @@ function testUnifiedOrchestrator() {
   });
 }
 
-// Rende deterministica la premessa dei due contratti sul ripiego: il
-// ripiego esiste solo se ROCCO consulta davvero il ragionatore, e quella
-// decisione la influenza il punteggio di novità del neurale — che cambia
-// con lo stato appreso sul disco. Misurato: con lo stato accumulato questi
-// due test passavano, con `data/neural/` vuota no. Passavano per fortuna.
-function neuraleCheChiedeAiuto() {
-  return {
-    shouldCallAI: function () { return { needed: true, reason: "premessa del test" }; }
-  };
-}
+// La premessa dei due contratti sul ripiego: il ripiego si prova solo se
+// ROCCO consulta davvero il ragionatore, e ROCCO lo consulta **solo** quando
+// non ha nessuna ipotesi propria — che su un messaggio tecnico non succede
+// quasi mai.
+//
+// `ROCCO_ALWAYS_REASONER=1` è il gemello dichiarato di `ROCCO_NO_PROVIDER=1`:
+// uno dice "mai", l'altro "sempre", e servono a misurare quanto l'IA
+// aggiunge. Qui serve come premessa, ed è una premessa **dichiarata**: prima
+// questi due test si appoggiavano a uno stub del livello neurale che
+// ribaltava la decisione, e prima ancora passavano per fortuna, perché il
+// punteggio di novità del neurale cambia con lo stato appreso sul disco.
+process.env.ROCCO_ALWAYS_REASONER = "1";
 
 function testFallbackMetadata() {
   var orchestrator = orchestratorFactory.createOrchestrator({
     providerGateway: makeGateway([], true),
-    toolRegistry: makeToolRegistry(),
-    neuralIntegration: neuraleCheChiedeAiuto()
+    toolRegistry: makeToolRegistry()
   });
 
   return orchestrator.runDiagnosis({
@@ -315,13 +316,12 @@ function testFallbackMetadata() {
 function testMalformedReasonerFallback() {
   var orchestrator = orchestratorFactory.createOrchestrator({
     providerGateway: makeMalformedGateway(),
-    toolRegistry: makeToolRegistry(),
-    neuralIntegration: neuraleCheChiedeAiuto()
+    toolRegistry: makeToolRegistry()
   });
 
-  // La premessa — ROCCO consulta davvero l'IA — è ora dichiarata dal
-  // neurale finto sopra, non sperata dal messaggio. Le asserzioni restano
-  // identiche: cambia la premessa, non la pretesa.
+  // La premessa — ROCCO consulta davvero il ragionatore — è dichiarata da
+  // `ROCCO_ALWAYS_REASONER=1` in testa al file, non sperata dal messaggio.
+  // Le asserzioni restano identiche: cambia la premessa, non la pretesa.
   return orchestrator.runDiagnosis({
     message: "Il differenziale scatta senza motivo apparente."
   }).then(function (result) {

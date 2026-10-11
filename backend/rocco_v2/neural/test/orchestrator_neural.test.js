@@ -38,19 +38,37 @@ var NeuralVision = require("../neural_vision");
   ok(initResult.initialized, "init completato");
 
   // ========================================================================
-  // BLOCCO 1: Bootstrap forum — i casi reali vengono appresi al warmup
+  // BLOCCO 1: il warmup inietta CONOSCENZA, non esperienza
   // ========================================================================
-  console.log("\n=== BLOCCO 1: Bootstrap forum ===");
+  console.log("\n=== BLOCCO 1: cosa inietta il warmup ===");
 
   var stats = neuralIntegration.getStats();
   ok(stats !== null, "getStats non null");
 
-  // Verifica che la memoria abbia episodi (dai forum)
-  if (stats.memory) {
-    var memEp = stats.memory.episodi_totali || stats.memory.totalEpisodes || 0;
-    ok(memEp >= 1, "memoria ha episodi dal forum — " + memEp);
-  } else {
+  // Qui si pretendeva `memoria ha episodi dal forum >= 1`: il warmup
+  // ingeriva i 48 casi di `casi_reali_forum.js` **con la loro causa_reale**,
+  // e quello stesso file è il metro del banco di prova. ROCCO veniva
+  // interrogato su casi di cui conosceva la risposta.
+  //
+  // Regola unica: il corpus è esame, l'esperienza arriva solo dai casi che
+  // l'elettricista chiude e conferma. La proprietà da provare non è "la
+  // memoria è vuota" — su una macchina che ha lavorato gli episodi veri si
+  // caricano da disco — ma che **il warmup non ne aggiunge nessuno**, e che
+  // rifarlo non cambia niente (altrimenti la scuola non sarebbe ripetibile,
+  // ed è il difetto per cui veniva saltata del tutto).
+  function episodi() {
+    var s = neuralIntegration.getStats();
+    if (!s || !s.memory) return null;
+    return s.memory.episodi_totali || s.memory.totalEpisodes || 0;
+  }
+
+  var epPrima = episodi();
+  if (epPrima === null) {
     ok(true, "memoria stats non disponibile (ma warmup ha funzionato)");
+  } else {
+    neuralIntegration.warmup({});
+    var epDopo = episodi();
+    eq(epDopo, epPrima, "il warmup non scrive esperienza: episodi " + epPrima + " → " + epDopo);
   }
 
   // Knowledge graph arricchito
@@ -196,20 +214,24 @@ var NeuralVision = require("../neural_vision");
   }
 
   // ========================================================================
-  // BLOCCO 8: Hook shouldCallAI
+  // BLOCCO 8: la decisione sull'IA è una sola, e non è del neurale
   // ========================================================================
-  console.log("\n=== BLOCCO 8: shouldCallAI ===");
+  console.log("\n=== BLOCCO 8: chi decide se chiamare l'IA ===");
 
-  var aiHint = null;
-  try {
-    aiHint = neuralIntegration.shouldCallAI(cs1, fakeHyps);
-  } catch(e) { /* graceful */ }
+  // `shouldCallAI` è stato ritirato: poteva ribaltare in tre modi la
+  // decisione dell'orchestratore, e misurando portava a 18 chiamate su 21
+  // senza cambiare il risultato sull'italiano. Ora decide
+  // `orchestrator.decideAINeeded()`: una riga, deterministica.
+  ok(typeof neuralIntegration.shouldCallAI === "undefined",
+    "il neurale non espone più una decisione sull'IA");
 
-  ok(aiHint !== null && aiHint !== undefined, "shouldCallAI non crasha");
-  if (aiHint) {
-    ok(aiHint.needed === true || aiHint.needed === false || aiHint.needed === null,
-      "needed è boolean o null");
-  }
+  var orchestratore = require("../../orchestrator");
+  ok(orchestratore.decideAINeeded({ hypotheses: [], facts_confirmed: ["un fatto"] }) === true,
+    "senza ipotesi e con un fatto, ROCCO chiede aiuto");
+  ok(orchestratore.decideAINeeded({
+    hypotheses: [{ status: "active", label: "dispersione" }],
+    facts_confirmed: ["un fatto"]
+  }) === false, "con una sua ipotesi, ROCCO non chiede aiuto");
 
   // ========================================================================
   // BLOCCO 9: Hook scoreActionInformativeness
@@ -357,7 +379,6 @@ var NeuralVision = require("../neural_vision");
   try { neuralIntegration.simulaCausale(csVuoto); } catch(e) { errorCount++; }
   try { neuralIntegration.findSimilarCases(csVuoto, 3); } catch(e) { errorCount++; }
   try { neuralIntegration.scoreHypotheses([], csVuoto); } catch(e) { errorCount++; }
-  try { neuralIntegration.shouldCallAI(csVuoto, []); } catch(e) { errorCount++; }
   try { neuralIntegration.detectNovelty({}, csVuoto); } catch(e) { errorCount++; }
 
   eq(errorCount, 0, "zero crash con caseState vuoto — graceful degradation");

@@ -113,20 +113,21 @@ test("detectNovelty ritorna struttura corretta", function() {
   assert(typeof result.novelty_score === "number");
 });
 
-// --- Hook 6: shouldCallAI ---
-test("shouldCallAI con ipotesi attive", function() {
-  var hyps = [
-    { label: "dispersione", status: "active", neural_score: 0.8 },
-    { label: "cortocircuito", status: "active", neural_score: 0.3 }
-  ];
-  var result = ni.shouldCallAI(mockCS, hyps);
-  assert(result.needed !== undefined);
-  assert(result.reason);
-});
-
-test("shouldCallAI senza ipotesi → serve AI", function() {
-  var result = ni.shouldCallAI(mockCS, []);
-  assert(result.needed === true);
+// --- Hook 6: RITIRATO ---
+//
+// Era `shouldCallAI(caseState, hypotheses)`, e poteva ribaltare in tre modi
+// la decisione dell'orchestratore su quando consultare un modello remoto.
+// Misurato sui 21 casi italiani: l'IA veniva chiamata 18 volte, 15 di quelle
+// per "alta incertezza pattern" — cioè perché una rete appena addestrata non
+// era sicura, mentre il motore aveva da 12 a 20 ipotesi proprie. E non
+// serviva: spegnendo i provider il risultato sull'italiano è identico.
+//
+// La decisione ora è una riga in `orchestrator.decideAINeeded()`: si chiede
+// aiuto solo se il ragionamento deterministico non ha prodotto niente.
+test("il neurale non decide più quando chiamare l'IA", function() {
+  assert(typeof ni.shouldCallAI === "undefined",
+    "shouldCallAI è tornato: la decisione sull'IA deve restare una sola, " +
+    "nel motore, e non deve poter essere ribaltata dal livello neurale");
 });
 
 // --- Training ---

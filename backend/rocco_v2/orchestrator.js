@@ -1530,15 +1530,31 @@ function decideToolNeeded(cs) {
   return null;
 }
 
+// UNA REGOLA SOLA: ROCCO chiede aiuto all'IA solo se non ha nessuna
+// ipotesi propria.
+//
+// Erano cinque rami, e quattro erano già compresi nel quinto: con una
+// qualsiasi ipotesi attiva il risultato era sempre `false`, quindi
+// l'intera funzione equivaleva a questa riga. Ma soprattutto la decisione
+// veniva poi **ribaltata** dal livello neurale (vedi il passo 8): misurato
+// sui 21 casi italiani, l'IA veniva chiamata 18 volte — 15 per "alta
+// incertezza pattern", cioè perché un classificatore neurale appena
+// addestrato non era sicuro, mentre il motore aveva da 12 a 20 ipotesi
+// proprie. Si chiedeva a un modello di lingua di risolvere l'insicurezza
+// di una rete, non la mancanza di una diagnosi.
+//
+// E non serviva: spegnendo i provider, sui 21 casi italiani il risultato è
+// **identico** (causa vera stampata 15/21, attiva 16/21). Sull'esame
+// completo si perdono 3 casi, tutti in lingue che ROCCO non parla.
+// Diciotto chiamate di rete per tre casi stranieri.
+//
+// `ROCCO_ALWAYS_REASONER=1` forza la consultazione — è il gemello di
+// `ROCCO_NO_PROVIDER=1`: uno dice "mai", l'altro "sempre", e servono a
+// misurare quanto l'IA aggiunge.
 function decideAINeeded(cs) {
-  var active = cs.hypotheses.filter(function(h) { return h.status === "active"; });
-  // AI confermata non serve se abbiamo ipotesi attive gestibili
-  if (active.some(function(h) { return h.confidence === "confirmed"; })) return false;
-  if (active.length >= 1 && active.length <= 5) return false;
-  // AI serve se: 0 ipotesi e ci sono fatti, oppure safety non critica
-  if (active.length === 0 && cs.facts_confirmed.length > 0) return true;
-  if (cs.safety.level === "stop") return false;
-  return false;
+  if (String(process.env.ROCCO_ALWAYS_REASONER || "") === "1") return true;
+  var attive = cs.hypotheses.filter(function(h) { return h.status === "active"; });
+  return attive.length === 0 && cs.facts_confirmed.length > 0;
 }
 
 function buildAIPrompt(cs) {
@@ -2536,31 +2552,19 @@ function createOrchestrator(options) {
     }).then(function() {
       if (cs.status === "closed") return;
 
-      // ═══ 8. AI — solo se il ragionamento deterministico non basta ═══
-      // Neural hook: il neural può suggerire se l'AI è necessaria
-      var neuralAIHint = null;
-      try {
-        if (neuralIntegration) {
-          neuralAIHint = neuralIntegration.shouldCallAI(cs, cs.hypotheses);
-          if (neuralAIHint && neuralAIHint.needed !== null) {
-            runtimeTrace.record(cs, "neural_ai_hint", { needed: neuralAIHint.needed, reason: neuralAIHint.reason });
-          }
-        }
-      } catch(e) { /* neural graceful degradation */ }
-      var aiNeeded = decideAINeeded(cs);
-      // Il neural può forzare la decisione AI (novelty alta, incertezza alta)
-      if (neuralAIHint && neuralAIHint.needed === true) aiNeeded = true;
-      if (neuralAIHint && neuralAIHint.needed === false && !aiNeeded) aiNeeded = false;
-      // M4: caso molto nuovo → forza AI (cervello locale non ha dati)
-      if (cs.neural_novelty && cs.neural_novelty.novel && cs.neural_novelty.novelty_score > 0.8) {
-        aiNeeded = true;
-      }
-      if (aiNeeded) {
-        runtimeTrace.record(cs, "ai_needed", {
-          reason: neuralAIHint && neuralAIHint.needed === true
-            ? "neural: " + (neuralAIHint.reason || "segnale forte")
-            : "ragionamento deterministico insufficiente"
-        });
+      // ═══ 8. AI — solo se ROCCO non ha nessuna ipotesi propria ═══
+      //
+      // Qui il livello neurale poteva **ribaltare** la decisione in tre modi
+      // (`shouldCallAI` a true, a false, e la novità sopra 0.8). Tolti tutti:
+      // una decisione con tre scavalchi non è una decisione, e misurando si
+      // vede che portava a chiamare l'IA in 18 casi su 21 senza cambiare il
+      // risultato sull'italiano. Vedi `decideAINeeded`.
+      //
+      // Resta la regola che il nome del passo prometteva da sempre: l'IA si
+      // consulta quando il ragionamento deterministico **non ha prodotto
+      // niente**, non quando una rete è insicura.
+      if (decideAINeeded(cs)) {
+        runtimeTrace.record(cs, "ai_needed", { reason: "nessuna ipotesi dal ragionamento deterministico" });
         return callAI(cs, providerGateway, inp.provider_hint);
       }
       runtimeTrace.record(cs, "ai_skipped", { reason: "ragionamento deterministico sufficiente" });

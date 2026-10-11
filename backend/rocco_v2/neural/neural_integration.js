@@ -382,52 +382,26 @@ function detectNovelty(percezione, caseState) {
 // Dentro decideAINeeded() — il neural suggerisce se serve l'LLM
 // ============================================================================
 
-function shouldCallAI(caseState, hypotheses) {
-  if (!initialized) return { needed: null, reason: "neural not initialized" };
-
-  try {
-    var activeHyp = hypotheses.filter(function(h) { return h.status === "active"; });
-
-    // Se nessuna ipotesi attiva → serve AI
-    if (activeHyp.length === 0) {
-      return { needed: true, reason: "nessuna ipotesi attiva", confidence: 0.9 };
-    }
-
-    // Se neural_scores tutti alti e concordanti → NO, ROCCO basta
-    var avgNeural = 0;
-    var withScore = 0;
-    for (var i = 0; i < activeHyp.length; i++) {
-      if (activeHyp[i].neural_score !== undefined) {
-        avgNeural += activeHyp[i].neural_score;
-        withScore++;
-      }
-    }
-    if (withScore > 0) avgNeural /= withScore;
-
-    if (avgNeural > 0.7 && activeHyp.length >= 1 && activeHyp.length <= 4) {
-      return { needed: false, reason: "neural scores alti (" + avgNeural.toFixed(2) + ")", confidence: avgNeural };
-    }
-
-    // Se novelty alta → serve AI
-    var novelty = detectNovelty(null, caseState);
-    if (novelty.novel) {
-      return { needed: true, reason: "problema nuovo (novelty " + novelty.novelty_score.toFixed(2) + ")", confidence: 0.8 };
-    }
-
-    // Se incertezza pattern alta → serve AI
-    var features = NeuralPatterns.estraiFeaturesSafe(caseState);
-    var faultResult = NeuralPatterns.classificaGuasto(features);
-    var uncertainty = NeuralPatterns.stimaIncertezza(features, faultResult);
-    if (uncertainty.certainty === "bassa") {
-      return { needed: true, reason: "alta incertezza pattern", confidence: 0.6 };
-    }
-
-    // Default: non interferire con la decisione originale
-    return { needed: null, reason: "nessun segnale forte dal neural" };
-  } catch(e) {
-    return { needed: null, reason: "neural error: " + (e.message || e) };
-  }
-}
+// ============================================================================
+// HOOK 6 — RITIRATO: la decisione "serve l'IA?" è una sola, e sta nel motore
+// ============================================================================
+//
+// Qui viveva `shouldCallAI(caseState, hypotheses)`, 45 righe che potevano
+// **ribaltare** la decisione dell'orchestratore in tre modi: nessuna ipotesi
+// attiva, punteggi neurali alti, novità alta, incertezza del classificatore.
+//
+// Misurato sui 21 casi italiani: l'IA veniva chiamata 18 volte, e **15 di
+// quelle per "alta incertezza pattern"** — cioè perché una rete appena
+// addestrata non era sicura, mentre il motore aveva da 12 a 20 ipotesi
+// proprie. Si chiedeva a un modello di lingua di risolvere l'insicurezza di
+// una rete, non la mancanza di una diagnosi. E non serviva: spegnendo i
+// provider il risultato sull'italiano è identico.
+//
+// La regola ora è una riga in `orchestrator.decideAINeeded()`: l'IA si
+// consulta se il ragionamento deterministico non ha prodotto nessuna
+// ipotesi. Il neurale continua a fare le cose che sa fare — ordinare,
+// rilevare la novità, costruire il modello del mondo — ma non decide più
+// quando chiamare un modello remoto.
 
 // ============================================================================
 // TRAINING PIPELINE
@@ -650,7 +624,6 @@ module.exports = {
   findSimilarCases: findSimilarCases,
   scoreActionInformativeness: scoreActionInformativeness,
   detectNovelty: detectNovelty,
-  shouldCallAI: shouldCallAI,
 
   // Training
   trainFromClosedCase: trainFromClosedCase,
