@@ -2357,6 +2357,27 @@ app.patch("/api/rocco/diagnosi/:id", async (req, res) => {
 
 // POST /api/rocco/close-case — chiudi un caso e attiva il training neurale
 // Il tecnico conferma la causa reale → ROCCO impara dall'esperienza
+// POST /api/rocco/close-case — l'elettricista chiude il guasto
+//
+// Qui questo endpoint faceva UNA cosa sola: addestrare i pesi neurali. Il
+// caso non veniva salvato da nessuna parte come caso. Conseguenza misurabile:
+// `data/rocco-v2-memory.json` restava `{"closed_cases": []}` per sempre, e
+// la memoria didattica dell'università non vedeva mai un caso reale arrivare
+// dal percorso che il frontend usa. La gamba che doveva far crescere il
+// corpus — "guasto chiuso → causa capita → esperienza salvata → ROCCO la
+// riusa" — era interrotta al secondo passaggio.
+//
+// Un caso chiuso va in tre posti, perché sono tre cose diverse:
+//   1. casi chiusi (rocco_v2/memory.js) — il caso CITABILE: causa accertata,
+//      verifica che l'ha decisa, ipotesi scartate. È quello che ROCCO
+//      riusa per dire "assomiglia a un caso che ho già visto".
+//   2. memoria didattica (rocco_university) — la LEZIONE: il caso reale
+//      nella materia, accanto a formule ed esami. Sopravvive a DB spento.
+//   3. memoria neurale — i PESI: ordinano le ipotesi, non affermano nulla.
+//
+// Il premere il bottone È la validazione: `validated: true` lo dichiara, e
+// senza quel campo `saveValidatedClosedCase` rifiuta il caso
+// (`case_not_validated`).
 app.post("/api/rocco/close-case", async (req, res) => {
   try {
     const { caseState, confirmedCause, componenti, come_verificato, diagnosi } = req.body || {};
@@ -2364,31 +2385,75 @@ app.post("/api/rocco/close-case", async (req, res) => {
       return res.status(400).json({ ok: false, error: "confirmedCause obbligatorio" });
     }
 
+    const userId = (req.body && req.body.user_id) || (req.identity && req.identity.user_id) || "default";
+    const cs = caseState && typeof caseState === "object" ? caseState : {};
+
     // Costruisci il feedback
     const feedback = {
       confirmedCause: confirmedCause,
       diagnosi: diagnosi || confirmedCause,
       componenti: componenti || [],
-      come_verificato: come_verificato || ""
+      come_verificato: come_verificato || "",
+      // La verifica dichiarata dall'elettricista è la prova che ha deciso il
+      // caso: è il dato più prezioso del record, perché il caso successivo
+      // riparte da lì invece di ripercorrere tutte le ipotesi.
+      decisiveChecks: come_verificato ? [come_verificato] : [],
+      validated: true,
+      status: "closed"
     };
 
-    // Cerca il modulo neurale
+    // 1. Casi chiusi — il caso citabile
+    let casoResult = { recorded: false, reason: "memoria_non_disponibile" };
+    try {
+      const v2memory = require('./rocco_v2/memory');
+      casoResult = v2memory.saveValidatedClosedCase(cs, feedback);
+    } catch (e) {
+      casoResult = { recorded: false, reason: e.message };
+    }
+
+    // 2. Memoria didattica — la lezione, nella materia della diagnosi
+    let memoriaResult = { fonte: null, error: null };
+    try {
+      const uniMemory = require('./modules/rocco_university/memory');
+      memoriaResult = await uniMemory.registraCasoReale(userId, 'diagnosi_guasti', {
+        sintomo: String(cs.problem_summary || "").slice(0, 300),
+        causa_confermata: confirmedCause,
+        come_verificato: come_verificato || "",
+        componenti: componenti || cs.components_detected || [],
+        certezza_dichiarata: cs.final_confidence || null
+      });
+    } catch (e) {
+      memoriaResult = { fonte: null, error: e.message };
+    }
+
+    // 3. Memoria neurale — i pesi
     let neuralResult = null;
     try {
       const neuralIntegration = require('./rocco_v2/neural/neural_integration');
       if (neuralIntegration && neuralIntegration.trainFromClosedCase) {
-        neuralResult = neuralIntegration.trainFromClosedCase(caseState || {}, feedback);
+        neuralResult = neuralIntegration.trainFromClosedCase(cs, feedback);
       }
     } catch (e) {
       neuralResult = { trained: false, error: e.message };
     }
 
+    const memorieScritte = [];
+    if (casoResult && casoResult.recorded) memorieScritte.push("casi_chiusi");
+    if (memoriaResult && memoriaResult.fonte) memorieScritte.push("memoria_didattica");
+    if (neuralResult && neuralResult.trained) memorieScritte.push("neurale");
+
+    logger.info("[CASO CHIUSO] " + confirmedCause.slice(0, 60) +
+      " → memorie: " + (memorieScritte.join(", ") || "nessuna"));
+
     res.json({
       ok: true,
+      caso_chiuso: casoResult,
+      memoria_didattica: memoriaResult,
       training: neuralResult,
-      message: neuralResult && neuralResult.trained
-        ? "ROCCO ha imparato dal caso chiuso"
-        : "Training non riuscito"
+      memorie_scritte: memorieScritte,
+      message: memorieScritte.length
+        ? "ROCCO ha imparato dal caso chiuso (" + memorieScritte.join(", ") + ")"
+        : "Nessuna memoria ha registrato il caso"
     });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -2417,7 +2482,25 @@ app.post("/api/rocco/correct", async (req, res) => {
       neuralResult = { trained: false, error: e.message };
     }
 
-    res.json({ ok: true, training: neuralResult });
+    // Una correzione non è un caso chiuso — non c'è una causa accertata, e
+    // `saveValidatedClosedCase` la rifiuterebbe giustamente. È però la
+    // lezione più utile che esista: ROCCO ha proposto una pista e il tecnico
+    // l'ha smentita. Il posto giusto è la memoria didattica, dove il
+    // contatore conta quante volte ROCCO ha ripetuto lo stesso errore.
+    let memoriaResult = { fonte: null, error: null };
+    try {
+      const uniMemory = require('./modules/rocco_university/memory');
+      const userId = (req.body && req.body.user_id) || (req.identity && req.identity.user_id) || "default";
+      memoriaResult = await uniMemory.registraErrore(
+        userId, 'diagnosi_guasti',
+        "Ipotesi proposta e smentita dal tecnico: " + String(rejectedCause).slice(0, 160),
+        reason || ""
+      );
+    } catch (e) {
+      memoriaResult = { fonte: null, error: e.message };
+    }
+
+    res.json({ ok: true, training: neuralResult, memoria_didattica: memoriaResult });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }

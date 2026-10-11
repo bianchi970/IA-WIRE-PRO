@@ -52,6 +52,7 @@ var de = require("../engine/diagnosticEngine");
 var componenti = require("../knowledge/components.json").items;
 var corpus = require("../rocco_v2/neural/casi_reali_forum.js");
 var orch = require("../rocco_v2/orchestrator");
+var v2memory = require("../rocco_v2/memory");
 
 var casi = corpus.CASI_FORUM.filter(function (c) { return c.lingua === "it"; });
 
@@ -104,7 +105,14 @@ var BASELINE = {
   conferme_senza_misura:      { valore: 0,  verso: "min" },   // certezze regalate
   casi_conclusi_con_misura:   { valore: 9,  verso: "max" },   // su 13 casi che prescrivono una misura
   conferme_sbagliate:         { valore: 0,  verso: "min" },   // causa vera NON fra le confermate
-  contesto_perso_multi_turn:  { valore: 0,  verso: "min" }
+  contesto_perso_multi_turn:  { valore: 0,  verso: "min" },
+  // Apprendimento (misurato il 2026-10-11): il caso chiuso torna utile al
+  // caso successivo. Su 21 casi, 3 si fermano per sicurezza prima di
+  // ragionare e 1 vede il precedente escluso da una regola del motore:
+  // i 17 restanti sono il massimo raggiungibile su questo corpus.
+  esperienza_riusata:         { valore: 17, verso: "max" },   // il precedente è fra le stampate
+  esperienza_in_testa:        { valore: 17, verso: "max" },   // ed è la prima
+  esperienza_persa:           { valore: 0,  verso: "min" }    // salvata e non ritrovata
 };
 
 // ── Etichettatura a mano dei componenti inesistenti ───────────────────
@@ -207,6 +215,8 @@ var m = {
   conferme_senza_misura: 0,
   casi_conclusi_con_misura: 0, conferme_sbagliate: 0,
   contesto_perso_multi_turn: 0, casi_senza_misura_prescritta: 0,
+  esperienza_riusata: 0, esperienza_in_testa: 0, esperienza_persa: 0,
+  esperienza_senza_ragionamento: 0, esperienza_esclusa_da_regola: 0,
   certezza_t1: {}, certezza_t2: {}
 };
 var dettagli = [];
@@ -291,6 +301,98 @@ function secondoTurno(caso, rT1) {
   });
 }
 
+// ── Terzo turno: l'apprendimento ──────────────────────────────────────
+//
+// Le altre metriche misurano quanto ROCCO sa ragionare. Questa misura se
+// **impara**: l'elettricista chiude il guasto dichiarando la causa, e il
+// caso successivo deve poter dire "assomiglia a uno che ho già visto".
+//
+// Serve una metrica a sé perché il resto del banco non può vederla: lo
+// stato appreso viene ripristinato prima di ogni caso — giustamente, per
+// misurare ogni caso sullo stesso motore — quindi nelle altre misure i casi
+// chiusi sono sempre zero. Per anni la strada di scrittura è stata
+// interrotta (`/api/rocco/close-case` addestrava i pesi e non salvava il
+// caso) e nessuna misura se ne è accorta.
+//
+// Il caso viene chiuso con la **causa reale del corpus** e con la verifica
+// che il corpus prescrive: non invento né l'una né l'altra. Poi si ripone la
+// stessa domanda e si guarda dove finisce il precedente.
+function terzoTurno(caso) {
+  var feedback = {
+    confirmedCause: caso.causa_reale,
+    decisiveChecks: (caso.verifiche || []).slice(0, 1),
+    validated: true,
+    status: "closed"
+  };
+  var salvato = v2memory.saveValidatedClosedCase({
+    problem_summary: caso.domanda,
+    components_detected: [],
+    final_confidence: "probable"
+  }, feedback);
+
+  if (!salvato.recorded) {
+    m.esperienza_persa++;
+    dettagli.push(caso.id + ": il caso chiuso non è stato registrato — " + salvato.reason);
+    return Promise.resolve();
+  }
+
+  return orch.runDiagnosis({ message: caso.domanda, user_id: "bench_exp", max_steps: 5 })
+    .then(function (r) {
+      var cs = r.case_state;
+
+      // Un arresto di sicurezza non ragiona: niente ipotesi, quindi niente
+      // precedente. Non è esperienza perduta — è ROCCO che fa la cosa
+      // giusta e dice "stacca e chiama", come su "odore di bruciato in
+      // quadro". Contarlo come perdita misurerebbe la sicurezza, non
+      // l'apprendimento. Stesso trattamento di METRO_CIECO: escluso dal
+      // conteggio e **stampato**, così non sparisce dalla vista.
+      if (cs.safety && cs.safety.level === "stop") {
+        m.esperienza_senza_ragionamento++;
+        note.push(caso.id + ": arresto di sicurezza, il caso non arriva al ragionamento");
+        return;
+      }
+
+      // Il precedente escluso da una regola non è esperienza perduta: il
+      // caso chiuso entra come ipotesi e passa per le stesse regole di
+      // tutte — esclusione, conferma per misura, pertinenza. Si stampa la
+      // ragione, perché un'esclusione sbagliata deve restare visibile.
+      var escluse = (cs.hypotheses || []).filter(function (h) {
+        return !!h.esperienza && h.status !== "active";
+      });
+      if (escluse.length) {
+        m.esperienza_esclusa_da_regola++;
+        note.push(caso.id + ": precedente escluso dal motore — " +
+          String(escluse[0].rejection_reason || "senza ragione dichiarata"));
+        return;
+      }
+
+      // Qui invece è un difetto: il caso ragiona, nessuna regola ha
+      // escluso il precedente, e il precedente non c'è.
+      var portaPrecedente = attive(cs).filter(function (h) { return !!h.esperienza; });
+      if (!portaPrecedente.length) {
+        m.esperienza_persa++;
+        dettagli.push(caso.id + ": precedente salvato e non ritrovato nel ragionamento");
+        return;
+      }
+
+      // Arrivato davanti all'elettricista? Il metro è lo stesso delle altre
+      // metriche: `coerente()`, confronto lessicale largo fra l'etichetta
+      // stampata e la causa reale.
+      var stampate = ipotesiStampate(r.answer);
+      var posizione = -1;
+      stampate.forEach(function (l, i) {
+        if (posizione < 0 && coerente(l, caso.causa_reale)) posizione = i;
+      });
+
+      if (posizione >= 0) {
+        m.esperienza_riusata++;
+        if (posizione === 0) m.esperienza_in_testa++;
+      } else {
+        dettagli.push(caso.id + ": precedente nel ragionamento ma non fra le ipotesi stampate");
+      }
+    });
+}
+
 function riga(nome, ottenuto, su) {
   var base = BASELINE[nome];
   var ok = !base ? true
@@ -310,7 +412,9 @@ casi.forEach(function (caso) {
     // Ogni caso parte dallo stesso motore: stesso stato appreso e stesso
     // seme, così la differenza fra due casi è il caso, non la corsa.
     ripristinaStato();
-    return primoTurno(caso).then(function (r) { return secondoTurno(caso, r); });
+    return primoTurno(caso)
+      .then(function (r) { return secondoTurno(caso, r); })
+      .then(function () { return terzoTurno(caso); });
   });
 });
 
@@ -339,6 +443,13 @@ catena.then(function () {
 
   console.log("\nMULTI-TURN");
   ok = riga("contesto_perso_multi_turn", m.contesto_perso_multi_turn) && ok;
+
+  console.log("\nAPPRENDIMENTO (il caso chiuso torna utile)");
+  ok = riga("esperienza_riusata", m.esperienza_riusata, casi.length) && ok;
+  ok = riga("esperienza_in_testa", m.esperienza_in_testa, casi.length) && ok;
+  ok = riga("esperienza_persa", m.esperienza_persa) && ok;
+  console.log("    non applicabile: " + m.esperienza_senza_ragionamento +
+    " arresti di sicurezza, " + m.esperienza_esclusa_da_regola + " precedenti esclusi da una regola");
 
   // Informativo: quanta parte del vocabolario è esercitata da frasi vere.
   var chiavi = Object.keys(de.SYNONYM_MAP);

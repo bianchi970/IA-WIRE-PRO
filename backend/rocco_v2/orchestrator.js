@@ -564,7 +564,13 @@ function makeHypothesis(label, reason, source, confirmTests, denyTests, catena) 
     // Prima finiva solo nella catena come frase ("probabilità 45%"): non era
     // leggibile da nessuno. Serve a scegliere quale ipotesi rappresenta una
     // famiglia confermata, invece di prendere la prima generata.
-    probabilita: null
+    probabilita: null,
+    // Precedente verificato: { caso_id, somiglianza }, scritto dal passo
+    // 5d-bis quando un caso chiuso dall'elettricista porta questa causa.
+    // Dichiarato qui perché un campo letto e mai dichiarato è un `undefined`
+    // che JavaScript non segnala — già costato un peso del 60% su un campo
+    // inesistente.
+    esperienza: null
   };
 }
 
@@ -625,20 +631,61 @@ function ragionaPerPrincipi(cs) {
   return hyps;
 }
 
-// D3. Ragionamento per analogia (casi simili)
+// D3. Ragionamento per analogia — i casi che l'elettricista ha chiuso
+//
+// Questa funzione leggeva i casi chiusi da sempre, e per sempre ne ha
+// trovati zero: `/api/rocco/close-case` addestrava i pesi neurali e non
+// salvava il caso, quindi `data/rocco-v2-memory.json` restava
+// `{"closed_cases": []}`. Strada di lettura aperta, strada di scrittura
+// interrotta: l'una nascondeva l'altra, e il corpus non poteva crescere.
+//
+// Un precedente verificato è la forma più forte di "ho visto" che ROCCO
+// possiede — ma resta "ho visto", non "so": entra come ipotesi da verificare
+// e passa per le stesse regole di tutte (esclusione, conferma per misura,
+// pertinenza). Per questo **ordina** e non afferma: `esperienza` ha una
+// chiave sua nel comparatore, sopra i pesi appresi e sotto la prova
+// strumentale, e il precedente non scrive né `supporting_evidence` (che
+// farebbe salire la certezza a `probable` senza una misura) né
+// `probabilita` (che è la scala del simulatore causale).
 function ragionaPerAnalogia(cs) {
   var hyps = [];
   try {
-    var casi = memory.findRelevantClosedCases(cs, 2);
-    arr(casi).forEach(function(caso) {
-      if (!caso || !caso.confirmed_cause || caso.match_score < 0.25) return;
-      hyps.push(makeHypothesis(
-        caso.confirmed_cause,
-        "Caso simile risolto (score " + caso.match_score + "): " + s(caso.summary).substring(0, 80),
+    var casi = arr(memory.findRelevantClosedCases(cs, 3)).filter(function(caso) {
+      return caso && s(caso.confirmed_cause) && caso.match_score >= 0.25;
+    });
+
+    // Quanti precedenti hanno pesato su questa risposta: misura visibile del
+    // corpus che cresce, esposta in `evidence_meta`.
+    cs.casi_chiusi_simili = casi.map(function(caso) {
+      return { id: s(caso.id), somiglianza: caso.match_score, causa: s(caso.confirmed_cause) };
+    });
+
+    casi.forEach(function(caso) {
+      // La verifica dichiarata da chi ha chiuso il caso è un'istruzione vera,
+      // scritta da un tecnico: non passa per `toInstruction()`, che serve a
+      // tradurre le *previsioni* del modello causale.
+      var verifiche = arr(caso.decisive_checks).slice(0, 2).filter(function(v) { return s(v); });
+
+      var catena = ["Già risolto in un caso chiuso con questa causa accertata"];
+      if (s(caso.summary)) {
+        catena.push("Il caso precedente diceva: " + s(caso.summary).substring(0, 160));
+      }
+      if (verifiche.length) {
+        catena.push("Allora fu accertata cosi: " + s(verifiche[0]).substring(0, 160));
+      }
+      catena.push("Da verificare che le condizioni corrispondano");
+
+      // Nel `reason` stava il punteggio grezzo ("score 0.42"): un numero da
+      // macchina davanti all'elettricista, stessa famiglia degli slug. Il
+      // punteggio serve all'ordine, non al racconto.
+      var h = makeHypothesis(
+        s(caso.confirmed_cause),
+        "Causa accertata in un caso chiuso simile",
         "caso_validato",
-        arr(caso.decisive_checks).slice(0, 2), [],
-        ["Caso simile trovato nella memoria", "Causa confermata: " + caso.confirmed_cause, "Verificare se le condizioni corrispondono"]
-      ));
+        verifiche, [], catena
+      );
+      h.esperienza = { caso_id: s(caso.id), somiglianza: caso.match_score };
+      hyps.push(h);
     });
   } catch (e) { /* memoria non disponibile */ }
   return hyps;
@@ -726,12 +773,35 @@ function ragiona(cs, percezione) {
   // Sempre: analogia con casi validati (se disponibile)
   all = all.concat(ragionaPerAnalogia(cs));
 
-  // Deduplica per label normalizzata
+  // Deduplica per label normalizzata.
+  //
+  // Il dedup tiene la PRIMA ipotesi, e l'analogia è concatenata per ultima:
+  // quando il motore aveva già pensato da sé la causa di un caso chiuso, il
+  // precedente veniva scartato e con lui il campo `esperienza` — cioè la
+  // prova che quella pista era già stata accertata una volta andava perduta
+  // proprio nel caso in cui le due fonti concordano, che è il più forte.
+  // Un duplicato che porta un precedente non sparisce: lo consegna
+  // all'ipotesi che resta.
   var seen = {};
+  var tenute = {};
   return all.filter(function(h) {
     var key = normalize(h.label).substring(0, 60);
-    if (!key || seen[key]) return false;
+    if (!key) return false;
+    if (seen[key]) {
+      var rimasta = tenute[key];
+      if (rimasta && h.esperienza && !rimasta.esperienza) {
+        rimasta.esperienza = h.esperienza;
+        arr(h.catena).forEach(function(riga) {
+          if (rimasta.catena.indexOf(riga) < 0) rimasta.catena.push(riga);
+        });
+        arr(h.confirm_tests).forEach(function(v) {
+          if (rimasta.confirm_tests.indexOf(v) < 0) rimasta.confirm_tests.push(v);
+        });
+      }
+      return false;
+    }
     seen[key] = true;
+    tenute[key] = h;
     return true;
   });
 }
@@ -1640,6 +1710,28 @@ function makeHypothesisComparator(cs) {
     var ca = a.confidence === "confirmed" ? 1 : 0;
     var cb = b.confidence === "confirmed" ? 1 : 0;
     if (cb !== ca) return cb - ca;
+
+    // Il precedente verificato: un caso che l'elettricista ha chiuso con
+    // questa causa, con la misura che l'ha deciso.
+    //
+    // Sta SOPRA la probabilità del simulatore per una ragione di sostanza:
+    // `probabilita` è un a priori — quanto quella causa è frequente in
+    // generale, o "Alta/Bassa" dichiarato dalla banca dispositivi — mentre
+    // il precedente è un fatto accaduto e verificato su un impianto vero.
+    // Un a priori non batte un'osservazione.
+    //
+    // E sta sotto `confirmed`, che resta l'unica chiave che afferma: la
+    // misura di adesso conta più di una misura dell'altra volta.
+    //
+    // Misurato sui 21 casi italiani (banco, sezione APPRENDIMENTO), con la
+    // chiave sotto la probabilità e sopra: precedente **fra le ipotesi
+    // stampate 17/21** in entrambi i casi, precedente **in testa 12/21 →
+    // 17/21**, e nessuna variazione su tutto il resto — causa vera stampata
+    // 16/21, rumore fuori contesto 0, conferme senza misura 0, conferme
+    // sbagliate 0, casi conclusi con la misura 9/21. Guadagno senza costo.
+    var ea = a.esperienza && typeof a.esperienza.somiglianza === "number" ? a.esperienza.somiglianza : 0;
+    var eb = b.esperienza && typeof b.esperienza.somiglianza === "number" ? b.esperienza.somiglianza : 0;
+    if (eb !== ea) return eb - ea;
 
     // La stima del simulatore prima del conteggio delle prove: vedi sopra.
     var pa = typeof a.probabilita === "number" ? a.probabilita : 0;
@@ -2635,7 +2727,10 @@ function createOrchestrator(options) {
           }, []),
           neural_active: !!neuralIntegration,
           neural_novelty: cs.neural_novelty || null,
-          neural_training: cs.neural_training || null
+          neural_training: cs.neural_training || null,
+          // Quanti casi chiusi dall'elettricista hanno pesato su questa
+          // risposta: è la misura visibile del corpus che cresce.
+          casi_chiusi_simili: arr(cs.casi_chiusi_simili).length
         }
       };
   }
