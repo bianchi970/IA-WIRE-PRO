@@ -429,6 +429,10 @@ giraCorpus().then(function (risultati) {
   var conConferma = 0;
   var sbagliate = 0;
   var saliteDaVerificare = 0;
+  // Casi in cui almeno una delle ipotesi confermate è **applicabile** a
+  // questo impianto. Solo per questi la certezza finale deve salire.
+  var conConfermaInContesto = 0;
+  var nonSalite = [];
 
   risultati.forEach(function (r) {
     if (r.confermate.length === 0) return;
@@ -439,12 +443,48 @@ giraCorpus().then(function (risultati) {
       console.log("  ✗ " + r.caso.id + ": confermata senza la causa reale (" + r.caso.causa_reale + ")");
       console.log("      confermate: " + r.confermate.map(function (h) { return h.label; }).join(" | "));
     }
+    var inContesto = r.confermate.some(function (h) {
+      return !orchestrator.isOutOfDomain(h.label, r.cs.problem_summary);
+    });
+    if (inContesto) {
+      conConfermaInContesto++;
+      if (r.cs.final_confidence !== "confirmed") {
+        nonSalite.push(r.caso.id + " (" + r.cs.final_confidence + ")");
+      }
+    }
     if (r.cs.final_confidence === "confirmed") saliteDaVerificare++;
   });
 
   check("su diversi casi la misura produce una conferma", conConferma >= 8);
   eq("NESSUNA conferma senza la causa reale fra le confermate", sbagliate, 0);
-  check("e la certezza finale sale di conseguenza", saliteDaVerificare >= conConferma);
+
+  // Qui si pretendeva `saliteDaVerificare >= conConferma`: che OGNI ipotesi
+  // confermata facesse salire la certezza finale. Contraddice la guardia di
+  // pertinenza, che rifiuta deliberatamente di dire CONFERMATO quando le
+  // sole etichette confermate sono inapplicabili all'impianto del caso —
+  // dire "confermato: dispersione DC su pannello fotovoltaico" per una
+  // lavatrice è il difetto peggiore, perché la certezza dà peso al nome
+  // sbagliato.
+  //
+  // Le due regole convivevano perché il motore riaccodava le proprie prime
+  // tre ipotesi dentro le `osservazioni`, che finiscono in
+  // `facts_confirmed`, da cui `buildEvidenceContext()` ricava le **prove**
+  // su cui le confirm rules cercano i loro segnali: alcune conferme in
+  // contesto nascevano quindi dal testo di un'ipotesi di ROCCO. Togliendo
+  // quel giro (vedi osservazioni_pulite.test.js §5) restano tre casi —
+  // FORUM-IT-003, FORUM-SPEC-005, FORUM-IT-011 — dove l'unica ipotesi che
+  // la soglia conferma è fuori contesto, e la certezza correttamente non
+  // sale.
+  //
+  // L'asserzione ora dice il contratto vero: la certezza sale quando la
+  // misura conferma un'ipotesi **applicabile**. Resta una rete di
+  // sicurezza, non un rituale: se la certezza smettesse di salire su un
+  // caso pertinente, qui diventa rosso.
+  check("la certezza sale su ogni caso con una conferma pertinente",
+    saliteDaVerificare >= conConfermaInContesto);
+  nonSalite.forEach(function (x) { console.log("      non sale: " + x); });
+  check("e le conferme fuori contesto non fanno salire la certezza",
+    saliteDaVerificare <= conConferma);
 
   // Senza misura, sul solo racconto, non si conferma nulla: niente certezze
   // regalate a chi ha solo descritto il sintomo.

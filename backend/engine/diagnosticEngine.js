@@ -9,6 +9,36 @@ var roccoCaseClassifier = require("./roccoCaseClassifier");
 var roccoMethodEngine = require("./roccoMethodEngine");
 var limiti = require("../knowledge/limiti");
 
+// Vocabolario: slug → italiano tecnico. È un modulo puro, senza dipendenze,
+// e qui serve per una ragione sola: le `osservazioni` che questo file
+// compone finiscono davanti all'elettricista (nel referto V2 via
+// `facts_confirmed`, nella risposta offline e nel prompt del vecchio
+// /api/chat). Scrivere `[RCD-AC-2P]` o `corrente_ma` là dentro è un difetto
+// alla fonte, non un difetto del formattatore: il posto giusto per i nomi
+// italiani esiste già, bastava consultarlo.
+var lexicon = null;
+try { lexicon = require("../rocco_v2/lexicon"); } catch (_e) { lexicon = null; }
+
+/** Nome italiano di una grandezza misurata; l'identificatore se non c'è. */
+function nomeGrandezza(tipo) {
+  var t = String(tipo == null ? "" : tipo);
+  if (lexicon && lexicon.MEASURE_LABELS && lexicon.MEASURE_LABELS[t.toLowerCase()]) {
+    return lexicon.MEASURE_LABELS[t.toLowerCase()];
+  }
+  return t.replace(/_/g, " ");
+}
+
+/** Nome italiano di un componente; la categoria se il vocabolario non l'ha. */
+function nomeComponente(component) {
+  var c = component && typeof component === "object" ? component : {};
+  var id = String(c.id == null ? "" : c.id);
+  if (lexicon && lexicon.humanizeComponent) {
+    var nome = lexicon.humanizeComponent(id);
+    if (nome) return nome;
+  }
+  return c.category ? String(c.category) : (id.replace(/[-_]/g, " ") || "componente non dichiarato");
+}
+
 var LEARNING_HALF_LIFE_DAYS = 120;
 var MIN_LEARNING_FRESHNESS_WEIGHT = 0.25;
 var UNKNOWN_TIMESTAMP_FRESHNESS_WEIGHT = 0.20;
@@ -5068,8 +5098,11 @@ function analyzeTechnicalRequest(input, knowledge) {
     osservazioni.push("Immagine allegata: integrare le verifiche con lo stato visivo dei componenti.");
   }
   if (extractedValues.length) {
+    // `value.type` è un identificatore interno: `corrente_ma` arrivava
+    // all'utente in snake_case, fra parentesi. Il vocabolario ha il nome
+    // italiano di ogni grandezza — è il posto dove stanno già tutti.
     osservazioni.push("Valori misurati rilevati: " + extractedValues.map(function (value) {
-      return value.value + value.unit + " (" + value.type + ")";
+      return value.value + value.unit + " (" + nomeGrandezza(value.type) + ")";
     }).join(", ") + ".");
   }
   if (voltageAnomaly && voltageAnomaly.anomaly) {
@@ -5080,10 +5113,10 @@ function analyzeTechnicalRequest(input, knowledge) {
     );
   }
   matchedComponents.forEach(function (entry) {
-    osservazioni.push(
-      "Componente riconosciuto [" + entry.component.id.toUpperCase() + "]: " +
-      (entry.component.category ? entry.component.category : "categoria non dichiarata") + "."
-    );
+    // Qui si leggeva "Componente riconosciuto [RCD-AC-2P]: rcd." — l'id
+    // interno in maiuscolo e la categoria, anch'essa uno slug. Davanti a un
+    // elettricista. Il nome italiano del componente sta nel vocabolario.
+    osservazioni.push("Componente riconosciuto: " + nomeComponente(entry.component) + ".");
   });
   contradictions.forEach(function (contradiction) {
     osservazioni.push("CONTRADDIZIONE: " + contradiction.reason);
@@ -5098,9 +5131,16 @@ function analyzeTechnicalRequest(input, knowledge) {
   if (decisionPolicy.immediateAction) {
     osservazioni.push("AZIONE IMMEDIATA: " + decisionPolicy.immediateAction);
   }
-  publicHypotheses.slice(0, 3).forEach(function (item) {
-    osservazioni.push("IPOTESI: [" + String(item.livello || "probable").toUpperCase() + "] " + item.causa);
-  });
+  // Qui le prime tre ipotesi venivano riaccodate alle osservazioni come
+  // "IPOTESI: [CONFIRMED] ...". Ridondante in tutti e tre i consumatori di
+  // `osservazioni`, e sbagliata in due:
+  //   · referto V2 → scartata dal filtro `ENGINE_INTERNAL_PREFIXES`;
+  //   · risposta offline → duplica la propria sezione IPOTESI, che gli stessi
+  //     livelli li stampa in italiano ([CONFERMATO] / [DA_VERIFICARE]), i soli
+  //     che il frontend sa rendere come badge;
+  //   · prompt del vecchio /api/chat → duplica "IPOTESI (da confermare con
+  //     misure)", che `formatDiagnosticContext()` compone già da `diag.ipotesi`.
+  // Le ipotesi restano in `diag.ipotesi`, dove ogni consumatore le prende.
 
   extractedValues.forEach(function (value) {
     if (value.warning) {

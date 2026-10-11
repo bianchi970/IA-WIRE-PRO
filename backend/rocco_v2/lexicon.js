@@ -128,7 +128,19 @@ var MEASURE_LABELS = {
   pressure: "pressione",
   pressione: "pressione",
   tempo: "tempo",
-  ip: "grado di protezione IP"
+  ip: "grado di protezione IP",
+  // Tipi che `engine/diagnosticEngine.js` produce e che qui mancavano:
+  // `corrente_ma` arrivava all'utente in snake_case, fra parentesi, dentro
+  // la riga "Valori misurati rilevati".
+  //
+  // Si chiama "corrente in mA" e non "corrente di dispersione" di proposito:
+  // in italiano "30 mA" è quasi sempre la **taratura** del differenziale,
+  // non una misura di dispersione. Dare un nome più preciso del dato
+  // significherebbe affermare qualcosa che il numero non dice — la stessa
+  // ragione per cui non esiste una confirm rule sui mA.
+  corrente_ma: "corrente in mA",
+  frequenza: "frequenza",
+  velocita: "velocità"
 };
 
 // ── Livello di certezza ──
@@ -208,12 +220,20 @@ function humanizeComponents(list) {
 //
 // Il criterio: si scarta la contabilità interna e ciò che duplica un'altra
 // sezione del referto (SAFETY → RISCHI REALI, AZIONE IMMEDIATA → PROSSIMO
-// PASSO, IPOTESI → IPOTESI). Resta quel che afferma un fatto sull'impianto,
-// come "Valori misurati rilevati" o "CONTRADDIZIONE".
+// PASSO, IPOTESI → IPOTESI, COMPONENTE RICONOSCIUTO → COMPONENTI COINVOLTI).
+// Resta quel che afferma un fatto sull'impianto, come "Valori misurati
+// rilevati" o "CONTRADDIZIONE".
 var ENGINE_INTERNAL_PREFIXES = [
   "keyword tecniche rilevate",
   "caso: domini osservati",
   "memoria tecnica:",
+  // "Componente riconosciuto [RCD-AC-2P]: rcd." — lo slug del componente e
+  // la sua categoria, davanti all'elettricista. Il componente è già nella
+  // sezione COMPONENTI COINVOLTI, con il nome italiano. Alla fonte la riga
+  // è stata riscritta in italiano (serve al prompt del vecchio /api/chat e
+  // alla risposta offline, che compongono i COMPONENTI da un'altra lista);
+  // qui si scarta perché duplica.
+  "componente riconosciuto",
   "safety:",
   "azione immediata:",
   "ipotesi:"

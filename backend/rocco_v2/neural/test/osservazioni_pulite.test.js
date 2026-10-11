@@ -136,6 +136,80 @@ return recognition.run({ problem_summary: "il differenziale scatta quando accend
       pass++; // niente componenti su questo testo: nulla da verificare
     }
 
+    // ─── §4 Nemmeno il motore diagnostico scrive slug ────────────────
+    //
+    // Le `osservazioni` di `analyzeTechnicalRequest()` finiscono in
+    // `facts_confirmed` (case_state.js: toolResult.evidence) e da lì nel
+    // referto. Qui si leggeva "Componente riconosciuto [RCD-AC-2P]: rcd."
+    // — id interno in maiuscolo e categoria, anch'essa uno slug — e
+    // "30mA (corrente_ma)", snake_case fra parentesi.
+    //
+    // Si prova sulla fonte e non sul formattatore: un filtro a valle
+    // nasconde il difetto, non lo corregge, e la stessa riga passa per
+    // altre due strade (risposta offline e prompt del vecchio /api/chat)
+    // dove quel filtro non c'è.
+    console.log("\n§4 — il motore diagnostico non scrive slug");
+
+    var de = require("../../../engine/diagnosticEngine");
+    var kb = require("../../../knowledge").getLoadedKnowledge();
+    var diag = de.analyzeTechnicalRequest(
+      { message: "Il differenziale salta. Ho misurato 230V, 30mA e isolamento 0,2 MOhm." },
+      { failurePatterns: kb.failurePatterns, protectionRules: kb.protectionRules,
+        components: kb.components, safetyProtocols: kb.safetyProtocols }
+    );
+    var oss = (diag.osservazioni || []).join(" | ");
+
+    check("nessun id componente in maiuscolo fra parentesi quadre",
+      !/\[[A-Z0-9][A-Z0-9-]{3,}\]/.test(oss));
+    check("nessun identificatore snake_case",
+      !/\b[a-z]+_[a-z]+\b/.test(oss));
+    check("il componente è nominato in italiano",
+      /componente riconosciuto: [a-zà-ù]/i.test(oss) || oss.indexOf("Componente riconosciuto") < 0);
+    check("le grandezze misurate sono nominate in italiano",
+      oss.indexOf("Valori misurati rilevati") < 0 ||
+      /\(corrente in mA\)|\(tensione\)|\(resistenza di isolamento\)/.test(oss));
+
+    // E la riga del componente non deve nemmeno arrivare al referto:
+    // duplica la sezione COMPONENTI COINVOLTI.
+    var puliti = lexicon.cleanFacts(diag.osservazioni, 6).join(" | ");
+    check("la riga del componente non duplica COMPONENTI COINVOLTI",
+      puliti.indexOf("Componente riconosciuto") < 0);
+    check("il fatto vero invece resta",
+      puliti.indexOf("Valori misurati rilevati") >= 0);
+
+    // ─── §5 Un'ipotesi non è un fatto ────────────────────────────────
+    //
+    // È la proprietà più importante del file, e non è una questione di
+    // forma. Il motore riaccodava le proprie prime tre ipotesi dentro le
+    // `osservazioni`; quelle finiscono in `facts_confirmed`; e il
+    // controfattuale valuta le previsioni di un'ipotesi **contro
+    // `facts_confirmed`** (causal_model.js: `fatti =
+    // [].concat(arr(cs.facts_confirmed), …)`). Trovava quindi l'ipotesi
+    // stessa fra i fatti e la dichiarava "confermata dai fatti": una
+    // supposizione che si conferma da sola, e che per questo finiva in
+    // testa all'elenco con `confidence: "probable"`.
+    //
+    // Misurato su FORUM-IT-007: `supporting_evidence: ["Controfattuale: 1
+    // previsioni confermate dai fatti"]`, dove il fatto era la riga
+    // `IPOTESI: [NON_VERIFIABLE] Dispersione DC verso terra: …`. Caduto
+    // quel giro, al primo turno i verdetti `probable` sono passati da 3 a 1
+    // sui 21 casi: due poggiavano su una prova che ROCCO si era scritto.
+    console.log("\n§5 — un'ipotesi non è un fatto");
+
+    var ipotesiNeiFatti = [];
+    (diag.ipotesi || []).forEach(function (ip) {
+      var tesi = String(ip.causa || "").split(/[:,—–-]/)[0].trim();
+      if (tesi.length < 12) return;   // troppo corta per un confronto sensato
+      (diag.osservazioni || []).forEach(function (o) {
+        if (String(o).indexOf(tesi) >= 0) ipotesiNeiFatti.push(tesi);
+      });
+    });
+    eq("nessuna ipotesi del motore compare fra le osservazioni", ipotesiNeiFatti.length, 0);
+    ipotesiNeiFatti.slice(0, 3).forEach(function (x) { console.log("      ipotesi fra i fatti →", x); });
+
+    check("nessuna etichetta di certezza in inglese",
+      !/\[(CONFIRMED|PROBABLE|NON_VERIFIABLE|POSSIBLE|UNLIKELY)\]/.test(oss));
+
     console.log("\n============================================================");
     console.log("OSSERVAZIONI PULITE: " + pass + " passed, " + fail + " failed");
     console.log("============================================================");

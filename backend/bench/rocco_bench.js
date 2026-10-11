@@ -99,7 +99,30 @@ process.on("exit", ripristinaStato);
 // ── Linee di base misurate (2026-10-10) ───────────────────────────────
 var BASELINE = {
   componenti_fantasma:        { valore: 0,  verso: "min" },   // meno è meglio
-  causa_vera_stampata:        { valore: 16, verso: "max" },   // su 21
+  // ABBASSATA 16 → 15 il 2026-10-11, e questa è l'unica ragione per cui una
+  // linea di base si abbassa: **la misura di prima era gonfiata da un
+  // difetto**, non è una capacità che si è persa.
+  //
+  // Il motore diagnostico riaccodava le proprie prime tre ipotesi dentro le
+  // `osservazioni`, che finiscono in `facts_confirmed`. Il controfattuale
+  // valuta le previsioni di un'ipotesi **contro `facts_confirmed`**
+  // (causal_model.js: `fatti = [].concat(arr(cs.facts_confirmed), …)`):
+  // trovava quindi l'ipotesi stessa fra i fatti e la dichiarava "confermata
+  // dai fatti", portandola a `probable` e in testa all'elenco.
+  //
+  // Su FORUM-IT-007 (inverter con ISO Fault) era esattamente così che la
+  // causa vera finiva fra le stampate: `supporting_evidence:
+  // ["Controfattuale: 1 previsioni confermate dai fatti"]`, dove il fatto
+  // era la riga `IPOTESI: [NON_VERIFIABLE] Dispersione DC verso terra: …`.
+  // Una supposizione che si conferma da sola — la stessa cosa per cui lo
+  // stesso giorno è stata ritirata `cerca_casi_simili`.
+  //
+  // Caduto quel giro: 16 → 15 stampate, e al primo turno `probable` 3 → 1.
+  // Il secondo numero è il più importante: due "probabile" poggiavano su
+  // una prova che ROCCO si era scritto da sé. `causa_vera_attiva` resta 16:
+  // l'ipotesi giusta ROCCO continua a formularla, non la mette più davanti
+  // per una prova inventata.
+  causa_vera_stampata:        { valore: 15, verso: "max" },   // su 21
   causa_vera_attiva:          { valore: 16, verso: "max" },
   rumore_fuori_contesto:      { valore: 0,  verso: "min" },
   conferme_senza_misura:      { valore: 0,  verso: "min" },   // certezze regalate
