@@ -191,6 +191,27 @@ narrator.narrate(makeCaseState(), DRAFT, fakeGateway(GOOD), {}).then(function (r
   ok(r.narrated === false, "slug nel testo scartato");
   ok(/slug interno/.test(r.reason || ""), "motivo registrato: " + r.reason);
 
+  section("8-bis. Frase vietata — si torna alla bozza");
+
+  // Fino al 12/10 nessuno controllava le BANNED_PHRASES sul percorso vivo:
+  // `rocco.postcheck()` le filtra, ma è chiamato solo dentro `/api/chat`,
+  // mentre il frontend usa `/api/chat/v2`. Il narratore è un modello di
+  // lingua, e queste frasi sono esattamente la sua tentazione.
+  var vietata = GOOD.replace(
+    "- Misura di isolamento verso terra sul circuito della lavatrice",
+    "- Consiglio di rivolgersi a un elettricista per una valutazione sul posto");
+  return narrator.narrate(makeCaseState(), DRAFT, fakeGateway(vietata), {});
+}).then(function (r) {
+  ok(r.narrated === false, "la frase vietata fa tornare alla bozza");
+  ok(r.answer === DRAFT, "risposta = bozza deterministica");
+  ok(/frase vietata/.test(r.reason || ""), "motivo registrato: " + r.reason);
+
+  // E la bozza non ne contiene: non è un filtro che si limita a nascondere.
+  var policies = require("../../../rocco/policies");
+  var piano = DRAFT.toLowerCase().replace(/\s+/g, " ");
+  ok(!policies.BANNED_PHRASES.some(function (f) { return piano.indexOf(f) >= 0; }),
+    "la bozza deterministica non contiene frasi vietate");
+
   section("9. Provider non raggiungibile — la bozza resta una risposta valida");
 
   return narrator.narrate(makeCaseState(), DRAFT, failingGateway("ENOTFOUND"), {});

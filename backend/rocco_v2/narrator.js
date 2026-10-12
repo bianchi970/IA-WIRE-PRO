@@ -43,6 +43,23 @@ var MIN_ANSWER_LEN = 200;
 // normativi, che a loro volta citano il punto del curriculum che li insegna.
 var NORMATIVE_NUMBERS = require("../knowledge/limiti").numeriNormativi();
 
+// Le frasi vietate stanno nel codice di comportamento di ROCCO, e fino a qui
+// **nessuno le applicava sul percorso vivo**: `rocco.postcheck()` — che le
+// controlla — è chiamato solo dentro `/api/chat` (il ripiego), mentre il
+// frontend usa `/api/chat/v2`, dove l'unico filtro sul testo è `validate()`
+// qui sotto, che ne controllava cinque e non questa.
+//
+// Sono esattamente le frasi che annullano il prodotto: *"consiglio di
+// rivolgersi a un elettricista"*, *"difficile dirlo senza vedere"*, *"le
+// cause potrebbero essere molteplici"*. ROCCO esiste per dire **quale misura
+// fare adesso**; una di queste righe dice il contrario, e il narratore è un
+// modello di lingua — la tentazione di scriverle è esattamente la sua.
+//
+// Non si ripulisce la frase: si **torna alla bozza deterministica**, come per
+// ogni altra violazione. Una risposta che il motore ha scritto da sé non
+// contiene esitazioni, perché non ne ha.
+var BANNED_PHRASES = require("../rocco/policies").BANNED_PHRASES;
+
 function s(v) { return String(v == null ? "" : v).trim(); }
 function arr(v) { return Array.isArray(v) ? v : []; }
 
@@ -391,6 +408,16 @@ function validate(answer, data) {
   numbers = extractMeasuredNumbers(text);
   bad = numbers.filter(function (n) { return !allowed[n]; });
   if (bad.length) return { ok: false, reason: "misure non nei dati: " + bad.slice(0, 3).join(", ") };
+
+  // 6. Nessuna frase vietata dal codice di comportamento.
+  //    Il confronto è su minuscolo con spazi normalizzati: il modello
+  //    riformula la punteggiatura, non il senso.
+  var piano = text.toLowerCase().replace(/\s+/g, " ");
+  for (i = 0; i < BANNED_PHRASES.length; i += 1) {
+    if (piano.indexOf(BANNED_PHRASES[i]) >= 0) {
+      return { ok: false, reason: "frase vietata: " + BANNED_PHRASES[i] };
+    }
+  }
 
   return { ok: true, reason: null };
 }

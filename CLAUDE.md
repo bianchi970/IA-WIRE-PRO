@@ -1066,6 +1066,53 @@ nessun caso del corpus — vengono dalla fisica, non da una misura.
 
 ---
 
+### Il codice di comportamento non arrivava al motore vivo (12/10)
+
+`rocco/policies.js` dichiara chi è ROCCO: 7 HARD_SAFETY_RULES, 14
+GOLDEN_RULES, 15 BANNED_PHRASES. **`rocco_v2` non lo importa. Zero
+occorrenze.** Quelle regole raggiungono solo:
+
+- `rocco/index.js` → il prompt del vecchio `/api/chat`, che è il **ripiego**;
+- `rocco/postcheck.js` → il filtro sulle frasi vietate, chiamato **solo
+  dentro `/api/chat`** (`server.js:1968`), mai da `/api/chat/v2`;
+- `server.js` → un endpoint che le **conta**: `goldenRules: 14`, dichiarato
+  come capacità mentre il motore vivo non ne vede nessuna.
+
+È il difetto ricorrente di questo repo applicato al codice di comportamento,
+e ha due facce diverse.
+
+**Il contenuto c'è.** Le prescrizioni delle golden rules — megaohmetro a
+500 V, pinza amperometrica, bobina A1-A2, sequenzimetro, fusibili gG/NH non
+resettabili, ausiliaria 24 VDC separata — si trovano tutte nel percorso vivo,
+perché la banca dispositivi e il curriculum le portano. ROCCO le **sa**.
+
+**Il vincolo no.** Sul percorso vivo l'unico filtro sul testo finale è
+`narrator.validate()`, che controllava **cinque** cose: sezioni presenti,
+certezza invariata, nessuno slug, nessuna ipotesi inventata, nessuna misura
+inventata. Le frasi vietate non erano fra quelle. Il narratore **è** un
+modello di lingua, e *"consiglio di rivolgersi a un elettricista"*, *"difficile
+dirlo senza vedere"*, *"le cause potrebbero essere molteplici"* sono
+esattamente la sua tentazione — oltre che le righe che annullano il prodotto:
+ROCCO esiste per dire **quale misura fare adesso**.
+
+Sesto controllo, e il trattamento è quello di tutte le altre violazioni:
+**si torna alla bozza deterministica**, non si ripulisce la frase. Una
+risposta che il motore ha scritto da sé non contiene esitazioni perché non ne
+ha — ed è verificato nel test, non supposto.
+
+Resta aperto e dichiarato: delle 14 golden rules, **una sola è oggi applicata
+come regola** sul percorso vivo (la prima, vedi il blocco sopra) più quelle
+che qualcuno ha ricostruito a mano per altra via — sezioni del referto,
+osservazioni pulite, componenti solo citati, un solo prossimo passo. Le altre
+sono conoscenza disponibile, non vincolo verificato. Chi vuole chiuderle lo
+faccia **una per una con la sua misura**, non con un filtro unico: un filtro
+che le controlla tutte senza che nessun caso le eserciti è un'altra capacità
+dichiarata e non provata.
+
+Test: `narrator.test.js` — 52 asserzioni (erano 48), §8-bis nelle due
+direzioni: la frase vietata fa tornare alla bozza **e** la bozza stessa non
+ne contiene nessuna.
+
 ### Non dare per scontato — e la regola era già scritta (12/10)
 
 `verifica_giusta` era **10 su 18**: otto volte il PROSSIMO PASSO non era la
