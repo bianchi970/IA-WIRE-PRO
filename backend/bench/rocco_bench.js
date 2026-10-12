@@ -267,7 +267,11 @@ var BASELINE = {
   // senza la catena 14, con la catena **senza freno 11** (peggio: su una
   // lavatrice metteva in testa l'umidità, che spiegherebbe la dispersione
   // ma che il racconto non nomina), con il freno **15**.
-  causa_vera_in_testa:        { valore: 15, verso: "max" },   // su 21
+  // ALZATA 15 → 16 il 12/10: un'ipotesi che **ridice il sintomo** non guida.
+  // Su FORUM-IT-007 la prima riga era "inverter in errore o spento" per un
+  // cliente che aveva appena scritto che l'inverter segna errore ISO. Ora è
+  // "umidità in connettore MC4", che è la causa reale del caso.
+  causa_vera_in_testa:        { valore: 16, verso: "max" },   // su 21
   //
   // Il controllo di onestà sul numero sopra: quante volte il credito sta su
   // una parola che il cliente **non** aveva già detto. 20 su 21 — l'unica

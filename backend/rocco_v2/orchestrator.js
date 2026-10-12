@@ -1989,10 +1989,32 @@ function makeHypothesisComparator(cs) {
     return cache[k];
   }
 
+  var cacheEco = {};
+  function ridiceIlSintomo(h) {
+    var k = s(h && h.label);
+    if (cacheEco[k] === undefined) {
+      cacheEco[k] = formeCausa.ridiceIlSintomo(k, story) ? 1 : 0;
+    }
+    return cacheEco[k];
+  }
+
   return function(a, b) {
     var fa = fuoriContesto(a);
     var fb = fuoriContesto(b);
     if (fa !== fb) return fa - fb;
+
+    // Ripetere il sintomo non è diagnosticare: un'ipotesi che ridice quel
+    // che il cliente ha appena scritto non è falsa, è **vuota**. Su
+    // FORUM-IT-007 la prima riga era "inverter in errore o spento" per un
+    // cliente che aveva appena scritto che l'inverter segna errore.
+    //
+    // Sta subito dopo la pertinenza e **prima della conferma**, per la
+    // stessa ragione per cui ci sta la pertinenza: un'ipotesi che non
+    // aggiunge niente non guida nemmeno se una soglia l'ha confermata.
+    // Vedi rocco_v2/forme_causa.js.
+    var ea = ridiceIlSintomo(a);
+    var eb = ridiceIlSintomo(b);
+    if (ea !== eb) return ea - eb;
 
     // La prova strumentale: confermata davanti a tutto il resto.
     var ca = a.confidence === "confirmed" ? 1 : 0;

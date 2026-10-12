@@ -237,6 +237,34 @@ check("un conduttore interrotto NON spiega l'assenza di rete",
 check("una dispersione NON spiega un differenziale difettoso",
   !fc.spiegaAltra("dispersione su carico", "RCD difettoso o a fine vita"));
 
+// ─── §8 Ripetere il sintomo non è diagnosticare ───────────────────────
+console.log("\n§8 — l'ipotesi che ridice il racconto");
+
+// Il racconto vero di FORUM-IT-007.
+var IT007 = "Ho un impianto fotovoltaico da 6kW, da ieri l'inverter segna " +
+  "errore ISO e non produce piu niente. Sul display c'e scritto 'ISO Fault'.";
+
+check("«inverter in errore o spento» ridice il sintomo",
+  fc.ridiceIlSintomo("inverter in errore o spento", IT007));
+check("anche nella seconda forma della banca",
+  fc.ridiceIlSintomo("Inverter in errore o limitazione", IT007));
+
+// Queste NO: aggiungono un perché che il cliente non ha detto.
+check("«umidità in connettore MC4» non ridice: aggiunge il perché",
+  !fc.ridiceIlSintomo("umidità in connettore MC4 o guaina cavo deteriorata", IT007));
+check("«sezionatore DC aperto» non ridice",
+  !fc.ridiceIlSintomo("sezionatore DC aperto", IT007));
+
+// La tesi dev'essere NUDA: chi nomina pezzi sta spiegando, non ripetendo.
+// Misurato: è la riga che separa le due famiglie sul corpus.
+check("una causa meccanica che nomina i pezzi non è una ripetizione",
+  !fc.ridiceIlSintomo("Asse meccanicamente bloccato (giunto, riduttore, pompa bloccata)",
+                      "Ho un motore trifase su un compressore, ronza ma non parte."));
+
+// E senza un comportamento nella tesi non c'è ripetizione possibile.
+check("un'etichetta senza comportamento non ridice mai",
+  !fc.ridiceIlSintomo("morsetto allentato", "il morsetto è diventato nero"));
+
 console.log("\n============================================================");
 console.log("FORME CAUSA: " + pass + " passed, " + fail + " failed");
 console.log("============================================================");

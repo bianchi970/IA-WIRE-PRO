@@ -51,8 +51,12 @@
  * proprio così: il superstite era la riga più generica e portava via
  * *"isolamento danneggiato"*, l'unica parola che diceva qualcosa.
  *
- * Modulo puro, nessuna dipendenza: come `negazione.js` e `forme_sintomo.js`.
+ * Modulo puro: l'unica dipendenza è `forme_sintomo.js`, l'altro vocabolario
+ * senza dipendenze — le forme in cui si dice un sintomo e quelle in cui si
+ * dice una causa stanno meglio vicine che in due posti che si ignorano.
  */
+
+var formeSintomo = require("./forme_sintomo");
 
 function norm(t) {
   return String(t == null ? "" : t).toLowerCase()
@@ -211,6 +215,43 @@ function frammento(label, base) {
   return f.charAt(0).toLowerCase() + f.slice(1);
 }
 
+// ── RIPETERE IL SINTOMO NON È DIAGNOSTICARE ──────────────────────────
+//
+// Su FORUM-IT-007 il cliente scrive *"l'inverter segna errore ISO e non
+// produce più niente"* e la prima riga della risposta era **"inverter in
+// errore o spento"**: gli si ridiceva quello che aveva appena scritto. Non
+// è falso — è **vuoto**. La causa vera (umidità in un connettore MC4)
+// stava sotto.
+//
+// Si riconosce col vocabolario che ROCCO ha già: un'etichetta ridice il
+// sintomo se la sua tesi nomina un OGGETTO e un COMPORTAMENTO che il
+// racconto ha **già detto entrambi**. *"Umidità in connettore MC4"* no,
+// perché `umido` il cliente non l'ha detto: quella aggiunge un perché.
+//
+// E la tesi dev'essere **nuda**: al più quattro parole. Misurato, è la
+// riga che separa *"inverter in errore o spento"* (3) da *"Asse
+// meccanicamente bloccato (giunto, riduttore, pompa bloccata)"* (7), che
+// è una causa meccanica vera e nomina pezzi che il cliente non ha
+// nominato. Chi ripete non aggiunge: chi aggiunge, spiega.
+//
+// **Retrocessione, non esclusione**, come la pertinenza: l'ipotesi resta
+// viva perché non è falsa, e torna su se una misura la conferma.
+var MAX_PAROLE_TESI_NUDA = 4;
+
+function sottoinsieme(piccolo, grande) {
+  return piccolo.every(function (x) { return grande.indexOf(x) >= 0; });
+}
+
+function ridiceIlSintomo(label, racconto) {
+  var t = tesi(label);
+  if ((t.match(/[A-Za-zàèéìòù]{3,}/g) || []).length > MAX_PAROLE_TESI_NUDA) return false;
+  var oggetti = formeSintomo.oggetti(t);
+  var comportamenti = formeSintomo.comportamenti(t);
+  if (!oggetti.length || !comportamenti.length) return false;
+  return sottoinsieme(oggetti, formeSintomo.oggetti(racconto)) &&
+         sottoinsieme(comportamenti, formeSintomo.comportamenti(racconto));
+}
+
 module.exports = {
   FENOMENI_CAUSA: FENOMENI_CAUSA,
   RELAZIONI_CAUSALI: RELAZIONI_CAUSALI,
@@ -220,5 +261,6 @@ module.exports = {
   fenomenoCausa: fenomenoCausa,
   apparecchiNominati: apparecchiNominati,
   chiaveCausa: chiaveCausa,
-  frammento: frammento
+  frammento: frammento,
+  ridiceIlSintomo: ridiceIlSintomo
 };

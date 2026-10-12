@@ -1066,6 +1066,52 @@ nessun caso del corpus — vengono dalla fisica, non da una misura.
 
 ---
 
+### Ripetere il sintomo non è diagnosticare (12/10)
+
+Su FORUM-IT-007 il cliente scrive *"l'inverter segna **errore ISO** e non
+produce più niente"* e la prima riga della risposta era **"inverter in
+errore o spento"**: gli si ridiceva quello che aveva appena scritto. Non è
+falso — è **vuoto**. La causa vera (umidità in un connettore MC4) stava
+sotto.
+
+È l'ultimo dei quattro casi contati all'inizio della giornata come «non
+sono ipotesi», e il più sottile: KR-14 copriva quello in cui il racconto
+**smentisce** l'ipotesi, questo è quello in cui il racconto la **contiene**.
+
+Si riconosce con il vocabolario che ROCCO ha già — `forme_sintomo.js`,
+OGGETTO × COMPORTAMENTO: l'etichetta ridice il sintomo se la sua **tesi**
+nomina un oggetto e un comportamento che il racconto ha già detto
+**entrambi**. *"Umidità in connettore MC4"* no, perché `umido` il cliente
+non l'ha detto: quella aggiunge un perché. Nessuna parola nuova inventata.
+
+**E la tesi dev'essere nuda**, al più quattro parole. Misurato, è la riga
+che separa *"inverter in errore o spento"* (3 parole) da *"Asse
+meccanicamente bloccato (giunto, riduttore, pompa bloccata)"* (7), che è
+una causa meccanica vera e nomina pezzi che il cliente non ha nominato:
+**chi ripete non aggiunge, chi aggiunge spiega.** Senza questa riga, la
+regola retrocedeva anche quella.
+
+**Retrocessione, non esclusione**, come la pertinenza — e nel comparatore
+sta **subito dopo la pertinenza, prima della conferma**, per la stessa
+ragione già scritta per quella: un'ipotesi che non aggiunge niente non
+guida nemmeno se una soglia l'ha confermata.
+
+| metrica | prima | dopo |
+|---|---|---|
+| **causa vera in testa** | 15/21 | **16/21** |
+| prima riga di FORUM-IT-007 | *"inverter in errore o spento"* | *"umidità in connettore MC4 o guaina cavo deteriorata"* |
+| tutto il resto del banco | — | invariato |
+
+La riga nuova di IT-007 **è** la causa reale del caso (*"probabile ingresso
+acqua in un connettore MC4"*).
+
+**Un falso positivo trovato per strada, e valeva da solo**: la prima misura
+della regola colpiva anche FORUM-IT-013, dove avrebbe retrocesso la causa
+vera. Indagando, il difetto non era nella regola — vedi il blocco qui
+sotto, `scalda` dentro `scaldabagno`.
+
+Test: `forme_causa.test.js` §8 — 51 asserzioni in tutto.
+
 ### `scalda` dentro `scaldabagno` (12/10)
 
 Cercando perché su FORUM-IT-013 un'ipotesi risultasse «ripetizione del
