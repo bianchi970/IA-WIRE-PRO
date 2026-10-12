@@ -1591,6 +1591,22 @@ function radiciDi(testo) {
     .map(function(w) { return w.slice(0, RADICE_TEST); });
 }
 
+// **Scartato e da non riprovare: pesare solo le radici DISTINTIVE.**
+//
+// L'idea sembra ovvia. `coverage` conta le ipotesi che parlano della stessa
+// grandezza per radice, quindi una frase fatta di parole comuni combacia con
+// tutte **per costruzione** — ed è la tautologia già scartata due volte in
+// questo repo. Provata il 12/10 (radice presente in più di metà delle ipotesi
+// attive = generica, ignorata nel conteggio): **verifica giusta 11 → 9 su 18**.
+//
+// La ragione sta nel commento qui sopra, e l'avevo letto senza capirlo: la
+// radice comune **è** la leva. Su un differenziale che scatta `isolam` ricorre
+// nei test di mezze ipotesi proprio perché misurare l'isolamento è il passo
+// giusto — e scartarla ha fatto perdere FORUM-IT-001 e FORUM-IT-009, che erano
+// corretti. `coverage` non misura quanto una frase è specifica: misura su
+// quale grandezza poggia il caso. Chi riprova questa strada rimisuri prima.
+
+
 function scoreDiscrimination(chiave, activeHypotheses, testo) {
   var radici = radiciDi(testo);
   function parlaDi(t) {
@@ -1736,10 +1752,16 @@ function selectBestAction(cs) {
     // quindi ancora vincere.
     var azNorm = normalize(c.action);
     c.alreadyDone = alreadyDone.some(function(re) { return re.test(azNorm); });
+    // Un passo non deve dare per scontato quello che il racconto smentisce.
+    // Si legge il **racconto** (`story`), non le prove: l'applicabilità di un
+    // passo è strutturale, come la pertinenza e come KR-11. Penalità e non
+    // esclusione, per la stessa ragione di `alreadyDone`.
+    c.premessaSmentita = checkPhrasing.premessaSmentita(c.action, ctx.story);
     c.totalScore = c.discrimination.score + safety + simple + dup
       + (c.alreadyDone ? -40 : 0)
       // Un enunciato di stato non è un passo: pesa, ma non vince.
       + (c.enunciato ? -30 : 0)
+      + (c.premessaSmentita ? -60 : 0)
       + 0;
   });
 

@@ -23,6 +23,11 @@
  * che un'istruzione sbagliata su un impianto in tensione.
  */
 
+// Le forme in cui un guasto si dice stanno in un posto solo: qui si usano
+// per sapere se il racconto smentisce la premessa di un passo (vedi
+// `PREMESSE` in fondo). Modulo puro, nessuna dipendenza circolare.
+var formeSintomo = require("./forme_sintomo");
+
 function s(v) { return String(v == null ? "" : v).trim(); }
 
 /** Via gli articoli dal nome del nodo: "il Circuito prese" → "Circuito prese" */
@@ -348,11 +353,82 @@ function isInstruction(testo) {
   return AZIONI.test(t.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
 }
 
+// ── Un passo non deve dare per scontato quello che il racconto smentisce ──
+//
+// Direttiva di Romeo, 12/10: *"una cosa non deve assolutamente fare ROCCO è
+// dare tutto per scontato."* Cade esattamente su un difetto misurato.
+//
+// Alcuni schemi qui sopra traducono una previsione in un'istruzione che
+// **presuppone uno scenario**, e nessuno controllava che il racconto lo
+// sostenesse. Misurato sui 21 casi italiani, nelle tre volte in cui una di
+// queste formule è stata scelta come PROSSIMO PASSO era **sempre** sbagliata:
+//
+//  - FORUM-IT-002 — il cliente scrive *"uno non resta su, fa TRAC e ricade"*
+//    e il passo proposto era *"verifica che le protezioni siano chiuse"*: dà
+//    per scontato proprio quello che il cliente dice che non succede;
+//  - FORUM-SPEC-001 — *"le luci si accendono da sole"* e il passo era
+//    *"verifica che Circuito luci abbia tensione ai morsetti e non funzioni
+//    comunque"*: presuppone un impianto morto su un racconto che dice il
+//    contrario;
+//  - FORUM-IT-012 — stessa formula sul differenziale che scatta. Un
+//    differenziale che scatta **funziona**: sta facendo il suo mestiere.
+//
+// È la sorella di KR-14, che toglie un'**ipotesi** quando il cliente dichiara
+// l'assenza di allarmi: qui il racconto smentisce la premessa di un **passo**.
+//
+// Si dichiara la premessa, non la formula. Le classi di comportamento sono
+// quelle di `forme_sintomo.js` — nessun vocabolario nuovo — e la lettura è
+// sul **racconto**, come per la pertinenza e per KR-11: l'applicabilità di
+// un passo è strutturale, non è una misura.
+//
+// **Penalità e non esclusione**, come per `ALREADY_DONE`: se ogni candidato
+// avesse una premessa smentita ROCCO deve comunque proporre il migliore, e
+// meglio un passo discutibile che nessun passo.
+var PREMESSE = [
+  {
+    id: "protezioni-chiuse",
+    // "le protezioni sono chiuse", "il carico non funziona ma c'è tensione"
+    premessa: /protezioni (siano|sono) chiuse|tensione a valle, con il carico/i,
+    // Se una protezione scatta, non resta chiusa: la premessa è falsa.
+    smentita_da: ["scatta"],
+    perche: "il racconto dice che una protezione non resta chiusa"
+  },
+  {
+    id: "alimentato-e-inerte",
+    premessa: /abbia tensione ai morsetti e non funzioni comunque|non funziona anche se alimentato/i,
+    // `scatta`   — con una protezione che interviene non c'è tensione stabile;
+    // `spontaneo`— l'apparecchio agisce da solo, quindi funziona;
+    // `riduce`   — rende meno non vuol dire "non funziona".
+    smentita_da: ["scatta", "spontaneo", "riduce"],
+    perche: "il racconto dice che l'apparecchio qualcosa fa"
+  }
+];
+
+/**
+ * La premessa di questo passo è smentita dal racconto?
+ * Torna la ragione (stringa) oppure null.
+ */
+function premessaSmentita(testo, racconto) {
+  var t = s(testo);
+  var r = s(racconto);
+  if (!t || !r) return null;
+  for (var i = 0; i < PREMESSE.length; i++) {
+    var p = PREMESSE[i];
+    if (!p.premessa.test(t)) continue;
+    for (var j = 0; j < p.smentita_da.length; j++) {
+      if (formeSintomo.haComportamento(r, p.smentita_da[j])) return p.perche;
+    }
+  }
+  return null;
+}
+
 module.exports = {
   isInstruction: isInstruction,
   bersaglioValido: bersaglioValido,
   toInstruction: toInstruction,
   toInstructions: toInstructions,
   patternIdOf: patternIdOf,
-  PATTERNS: PATTERNS
+  premessaSmentita: premessaSmentita,
+  PATTERNS: PATTERNS,
+  PREMESSE: PREMESSE
 };

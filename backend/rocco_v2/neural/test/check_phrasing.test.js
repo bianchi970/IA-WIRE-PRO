@@ -187,6 +187,55 @@ ok(doppio === null, "la previsione col bersaglio sbagliato viene scartata, non t
 ok(/^Verifica se Circuito luci/.test(cp.toInstruction("Circuito luci non funziona")),
   "e lo schema continua a funzionare sul bersaglio giusto");
 
+// ─── §6 Un passo non dà per scontato quello che il racconto smentisce ──
+//
+// Regola di mestiere di Romeo, ed è già la prima delle GOLDEN_RULES:
+// *"non dare per scontato che la tensione a monte arrivi a valle."*
+// Si prova nelle due direzioni, perché una premessa dichiarata smentita
+// troppo facilmente toglierebbe passi buoni.
+console.log("\n§6 — la premessa che il racconto smentisce");
+
+// Deve scattare: sono le tre frasi vere dei casi dove la formula ha vinto.
+ok(cp.premessaSmentita(
+  "Verifica che le protezioni siano chiuse e che ci sia tensione a valle, con il carico che non funziona",
+  "ho provato a tirare su tutti gli interruttori ma uno non resta su, fa TRAC e ricade subito"),
+  "«protezioni chiuse» con una protezione che ricade");
+
+ok(cp.premessaSmentita(
+  "Verifica che Circuito luci abbia tensione ai morsetti e non funzioni comunque: conferma il guasto interno al componente",
+  "le luci del giardino si accendono da sole nel pomeriggio"),
+  "«alimentato e inerte» su un impianto che agisce da solo");
+
+ok(cp.premessaSmentita(
+  "Verifica che Differenziale 30mA abbia tensione ai morsetti e non funzioni comunque: conferma il guasto interno al componente",
+  "il differenziale scatta due o tre volte al giorno senza motivo"),
+  "un differenziale che scatta funziona: sta facendo il suo mestiere");
+
+ok(cp.premessaSmentita(
+  "Verifica che l'inverter abbia tensione ai morsetti e non funzioni comunque: conferma il guasto interno al componente",
+  "il mio impianto fotovoltaico produce il 30% in meno"),
+  "«non funziona» non descrive un impianto che rende meno");
+
+// NON deve scattare: la stessa formula su un racconto che la sostiene.
+ok(!cp.premessaSmentita(
+  "Verifica che Circuito luci abbia tensione ai morsetti e non funzioni comunque: conferma il guasto interno al componente",
+  "la presa del soggiorno non funziona più, le altre vanno"),
+  "su un apparecchio davvero inerte la premessa regge");
+
+ok(!cp.premessaSmentita(
+  "Verifica che le protezioni siano chiuse e che ci sia tensione a valle, con il carico che non funziona",
+  "ho forato il muro e adesso non funziona piu la presa del soggiorno"),
+  "«protezioni chiuse» regge se nessuna protezione è scattata");
+
+// Un passo senza premesse non viene mai toccato: è la maggioranza.
+ok(!cp.premessaSmentita(
+  "Misura la resistenza di isolamento verso terra su Carico con il megaohmetro a 500 V",
+  "il salvavita scatta quando accendo la lavatrice"),
+  "una misura strumentale non presuppone niente");
+
+ok(!cp.premessaSmentita("", "il differenziale scatta"), "testo vuoto: nessuna premessa");
+ok(!cp.premessaSmentita("Verifica che le protezioni siano chiuse", ""), "racconto vuoto: non si deduce niente");
+
 console.log("\n" + new Array(61).join("="));
 console.log("CHECK PHRASING: " + passed + " passed, " + failed + " failed");
 console.log(new Array(61).join("="));

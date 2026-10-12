@@ -1066,6 +1066,93 @@ nessun caso del corpus — vengono dalla fisica, non da una misura.
 
 ---
 
+### Non dare per scontato — e la regola era già scritta (12/10)
+
+`verifica_giusta` era **10 su 18**: otto volte il PROSSIMO PASSO non era la
+verifica che il caso prescrive. Prima di toccare il punteggio, la domanda
+giusta: **la verifica mancava, o c'era e non veniva scelta?**
+
+Misurato ricostruendo il pool dei candidati caso per caso: **in 6 casi su 8
+il candidato giusto era già fra i test delle ipotesi attive.** Solo 2 sono
+conoscenza che manca (FORUM-IT-005, FORUM-SPEC-001). Di nuovo «lo sa e non ci
+arriva», non «non lo sa».
+
+**Il difetto, e la regola di mestiere che lo nomina.** Le tre volte in cui ha
+vinto una formula di `toInstruction()` che **presuppone uno scenario**, era
+sempre sbagliata:
+
+| caso | il cliente scrive | ROCCO proponeva |
+|---|---|---|
+| FORUM-IT-002 | *"uno non resta su, fa TRAC e ricade"* | *"verifica che le protezioni **siano chiuse**"* |
+| FORUM-SPEC-001 | *"le luci si accendono **da sole**"* | *"verifica che Circuito luci abbia tensione e **non funzioni comunque**"* |
+| FORUM-IT-012 | *"il differenziale **scatta**"* | idem — ma un differenziale che scatta **funziona**: sta facendo il suo mestiere |
+
+Romeo l'ha detta così: *«una cosa non deve assolutamente fare ROCCO è dare
+tutto per scontato.»* **Ed è già la prima delle `GOLDEN_RULES`:** *"Misurare
+SEMPRE IN e OUT di ogni protezione: **non dare per scontato** che la tensione
+a monte arrivi a valle."*
+
+**Perché non era applicata: `rocco_v2` non legge `policies.js`. Zero
+occorrenze.** Le 7 HARD_SAFETY_RULES, le 14 GOLDEN_RULES e le 15
+BANNED_PHRASES arrivano solo a `rocco/index.js` (il prompt del vecchio
+`/api/chat`), a `postcheck.js` e a un endpoint di `server.js` che le
+**conta** — `goldenRules: 14` dichiarato come capacità mentre il motore vivo
+non ne vede nessuna. Il difetto ricorrente di questo repo applicato al codice
+di comportamento.
+
+`check_phrasing.PREMESSE` dichiara la **premessa** di un passo e le classi di
+comportamento che la smentiscono — vocabolario di `forme_sintomo.js`, niente
+di nuovo. Due voci: *protezioni chiuse* (smentita da `scatta`) e *alimentato
+e inerte* (smentita da `scatta`, `spontaneo`, `riduce` — rendere meno non è
+non funzionare). Si legge il **racconto**, come la pertinenza e KR-11:
+l'applicabilità di un passo è strutturale, non è una misura. **Penalità (−60)
+e non esclusione**, come `ALREADY_DONE`: se ogni candidato avesse una
+premessa smentita ROCCO deve comunque proporre il migliore.
+
+Misurato prima di scrivere la regola: quelle formule vincevano su **3 casi,
+tutti e tre sbagliati, e su zero dei 10 giusti** — penalizzarle non poteva
+rompere niente.
+
+**Scartato e da non riprovare, misurato: pesare solo le radici distintive.**
+`coverage` conta quante ipotesi parlano della stessa grandezza, per radice, e
+una frase di parole comuni combacia con tutte per costruzione: sembrava la
+tautologia già scartata due volte. Provata (radice in più di metà delle
+ipotesi = generica, ignorata): **11 → 9 su 18.** La ragione era scritta nel
+commento sopra la funzione e l'avevo letto senza capirlo — **la radice comune
+è la leva**: su un differenziale che scatta `isolam` ricorre nei test di mezze
+ipotesi proprio perché misurare l'isolamento è il passo giusto. Ha fatto
+perdere FORUM-IT-001 e FORUM-IT-009, che erano corretti. La nota sta in
+`orchestrator.js` sopra `scoreDiscrimination`.
+
+| metrica | prima | dopo |
+|---|---|---|
+| **verifica giusta** | 10/18 | **11/18** |
+| formule prefabbricate scelte come passo | 3 (tutte sbagliate) | **0** |
+| tutte le altre metriche del banco | — | **invariate, 0 regressioni** |
+
+**I 7 che restano, divisi per natura** — e sono tre cose diverse, non sette
+difetti:
+- **2 conoscenza mancante**: IT-005 (prescrive solo controlli manuali in
+  cassetta), SPEC-001 (relè crepuscolare — nessun candidato lo nomina);
+- **3 graduatoria delle ipotesi, non del passo**: su SPEC-002/004/005 il test
+  giusto appartiene a un'ipotesi che non è in testa. È la **stessa radice** di
+  `causa_vera_in_testa` 16/21 — IT-003 e SPEC-004 hanno entrambi *"protezione
+  a monte scattata"* in prima riga, su racconti dove nessuno ha detto che
+  qualcosa è scattato;
+- **2 metro cieco, non dichiarato**: su IT-003 ROCCO propone *"prova di
+  continuità su Circuito **prese**"* e il caso prescrive *"misura continuità
+  del cavo dalla cassetta alla **presa**"* — **sono la stessa prova**, e il
+  confronto per radice a sei caratteri non vede `presa`/`prese` (entrambe di
+  5). Stessa cosa su IT-005 con `cassetta`/`cassette`. È il difetto del
+  singolare/plurale italiano per la quarta volta, questa volta **nel metro**.
+  Non è stato corretto qui di proposito: allargare il metro alza il voto senza
+  cambiare ROCCO, e va fatto — se si fa — come blocco a sé e dichiarato.
+
+Test: `check_phrasing.test.js` — 66 asserzioni (erano 57), §6 nelle due
+direzioni: le tre frasi vere che devono scattare più il fotovoltaico che
+«rende meno», e quattro che non devono — compresa la stessa formula su un
+racconto che la sostiene.
+
 ### Un precedente si riconosce dal sintomo, non da una grandezza (12/10)
 
 `cs.domain` valeva `"tensione"` — una grandezza spacciata per dominio, l'ultimo

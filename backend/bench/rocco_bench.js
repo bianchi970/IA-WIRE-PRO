@@ -363,7 +363,11 @@ var BASELINE = {
   // Dopo: **10 su 18**. E su FORUM-SPEC-003 il passo è ora "misurare tensione
   // di ogni pannello separatamente (o termografia per hot-spot)", che è
   // esattamente quello che il caso prescrive.
-  verifica_giusta:            { valore: 10, verso: "max" },   // sui casi non in arresto
+  // ALZATA 10 → 11: un passo non dà più per scontato quello che il racconto
+  // smentisce (`check_phrasing.PREMESSE`). È la prima delle GOLDEN_RULES —
+  // "non dare per scontato che la tensione a monte arrivi a valle" — che il
+  // percorso vivo non applicava, perché `rocco_v2` non legge `policies.js`.
+  verifica_giusta:            { valore: 11, verso: "max" },   // sui casi non in arresto
   conferme_sbagliate:         { valore: 0,  verso: "min" },   // causa vera NON fra le confermate
   contesto_perso_multi_turn:  { valore: 0,  verso: "min" },
   // Apprendimento (misurato il 2026-10-11): il caso chiuso torna utile al
