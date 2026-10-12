@@ -3,6 +3,8 @@
 var fs = require("fs");
 var path = require("path");
 var contracts = require("./contracts");
+// Il sintomo si riconosce in un posto solo: OGGETTO × COMPORTAMENTO.
+var formeSintomo = require("./forme_sintomo");
 
 var STORE_PATH = path.join(__dirname, "..", "data", "rocco-v2-memory.json");
 
@@ -118,7 +120,10 @@ function buildCaseRecord(caseState, feedback) {
     id: safeText(feedback && feedback.caseId) || ("rocco-v2-" + Date.now()),
     saved_at: new Date().toISOString(),
     problem_summary: safeText(state.problem_summary),
-    domain: safeText(state.domain),
+    // `domain` non si salva più: era l'unico lettore di quel campo qui, e il
+    // confronto ora si fa sulla firma del sintomo ricavata dal racconto.
+    // Un campo scritto che nessuno legge è il difetto che questo repo
+    // insegue da venti blocchi.
     safety_level: safeText(safety.level),
     confirmed_cause: safeText(feedback && feedback.confirmedCause),
     decisive_checks: safeArray(feedback && feedback.decisiveChecks).slice(0, 6),
@@ -161,14 +166,16 @@ function findRelevantClosedCases(caseState, limit) {
   var matches = [];
   var query = safeText(caseState && caseState.problem_summary);
   var max = typeof limit === "number" ? limit : 3;
-  var domain = safeText(caseState && caseState.domain);
 
   store.closed_cases.forEach(function (item) {
     var itemSummary = safeText(item && item.problem_summary);
-    var itemDomain = safeText(item && item.domain);
     var score = similarity(query, itemSummary);
 
-    if (domain && itemDomain && domain === itemDomain) {
+    // Lo stesso apparecchio che fa la stessa cosa. Il confronto è sui due
+    // racconti e non su un campo salvato: vedi `forme_sintomo.stessoSintomo`
+    // per i numeri che hanno scartato la chiave precedente (`caseState.domain`,
+    // precisione 49%, nulla su metà dei casi).
+    if (formeSintomo.stessoSintomo(query, itemSummary)) {
       score += 0.15;
     }
 

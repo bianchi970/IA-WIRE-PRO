@@ -155,6 +155,22 @@ NEGATIVI.forEach(function (n) {
   check("«" + n[0] + "» non è " + n[1], !forme.haComportamento(n[0], n[1]));
 });
 
+// Gli stessi confini valgono per gli OGGETTI. `rele` senza confine di
+// chiusura prende "ir**rele**vante", ed è la quarta volta che questo file
+// incontra una parola corta dentro una parola italiana.
+var OGGETTI_NEGATIVI = [
+  ["il dettaglio è irrilevante",            "commutazione"],
+  ["ho correlato i due eventi",             "commutazione"],
+  ["l'impianto è stato rilevato a norma",   "commutazione"]
+];
+OGGETTI_NEGATIVI.forEach(function (n) {
+  check("«" + n[0] + "» non nomina " + n[1], !forme.haOggetto(n[0], n[1]));
+});
+check("«il teleruttore della pompa» nomina la commutazione",
+  forme.haOggetto("il teleruttore della pompa fa rumore", "commutazione"));
+check("«il contattore non tira» nomina la commutazione",
+  forme.haOggetto("il contattore non tira", "commutazione"));
+
 // Una frase che non descrive un guasto non deve produrre un sintomo: dire
 // "non lo so" è la risposta giusta.
 var NON_GUASTI = [
@@ -218,6 +234,75 @@ var casiDiScatto = corpus.CASI_FORUM.filter(function (c) {
 }).length;
 check("la classe `scatta` non è più frequente dei casi di scatto del corpus",
   conteggio.scatta <= casiDiScatto + 2);
+
+// ─── §6 La firma del sintomo: riconoscere un precedente ───────────────
+//
+// `stessoSintomo` decide se un caso chiuso dall'elettricista parla della
+// stessa cosa di quello di oggi. Non ordina soltanto: un precedente
+// riconosciuto diventa un'**ipotesi** intestata "già accertata una volta",
+// quindi uno sbagliato è un'invenzione. Si prova in tre direzioni come il
+// resto del file: le coppie che devono somigliare, quelle che non devono, e
+// la misura sul corpus contro il metro esterno (`sintomo_atteso`).
+console.log("\n§6 — la firma del sintomo (riconoscere un precedente)");
+
+check("stesso apparecchio e stesso comportamento, parole diverse",
+  forme.stessoSintomo(
+    "il salvavita scatta sempre quando accendo la lavatrice",
+    "da due giorni il differenziale interviene appena parte la lavastoviglie"));
+
+check("il teleruttore che ronza e manca una fase — il caso vero, ridetto",
+  forme.stessoSintomo(
+    "c'e un teleruttore che comanda una pompa sommersa di un pozzo la bobina fa rumore, la centralina segna che manca una fase",
+    "su un altro pozzo il contattore ronza e il display dice che manca una fase"));
+
+check("stesso comportamento ma apparecchio diverso: NON somiglia",
+  !forme.stessoSintomo(
+    "il differenziale scatta appena accendo la lavatrice",
+    "il motore trifase del compressore non parte piu"));
+
+check("stesso apparecchio ma comportamento diverso: NON somiglia",
+  !forme.stessoSintomo(
+    "il differenziale scatta appena accendo la lavatrice",
+    "il differenziale non si riarma perche la leva e rotta meccanicamente"));
+
+check("chi tace non somiglia: un racconto senza sintomo non pesca nulla",
+  !forme.stessoSintomo(
+    "buongiorno avrei bisogno di un preventivo per rifare l'impianto",
+    "il differenziale scatta appena accendo la lavatrice"));
+
+check("la firma dichiara le due nature separate",
+  (function () {
+    var f = forme.firma("il differenziale scatta quando accendo la lavatrice");
+    return Array.isArray(f.oggetti) && Array.isArray(f.comportamenti);
+  })());
+
+// La misura che ha scelto questa chiave, rifatta qui perché non resti solo
+// nel commento: sulle 1128 coppie dei 48 casi, con verità `sintomo_atteso`.
+// La chiave precedente (`caseState.domain` = `observedDomains[0]`) scattava
+// su 82 coppie di cui **42 sbagliate** — precisione 49%, una monetina.
+(function () {
+  var casi = corpus.CASI_FORUM;
+  var vp = 0, fp = 0, fn = 0;
+  for (var i = 0; i < casi.length; i++) {
+    for (var j = i + 1; j < casi.length; j++) {
+      var stesso = !!casi[i].sintomo_atteso && casi[i].sintomo_atteso === casi[j].sintomo_atteso;
+      var scatta = forme.stessoSintomo(casi[i].domanda, casi[j].domanda);
+      if (scatta && stesso) vp++;
+      else if (scatta) fp++;
+      else if (stesso) fn++;
+    }
+  }
+  var precisione = vp + fp ? vp / (vp + fp) : 0;
+  var richiamo = vp + fn ? vp / (vp + fn) : 0;
+  console.log("    sulle " + (casi.length * (casi.length - 1) / 2) + " coppie del corpus: scatta su " +
+    (vp + fp) + ", giuste " + vp + ", sbagliate " + fp +
+    " — precisione " + Math.round(precisione * 100) + "%, richiamo " + Math.round(richiamo * 100) + "%");
+
+  // Le due soglie sono le misure della chiave scartata, non numeri scelti:
+  // sotto queste si tornerebbe a star peggio di `observedDomains[0]`.
+  check("precisione migliore della chiave scartata (49%)", precisione > 0.49);
+  check("richiamo migliore della chiave scartata (13%)", richiamo > 0.13);
+})();
 
 console.log("\n============================================================");
 console.log("FORME SINTOMO: " + pass + " passed, " + fail + " failed");

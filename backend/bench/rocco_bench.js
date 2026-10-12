@@ -376,6 +376,23 @@ var BASELINE = {
   esperienza_riusata:         { valore: 18, verso: "max" },   // il precedente è fra le stampate
   esperienza_in_testa:        { valore: 18, verso: "max" },   // ed è la prima
   esperienza_persa:           { valore: 0,  verso: "min" },   // salvata e non ritrovata
+  // L'altra metà della domanda, che per mesi nessuno ha posto: con nello
+  // store anche il caso chiuso di **un altro guasto**, ROCCO ripesca quello?
+  // Un precedente sbagliato non è un'ipotesi debole, è un'invenzione
+  // intestata "causa accertata".
+  //
+  // **È una guardia, non un guadagno, e va detto.** Misurata il 2026-10-12
+  // prima e dopo il cambio di chiave: **0 in entrambi i casi**. Su questo
+  // corpus la civetta non arriva mai alla soglia perché nessuna coppia di
+  // casi italiani è abbastanza vicina lessicalmente, e il contributo della
+  // chiave (+0.15) da solo non basta. Resta perché la cosa che sorveglia
+  // non ha nessun'altra sentinella, e perché il giorno in cui una chiave
+  // più larga sembrerà un'idea migliore, questa riga lo dirà.
+  //
+  // La prova del cambio sta altrove, ed è al livello giusto: sulle 1128
+  // coppie del corpus la chiave vecchia aveva precisione 49% e richiamo
+  // 13%, la nuova 72% e 27% — vedi `forme_sintomo.test.js` §6.
+  precedente_sbagliato:       { valore: 0,  verso: "min" },
   // Esame completo sui 48 casi, 8 lingue — misurate il 2026-10-11, con
   // il corpus ormai usato SOLO come esame.
   //
@@ -708,6 +725,7 @@ var m = {
   contesto_perso_multi_turn: 0, casi_senza_misura_prescritta: 0,
   esperienza_riusata: 0, esperienza_in_testa: 0, esperienza_persa: 0,
   esperienza_senza_ragionamento: 0, esperienza_esclusa_da_regola: 0,
+  precedente_sbagliato: 0,
   esame: {},
   certezza_t1: {}, certezza_t2: {}
 };
@@ -859,8 +877,43 @@ function secondoTurno(caso, rT1) {
 // Il caso viene chiuso con la **causa reale del corpus** e con la verifica
 // che il corpus prescrive: non invento né l'una né l'altra. Poi si ripone la
 // stessa domanda e si guarda dove finisce il precedente.
+//
+// ── E un caso CIVETTA, perché metà della domanda non era misurata ──
+//
+// Fin qui il banco chiudeva un caso e riponeva **la stessa domanda**: un
+// esperimento che può solo rispondere "il precedente torna?". Quello che
+// non chiedeva mai è l'altra metà, ed è la metà che fa danno: **torna
+// quello sbagliato?** Un precedente non si limita a ordinare — il motore ne
+// fabbrica un'ipotesi intestata "causa accertata in un caso chiuso simile":
+// se viene da un altro guasto, è un'invenzione presentata come esperienza.
+//
+// Il difetto era invisibile per costruzione. La chiave che decideva la
+// somiglianza era `caseState.domain` (= `observedDomains[0]`), e misurata
+// sulle 1128 coppie del corpus contro `sintomo_atteso` aveva **precisione
+// 49%** — testa o croce. Il banco non poteva vederlo perché nello store
+// c'era un caso solo, e per di più lo stesso.
+//
+// Quindi nello store entra anche un caso di **un altro sintomo**, preso dal
+// corpus con la sua domanda e la sua causa vera: niente di inventato. Se
+// ROCCO lo ripesca, è un precedente sbagliato e si conta.
+function civetta(caso, tutti) {
+  // Scelta deterministica: il primo caso italiano con un `sintomo_atteso`
+  // diverso, a partire da quello dopo. Deterministica perché una civetta
+  // estratta a caso darebbe una pagella diversa a ogni corsa — lo stesso
+  // motivo per cui il neurale ha un seme fisso.
+  var i = tutti.indexOf(caso);
+  for (var k = 1; k < tutti.length; k++) {
+    var altro = tutti[(i + k) % tutti.length];
+    if (altro.sintomo_atteso && altro.sintomo_atteso !== caso.sintomo_atteso) return altro;
+  }
+  return null;
+}
+
 function terzoTurno(caso) {
+  // Id espliciti: `saveValidatedClosedCase` ne genera uno da `Date.now()`, e
+  // due salvataggi nello stesso millisecondo si scambierebbero per duplicati.
   var feedback = {
+    caseId: "bench-" + caso.id,
     confirmedCause: caso.causa_reale,
     decisiveChecks: (caso.verifiche || []).slice(0, 1),
     validated: true,
@@ -876,6 +929,24 @@ function terzoTurno(caso) {
     m.esperienza_persa++;
     dettagli.push(caso.id + ": il caso chiuso non è stato registrato — " + salvato.reason);
     return Promise.resolve();
+  }
+
+  // La civetta: un guasto diverso, chiuso anche lui. Non deve tornare.
+  var esca = civetta(caso, casi);
+  var escaId = null;
+  if (esca) {
+    var salvataEsca = v2memory.saveValidatedClosedCase({
+      problem_summary: esca.domanda,
+      components_detected: [],
+      final_confidence: "probable"
+    }, {
+      caseId: "civetta-" + esca.id,
+      confirmedCause: esca.causa_reale,
+      decisiveChecks: (esca.verifiche || []).slice(0, 1),
+      validated: true,
+      status: "closed"
+    });
+    if (salvataEsca.recorded) escaId = salvataEsca.id;
   }
 
   return orch.runDiagnosis({ message: caso.domanda, user_id: "bench_exp", max_steps: 5 })
@@ -898,8 +969,12 @@ function terzoTurno(caso) {
       // caso chiuso entra come ipotesi e passa per le stesse regole di
       // tutte — esclusione, conferma per misura, pertinenza. Si stampa la
       // ragione, perché un'esclusione sbagliata deve restare visibile.
+      // Il filtro nomina il caso: da quando nello store c'è anche la
+      // civetta, "un'ipotesi con un precedente" non vuol più dire "il
+      // precedente di questo caso", e le due misure si confonderebbero.
+      var mio = function (h) { return h.esperienza && h.esperienza.caso_id === salvato.id; };
       var escluse = (cs.hypotheses || []).filter(function (h) {
-        return !!h.esperienza && h.status !== "active";
+        return mio(h) && h.status !== "active";
       });
       if (escluse.length) {
         m.esperienza_esclusa_da_regola++;
@@ -908,9 +983,22 @@ function terzoTurno(caso) {
         return;
       }
 
+      // La civetta ripescata: un guasto diverso presentato come "causa
+      // accertata in un caso chiuso simile". Si conta sulle **attive**,
+      // cioè su quelle che arrivano all'elettricista, e si stampa: un
+      // precedente sbagliato va visto, non solo contato.
+      var intruse = attive(cs).filter(function (h) {
+        return h.esperienza && h.esperienza.caso_id === escaId;
+      });
+      if (escaId && intruse.length) {
+        m.precedente_sbagliato++;
+        dettagli.push(caso.id + ": ripesca il precedente di un altro guasto (" +
+          String(esca.id) + ") — «" + String(intruse[0].label).slice(0, 60) + "»");
+      }
+
       // Qui invece è un difetto: il caso ragiona, nessuna regola ha
       // escluso il precedente, e il precedente non c'è.
-      var portaPrecedente = attive(cs).filter(function (h) { return !!h.esperienza; });
+      var portaPrecedente = attive(cs).filter(mio);
       if (!portaPrecedente.length) {
         m.esperienza_persa++;
         dettagli.push(caso.id + ": precedente salvato e non ritrovato nel ragionamento");
@@ -1090,6 +1178,7 @@ catena.then(function () {
   ok = riga("esperienza_riusata", m.esperienza_riusata, casi.length) && ok;
   ok = riga("esperienza_in_testa", m.esperienza_in_testa, casi.length) && ok;
   ok = riga("esperienza_persa", m.esperienza_persa) && ok;
+  ok = riga("precedente_sbagliato", m.precedente_sbagliato) && ok;
   console.log("    non applicabile: " + m.esperienza_senza_ragionamento +
     " arresti di sicurezza, " + m.esperienza_esclusa_da_regola + " precedenti esclusi da una regola");
 

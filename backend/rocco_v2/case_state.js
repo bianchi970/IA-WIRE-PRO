@@ -54,7 +54,16 @@ function createCaseState(params) {
     case_id: safeText(input.case_id) || null,
     conversation_id: safeText(input.conversation_id) || null,
     status: normalizeStatus(input.status || "open"),
-    domain: safeText(input.domain) || null,
+    // Che cosa il motore ha osservato: tensione, isolamento, temperatura,
+    // differenziale, continuità, bruciato_fumo_odore. È una **grandezza o un
+    // fenomeno**, non un dominio di mestiere.
+    //
+    // Si chiamava `domain`, e il nome sbagliato ha fatto danno vero: chiudendo
+    // a mano il primo guasto reale ci è stato scritto `"elettrico"`, un valore
+    // che la pipeline non genera mai, e il precedente è rimasto archiviato con
+    // una chiave che ROCCO non avrebbe mai ritrovato. Un nome che invita il
+    // valore sbagliato è un difetto, non una questione di stile.
+    fenomeno_osservato: safeText(input.fenomeno_osservato) || null,
     user_goal: safeText(input.user_goal || input.message),
     problem_summary: safeText(input.problem_summary || input.message),
     facts_confirmed: [],
@@ -158,7 +167,7 @@ function mergeSafetySeedOutput(caseState, safetyOutput) {
   caseState.safety.reasons = pushUniqueStrings([], safeArray(safety.reasons));
   caseState.safety.blocked_actions = pushUniqueStrings([], safeArray(safety.blocked_actions));
   caseState.safety.allowed_next_step = safeText(safety.allowed_next_step);
-  caseState.domain = caseState.domain || safeText(seed.domain) || null;
+  caseState.fenomeno_osservato = caseState.fenomeno_osservato || safeText(seed.fenomeno_osservato) || null;
   caseState.problem_summary = safeText(seed.problem_summary || caseState.problem_summary);
   caseState.facts_confirmed = pushUniqueStrings(caseState.facts_confirmed, safeArray(seed.facts_confirmed));
   caseState.facts_uncertain = pushUniqueStrings(caseState.facts_uncertain, safeArray(seed.facts_uncertain));

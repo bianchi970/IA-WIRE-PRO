@@ -36,7 +36,7 @@ function validateCaseState(caseState) {
     "case_id",
     "conversation_id",
     "status",
-    "domain",
+    "fenomeno_osservato",
     "user_goal",
     "problem_summary",
     "facts_confirmed",

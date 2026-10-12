@@ -201,7 +201,11 @@ function parseValoriDaTesto(testo) {
 
 function detectSystemType(cs) {
   if (!cs) return "generico";
-  var text = ((cs.problem_summary || "") + " " + (cs.domain || "")).toLowerCase();
+  // Qui si concatenava anche `cs.domain`. Non aggiungeva niente: quel campo
+  // contiene una grandezza (tensione, isolamento, differenziale…) e nessuna
+  // di quelle parole compare nelle quattro espressioni qui sotto. Tolto
+  // perché sembrava un contributo e non lo era.
+  var text = String(cs.problem_summary || "").toLowerCase();
   if (/motore|trifase|3[\s-]?fasi/.test(text)) return "motore";
   if (/caldaia|boiler|scaldabagno/.test(text)) return "caldaia";
   if (/fotovoltaico|pannelli|inverter|solare/.test(text)) return "fotovoltaico";

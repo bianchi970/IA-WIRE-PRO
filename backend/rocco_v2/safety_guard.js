@@ -100,7 +100,7 @@ function run(input) {
       allowed_next_step: String(decisionPolicy.allowedNextStep || "")
     },
     seed: {
-      domain: internal.caseState && internal.caseState.observedDomains && internal.caseState.observedDomains[0] ? internal.caseState.observedDomains[0] : null,
+      fenomeno_osservato: internal.caseState && internal.caseState.observedDomains && internal.caseState.observedDomains[0] ? internal.caseState.observedDomains[0] : null,
       problem_summary: payload.message,
       facts_confirmed: factLabels.slice(0, 10),
       facts_uncertain: (diag && Array.isArray(diag.rischi) ? diag.rischi : []).slice(0, 6),

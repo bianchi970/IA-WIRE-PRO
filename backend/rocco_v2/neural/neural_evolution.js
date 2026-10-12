@@ -146,7 +146,7 @@ function selfReview(caseState, diagnosi, esitoReale) {
     dettaglio: dettaglio,
     moduli: analisiModuli,
     segnali: segnali,
-    dominio: caseState.domain || "elettrico",
+    fenomeno: caseState.fenomeno_osservato || "non rilevato",
     componenti: caseState.components_detected || []
   };
 
@@ -169,7 +169,7 @@ function selfReview(caseState, diagnosi, esitoReale) {
   aggiornaCalibrazione();
 
   // Aggiorna competenza
-  aggiornaCompetenza(causaReale, tipo, caseState.domain || "elettrico");
+  aggiornaCompetenza(causaReale, tipo, caseState.fenomeno_osservato || "non rilevato");
 
   // Drift detection
   stato.drift.finestra.push(tipo === TIPI_ERRORE.CORRETTO ? 1 : 0);
@@ -907,7 +907,7 @@ function aggiornaCalibrazione() {
 // COMPETENZA TRACKING
 // ============================================================================
 
-function aggiornaCompetenza(causa, tipo, dominio) {
+function aggiornaCompetenza(causa, tipo, fenomeno) {
   // Per causa
   if (!stato.competenza[causa]) {
     stato.competenza[causa] = { casi: 0, corretti: 0, ultimo: 0 };
@@ -917,7 +917,10 @@ function aggiornaCompetenza(causa, tipo, dominio) {
   stato.competenza[causa].ultimo = Date.now();
 
   // Per dominio
-  var chiaveDominio = "dominio:" + dominio;
+  // La chiave dice che cosa conta: il fenomeno osservato (tensione,
+  // isolamento, differenziale…), non un dominio di mestiere. Il valore era
+  // sempre stato quello; il nome diceva un'altra cosa.
+  var chiaveDominio = "fenomeno:" + fenomeno;
   if (!stato.competenza[chiaveDominio]) {
     stato.competenza[chiaveDominio] = { casi: 0, corretti: 0, ultimo: 0 };
   }

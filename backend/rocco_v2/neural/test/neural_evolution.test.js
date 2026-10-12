@@ -47,7 +47,7 @@ console.log("\n=== NEURAL EVOLUTION TESTS ===\n");
 // --- Mock data ---
 var mockCS = {
   problem_summary: "il differenziale scatta con la lavatrice",
-  domain: "elettrico",
+  fenomeno_osservato: "differenziale",
   components_detected: ["RCD"],
   facts_confirmed: ["scatta quando accendo la lavatrice"]
 };
@@ -369,12 +369,12 @@ test("competenza tracking per causa", function() {
   assert(Math.abs(comp.dispersione.accuratezza - 2/3) < 0.01);
 });
 
-test("competenza tracking per dominio", function() {
+test("competenza tracking per fenomeno osservato", function() {
   ne.reset();
   ne.selfReview(mockCS, mockDiagnosiCorretta, mockEsitoReale);
   var comp = ne.getCompetenza();
-  assert(comp["dominio:elettrico"], "manca dominio:elettrico");
-  assert(comp["dominio:elettrico"].casi === 1);
+  assert(comp["fenomeno:differenziale"], "manca fenomeno:differenziale");
+  assert(comp["fenomeno:differenziale"].casi === 1);
 });
 
 // ============================================================

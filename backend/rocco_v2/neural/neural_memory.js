@@ -32,7 +32,7 @@ function EpisodioMemoria(id, embedding, snapshot, feedback) {
   this.embedding = embedding;
   this.snapshot = {
     problem_summary: snapshot.problem_summary || "",
-    domain: snapshot.domain || "",
+    fenomeno_osservato: snapshot.fenomeno_osservato || "",
     confirmed_cause: (feedback && feedback.confirmedCause) || "",
     decisive_checks: (feedback && feedback.decisiveChecks) || [],
     components: snapshot.components_detected || [],
@@ -218,7 +218,7 @@ function creaPatternSemantico(episodiCluster) {
   for (var i = 0; i < episodiCluster.length; i++) {
     var s = episodiCluster[i].snapshot;
     if (s.confirmed_cause) causes[s.confirmed_cause] = (causes[s.confirmed_cause] || 0) + 1;
-    if (s.domain) domains[s.domain] = (domains[s.domain] || 0) + 1;
+    if (s.fenomeno_osservato) domains[s.fenomeno_osservato] = (domains[s.fenomeno_osservato] || 0) + 1;
     for (var j = 0; j < s.decisive_checks.length; j++) {
       checks[s.decisive_checks[j]] = (checks[s.decisive_checks[j]] || 0) + 1;
     }
@@ -228,7 +228,7 @@ function creaPatternSemantico(episodiCluster) {
   }
 
   var pattern = {
-    domain: topKey(domains),
+    fenomeno_osservato: topKey(domains),
     typical_cause: topKey(causes),
     typical_checks: topKeys(checks, 3),
     typical_components: topKeys(components, 3)

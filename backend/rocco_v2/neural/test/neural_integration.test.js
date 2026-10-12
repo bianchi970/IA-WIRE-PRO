@@ -47,7 +47,7 @@ var mockCS = {
   components_detected: ["RCD"],
   facts_confirmed: ["scatta quando accendo la lavatrice"],
   measurements: [],
-  domain: "elettrico"
+  fenomeno_osservato: "differenziale"
 };
 
 test("scoreHypotheses arricchisce ipotesi con neural_score", function() {

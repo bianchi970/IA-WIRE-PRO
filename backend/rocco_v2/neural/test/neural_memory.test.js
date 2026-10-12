@@ -26,7 +26,7 @@ console.log("\n=== NEURAL MEMORY TESTS ===\n");
 test("store salva episodio", function() {
   nm.reset();
   var ep = nm.store(
-    { problem_summary: "test caso 1", domain: "elettrico", components_detected: ["RCD"], facts_confirmed: ["scatta"] },
+    { problem_summary: "test caso 1", fenomeno_osservato: "differenziale", components_detected: ["RCD"], facts_confirmed: ["scatta"] },
     { confirmedCause: "dispersione", decisiveChecks: ["isolamento"] }
   );
   assert(ep);
@@ -38,7 +38,7 @@ test("store multipli incrementano contatore", function() {
   nm.reset();
   for (var i = 0; i < 5; i++) {
     nm.store(
-      { problem_summary: "caso " + i, domain: "elettrico", components_detected: [], facts_confirmed: [] },
+      { problem_summary: "caso " + i, fenomeno_osservato: "differenziale", components_detected: [], facts_confirmed: [] },
       { confirmedCause: "causa " + i }
     );
   }
@@ -68,7 +68,7 @@ test("episodi simili si consolidano automaticamente", function() {
 
   for (var i = 0; i < 5; i++) {
     nm.store(
-      { problem_summary: "differenziale scatta", domain: "elettrico", components_detected: ["RCD"], facts_confirmed: ["scatta"] },
+      { problem_summary: "differenziale scatta", fenomeno_osservato: "differenziale", components_detected: ["RCD"], facts_confirmed: ["scatta"] },
       { confirmedCause: "dispersione", decisiveChecks: ["isolamento"] }
     );
   }
@@ -104,7 +104,7 @@ test("replay ritorna dati corretti", function() {
 test("salva e carica preservano stato", function() {
   nm.reset();
   nm.store(
-    { problem_summary: "test save", domain: "test", components_detected: [], facts_confirmed: [] },
+    { problem_summary: "test save", fenomeno_osservato: "differenziale", components_detected: [], facts_confirmed: [] },
     { confirmedCause: "test causa" }
   );
   var stats1 = nm.stats();

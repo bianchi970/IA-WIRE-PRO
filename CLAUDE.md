@@ -13,7 +13,7 @@ sono file da lanciare a memoria. Se aggiungi uno strumento, dichiaralo —
 cd backend
 
 npm start                   # avvia il server
-npm test                    # 37 suite, esce ≠ 0 se una fallisce (~85s, senza rete)
+npm test                    # 39 suite, esce ≠ 0 se una fallisce (~45s, senza rete)
 npm run bench               # la pagella: esce ≠ 0 se una metrica peggiora (~19s)
 npm run smoke               # 5 chiamate HTTP sul servizio vero (con i provider)
 
@@ -841,7 +841,7 @@ stato appreso sul disco. Quelle due asserzioni passavano **per fortuna**: con
 del motore non le lanciava **nessun comando**. Per mesi "i test passano" ha
 voluto dire che il server rispondeva.
 
-`test/run_all.js` (→ `npm test`) esegue le **36 suite**, poi conta, e **esce
+`test/run_all.js` (→ `npm test`) esegue le **39 suite**, poi conta, e **esce
 diverso da zero** se una fallisce. Fermarsi al primo rosso è il motivo per
 cui 35 funzioni sono rimaste invisibili. `npm run smoke` resta lo smoke test,
 `npm run bench` la pagella.
@@ -1065,6 +1065,110 @@ surriscaldamento`, `sovraccarico → surriscaldamento`) non sono esercitate da
 nessun caso del corpus — vengono dalla fisica, non da una misura.
 
 ---
+
+### Un precedente si riconosce dal sintomo, non da una grandezza (12/10)
+
+`cs.domain` valeva `"tensione"` — una grandezza spacciata per dominio, l'ultimo
+degli aperti di ieri. Il nome sbagliato era la metà meno grave: la metà grave è
+che **su quella chiave si decideva quale caso chiuso somiglia a quello di oggi.**
+
+`memory.findRelevantClosedCases` sommava **+0.15 se il dominio combacia**, e
+`ragionaPerAnalogia` filtra a `0.25`: quella chiave decideva se un precedente
+entra o resta fuori. Misurata com'era:
+
+- `caseState.domain` = `observedDomains[0]`, e quella lista si riempie in
+  **ordine fisso** (tensione, isolamento, temperatura, differenziale,
+  continuità, bruciato). Il primo elemento è un ordine di dichiarazione, non
+  il fenomeno dominante: FORUM-IT-001/009/013/016 danno `differenziale`,
+  mentre IT-011/012 — **stesso guasto** — danno `tensione` solo perché il
+  cliente ha nominato anche una tensione. Due casi identici non si
+  riconoscono;
+- era **null su 25 casi su 48 (52%)**, e lì il confronto non scattava mai.
+
+Misurato sulle 1128 coppie dei 48 casi, con verità `sintomo_atteso` del corpus
+— metro **esterno**, non la chiave che si sta scegliendo:
+
+| chiave | scatta su | giuste | sbagliate | precisione | richiamo |
+|---|---|---|---|---|---|
+| `observedDomains[0]` | 82 | 40 | **42** | **49%** | 13% |
+| un comportamento in comune | 359 | 222 | 137 | 62% | 72% |
+| **comportamento *e* oggetto** | 116 | 83 | 33 | **72%** | **27%** |
+
+**Testa o croce.** E un precedente non si limita a ordinare: `ragionaPerAnalogia`
+ne **fabbrica un'ipotesi** intestata *"causa accertata in un caso chiuso
+simile"*. Uno sbagliato è un'invenzione presentata come esperienza — per questo
+si pretendono **entrambi** e non il solo comportamento, che pure ha più
+richiamo. Stessa dottrina del CONFERMATO sul punto sbagliato.
+
+`forme_sintomo.stessoSintomo()`: stesso **oggetto** e stesso **comportamento**,
+il vocabolario che il progetto ha già. La firma si **ricava dai due racconti**,
+non si salva: i casi chiusi conservano il loro `problem_summary`, quindi
+funziona su quello che è già su disco, senza migrazione e senza un campo in più
+da tenere allineato. `domain` sparisce anche dal record salvato — era il suo
+unico lettore.
+
+**La classe che mancava, e la prova è il guasto vero.** Sul caso di Romeo —
+*"un teleruttore che comanda una pompa sommersa, la bobina fa rumore"* — la
+firma restava spaiata: `OGGETTI` aveva 7 classi e **nessuna per chi apre e
+chiude un circuito comandato**. Contate prima di scriverla, come prescrive il
+metodo: nel corpus `teleruttore`, `contattore`, `relè`, `bobina` compaiono
+**zero volte**; nella banca sono di casa — `rele` 78, `bobina` 60,
+`contattore` 55, `salvamotore` 10, `teleruttore` 4 — e dei 21 guasti che
+nominano una bobina **11 stanno in CONTATTORE o RELE**. Aggiunta
+`commutazione`; `pompa` **non** si aggiunge, sta già in `motore` e non si
+duplica. Misurato sul precedente vero: *"stesso sintomo, altro impianto"*
+passa da **sotto soglia** a **0.3 — riusato**, e il racconto identico da
+0.444 a 0.594.
+
+**Il nome ha fatto danno vero, e per questo si cambia.** Chiudendo il primo
+guasto reale ci era stato scritto a mano `domain: "elettrico"` — un valore che
+la pipeline non genera mai — e il precedente è rimasto archiviato con una
+chiave che ROCCO non avrebbe mai ritrovato. Un nome che **invita** il valore
+sbagliato è un difetto, non una questione di stile: `domain` →
+`fenomeno_osservato`, nel contratto e nei tre lettori neurali rimasti.
+`neural_evolution` contava la competenza sotto `"dominio:"` un valore che
+dominio non era (ora `"fenomeno:"`), e `neural_patterns.detectSystemType`
+concatenava quel campo al testo **senza che aggiungesse niente**: nessuna
+grandezza combacia con `motore|caldaia|fotovoltaico|civile`. Tolto, perché
+sembrava un contributo e non lo era. I test scrivevano `domain: "elettrico"`:
+**lo stesso errore del guasto vero, dentro la rete di sicurezza.**
+
+**La metrica che mancava, ed è una guardia dichiarata.** Il banco chiudeva un
+caso e riponeva **la stessa domanda**: un esperimento che può solo rispondere
+*"il precedente torna?"*, mai *"torna quello sbagliato?"* — che è la metà che
+fa danno, e l'unica che una chiave al 49% poteva rompere. Ora nello store entra
+anche un **caso civetta**: il guasto chiuso di un altro sintomo, preso dal
+corpus con la sua domanda e la sua causa vera. `precedente_sbagliato`.
+
+**Misurata prima e dopo: 0 in entrambi i casi**, e va detto. Su questo corpus
+la civetta non arriva mai alla soglia perché nessuna coppia di casi italiani è
+abbastanza vicina lessicalmente, e +0.15 da solo non basta. **Non è una prova
+del guadagno, è una sentinella** per la cosa che non ne aveva nessuna. E
+l'ablazione sul banco non si poteva fare per una ragione istruttiva: il banco
+passa a `saveValidatedClosedCase` un `case_state` sintetico **senza `domain`**,
+quindi la chiave vecchia lì non scattava mai — il banco non l'aveva mai
+esercitata. La prova del cambio sta al livello giusto, sulle coppie.
+
+| metrica | prima | dopo |
+|---|---|---|
+| precisione della chiave (coppie, verità del corpus) | **49%** | **72%** |
+| richiamo | 13% | **27%** |
+| casi senza chiave | **25/48** | 7/48 |
+| precedente sbagliato (nuova guardia) | 0 | 0 |
+| tutte le metriche del banco | — | **invariate, 0 regressioni** |
+
+**Il banco non si muove, ed è atteso**: `esperienza_riusata` è 18/21 con 3
+arresti di sicurezza, cioè **18 su 18** — saturo. E non poteva muoversi
+comunque, perché chiude ogni caso **col suo stesso testo**: il precedente
+combacia per identità, e nessuna chiave di somiglianza viene esercitata.
+
+Test: `forme_sintomo.test.js` — 60 asserzioni (erano 45), §6 con le coppie che
+devono somigliare, quelle che non devono (stesso comportamento ma altro
+apparecchio, stesso apparecchio ma altro comportamento, un racconto senza
+sintomo) e la misura sulle 1128 coppie, che fallisce se precisione o richiamo
+scendono sotto quelli della chiave scartata. Più §3: `rele` col confine di
+parola da entrambi i lati, che senza prende "ir**rele**vante" — la quarta volta
+che questo file incontra una parola corta dentro una parola italiana.
 
 ### Ripetere il sintomo non è diagnosticare (12/10)
 

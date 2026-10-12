@@ -154,6 +154,22 @@ var OGGETTI = {
   motore: /motore|pompa|compressore|ventilator|\bmotor\b/,
   caldaia: /caldaia|boiler|scaldabagn|riscaldament|bruciator/,
   fotovoltaico: /fotovoltaic|solare|pannell|inverter|stringa|\bfv\b/,
+  // Chi apre e chiude un circuito comandato: teleruttore, contattore, relè,
+  // e la **bobina** che il cliente nomina al posto loro ("la bobina fa
+  // rumore"). La pompa non è qui: sta già in `motore`, e non si duplica.
+  //
+  // Mancava, e il corpus non poteva mostrarlo: queste parole compaiono
+  // **zero volte** nelle 48 domande d'esame. Nella banca invece sono di
+  // casa — `rele` 78, `bobina` 60, `contattore` 55, `salvamotore` 10,
+  // `teleruttore` 4 — e dei 21 guasti che nominano una bobina 11 stanno in
+  // CONTATTORE o RELE. È la famiglia che il primo guasto vero ha toccato:
+  // un teleruttore che ronza su una pompa sommersa. Come per POMPA, la
+  // prova non è la pagella — è il guasto.
+  // `rele` col confine di parola da entrambi i lati: senza, prende
+  // "ir**rele**vante" — la famiglia di difetti delle sigle dentro le parole
+  // italiane, che in questo file è già costata `scalda` in "scaldabagno".
+  // L'accento non si scrive: `normalizza()` lo ha già tolto.
+  commutazione: /teleruttor|contattor|\brele\b|bobina|salvamotor|avviator/,
   // Il punto dove un contatto scalda: è l'oggetto della regola del
   // surriscaldamento, che prima stava nella colonna sbagliata.
   connessione: /cavo|morsett|quadro|\bfilo\b|connession|giunzion|presa|capocorda|socket|prise|stecker/,
@@ -208,6 +224,61 @@ function haOggetto(testo, classe) {
   return !!re && negazione.hasUnnegatedMatch(normalizza(testo), re);
 }
 
+// ── La firma del sintomo: due racconti parlano della stessa cosa? ──────
+//
+// Serve a riconoscere un **precedente**: un caso che l'elettricista ha
+// chiuso somiglia a quello di oggi se i due racconti dicono lo stesso
+// apparecchio che fa la stessa cosa.
+//
+// Prima questa domanda aveva una risposta d'altro genere:
+// `memory.findRelevantClosedCases` confrontava `caseState.domain`, cioè
+// `observedDomains[0]` del motore. Due difetti in uno:
+//
+//  - quella lista si riempie in **ordine fisso** (tensione, isolamento,
+//    temperatura, differenziale, continuità, bruciato), quindi il primo
+//    elemento è una scelta di dichiarazione, non il fenomeno dominante.
+//    Misurato: FORUM-IT-001/009/013/016 danno `differenziale`, mentre
+//    IT-011/012 — stesso guasto — danno `tensione` solo perché il cliente
+//    ha nominato anche una tensione. Due casi identici non si riconoscono;
+//  - era **null su 25 casi su 48** (52%), e lì il confronto non scattava mai.
+//
+// Misurato sulle 1128 coppie dei 48 casi, con verità `sintomo_atteso` del
+// corpus (metro esterno: non è la chiave che si sta scegliendo):
+//
+//   chiave                        scatta  giuste  sbagliate  precis.  richiamo
+//   observedDomains[0]               82      40       42       49%      13%
+//   un comportamento in comune      359     222      137       62%      72%
+//   comportamento **e** oggetto     116      83       33       72%      27%
+//
+// La precedente scattava a testa o croce. Si pretendono **entrambi** e non
+// il solo comportamento, benché quello abbia più richiamo, perché un
+// precedente non si limita a ordinare: `ragionaPerAnalogia` ne **fabbrica
+// un'ipotesi** intestata "già accertata una volta". Un precedente che non
+// c'è stato è peggio di nessun precedente — la stessa ragione per cui un
+// CONFERMATO sul punto sbagliato è peggio di un DA VERIFICARE.
+//
+// La firma si **ricava dal testo** dei due racconti, non si salva: i casi
+// già chiusi conservano il loro `problem_summary`, quindi funziona su
+// quello che c'è su disco senza migrazione e senza un campo in più da
+// tenere allineato.
+function firma(testo) {
+  return { oggetti: oggetti(testo), comportamenti: comportamenti(testo) };
+}
+
+function inComune(sinistra, destra) {
+  for (var i = 0; i < sinistra.length; i++) {
+    if (destra.indexOf(sinistra[i]) >= 0) return true;
+  }
+  return false;
+}
+
+/** Stesso apparecchio **e** stesso comportamento. Chi tace non somiglia. */
+function stessoSintomo(testoA, testoB) {
+  var a = firma(testoA);
+  var b = firma(testoB);
+  return inComune(a.comportamenti, b.comportamenti) && inComune(a.oggetti, b.oggetti);
+}
+
 module.exports = {
   COMPORTAMENTI: COMPORTAMENTI,
   OGGETTI: OGGETTI,
@@ -215,5 +286,7 @@ module.exports = {
   comportamenti: comportamenti,
   oggetti: oggetti,
   haComportamento: haComportamento,
-  haOggetto: haOggetto
+  haOggetto: haOggetto,
+  firma: firma,
+  stessoSintomo: stessoSintomo
 };
