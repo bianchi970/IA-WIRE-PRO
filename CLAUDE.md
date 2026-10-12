@@ -970,6 +970,105 @@ senza soluzione. Per un **esame** servono le risposte, e i forum danno
 domande. La crescita vera del corpus viene dai casi che l'elettricista
 chiude, non dalla rete.
 
+### Una causa, una riga (12/10)
+
+Prima di toccare il ragionamento è stata misurata la cosa giusta: **le 84
+ipotesi che l'elettricista legge sui 21 casi italiani, lette una per una**.
+Il difetto che mi aspettavo — la causa e le sue conseguenze messe in
+parallelo — c'è, ma è il minore: **8 coppie su 7 casi**. Quello grosso è
+un altro, ed era sotto gli occhi:
+
+| cosa fanno le 84 righe | righe | casi |
+|---|---|---|
+| **ridicono una causa già scritta sopra** | **21 (25%)** | 11/21 |
+| stanno in catena: una è la causa di un'altra | 8 coppie | 7/21 |
+| non sono ipotesi (un'istruzione, il sintomo ripetuto, una pista che il racconto smentisce) | 4 | 4/21 |
+
+Su FORUM-IT-013 tutte e quattro:
+
+```
+- Dispersione verso terra su carico o cavo sempre presente
+- dispersione a terra sul cavo (isolamento danneggiato)
+- Dispersione in uno specifico apparecchio o cavo
+- dispersione su carico
+```
+
+**Non è conoscenza che manca, è una riga di confronto.** Quelle quattro
+righe vengono da **quattro fonti diverse** — motore, banca dispositivi,
+simulatore, curriculum — e la deduplica di `ragiona()` confrontava
+`normalize(label).substring(0, 60)`: **identità di stringa**. In italiano una
+frase non combacia quasi mai con sé stessa; è lo stesso difetto già corretto
+nella ricerca della banca ("pannelli" contro "pannello") e nel
+riconoscitore di componenti.
+
+`rocco_v2/forme_causa.js` dichiara **quando due etichette parlano della
+stessa causa**, con due chiavi che servono entrambe:
+
+- **FENOMENO** — che cosa succede fisicamente, riconosciuto sulla **tesi**
+  (la parte prima di " — " o ":"), la stessa convenzione di
+  `hypothesisClaim()` e del narratore. Leggere tutta l'etichetta sbagliava,
+  misurato: *"avvolgimento motore degradato: … o **umidità** assorbita"*
+  finiva fra le infiltrazioni — e su FORUM-IT-015 quello è l'avvolgimento,
+  cioè la causa vera.
+- **APPARECCHIO** — di che cosa parla. *"Cortocircuito"* e *"condensatore
+  di un motore in cortocircuito"* mandano l'elettricista in due posti
+  diversi. Senza questa seconda chiave le fusioni passavano da 70 a 121 e
+  **la causa vera si perdeva**.
+
+Le parole dei due elenchi sono **contate nelle 173 etichette distinte** che
+i 21 casi producono: `cortocircuit` 17, `morsett` 14, `degradat` 13,
+`interrott` 12, `dispers` 11, `sovraccaric` 10, `difettos` 10, `isolament` 9.
+
+**Fondere non è buttare.** Quel che l'assorbita dice in più finisce
+nell'etichetta dopo " — anche: ", e catena, `confirm_tests`,
+`supporting_evidence` ed `esperienza` passano a quella che resta. La prima
+versione teneva solo la meglio piazzata e perdeva la causa vera proprio
+così: su FORUM-IT-015 il superstite era la riga più generica e portava via
+*"isolamento danneggiato"*, l'unica parola che diceva qualcosa.
+
+**Tre regole trovate rompendo qualcosa**, e tutte e tre dicono la stessa
+cosa — *chi fonde non deve cambiare il giudizio*:
+
+1. **Si fonde dopo l'ordinamento, non prima.** Resta la meglio piazzata dal
+   comparatore del motore. Fonderle in `ragiona()` avrebbe tenuto la prima
+   **dichiarata**, che è un ordine di comodo.
+2. **La pertinenza entra nella chiave.** È la *prima* chiave del comparatore
+   e si legge sull'etichetta — che la fusione cambia. Senza, un'ipotesi
+   retrocessa perché fuori contesto prestava le proprie parole a una
+   pertinente e l'ordine "prima le pertinenti" si rompeva:
+   `pertinenza.test.js` è diventato rosso su FORUM-IT-005, col dimmer LED
+   tornato davanti.
+3. **Un'ipotesi CONFERMATA non si fonde**, né assorbe né viene assorbita. La
+   conferma vale su una tesi precisa. Misurato su FORUM-IT-007: la conferma
+   sul guasto d'isolamento della stringa DC finiva dentro *"dispersione DC
+   verso terra — pannelli, cavi, inverter"* e il connettore MC4 spariva
+   dalla riga confermata — `confirm_rules.test.js` §8 l'ha visto subito.
+   Un CONFERMATO sul punto sbagliato è peggio di un DA VERIFICARE.
+
+**Il metro della nuova metrica è indipendente da chi fonde.**
+`ipotesi_ripetute` nel banco **non** usa `chiaveCausa`: due righe si
+ripetono se i due terzi delle parole della più corta stanno nell'altra.
+Misurare una fusione con la chiave che fonde darebbe zero per costruzione —
+si misurerebbe la definizione, non il risultato.
+
+| metrica | prima | dopo |
+|---|---|---|
+| **righe che ridicono quella di sopra** (metro lessicale) | **12/84 su 7 casi** | **1/84 su 1 caso** |
+| ipotesi attive sui 21 casi | 347 | 277 (70 fusioni) |
+| ipotesi stampate in totale | 84 | 84 — ma sono 84 **cause diverse** |
+| esame completo, 48 casi | 33/48 | **34/48** |
+| causa vera stampata · attiva · stretta | 21/21 | invariate |
+| tutto il resto del banco | — | invariato, 0 regressioni |
+
+L'unica ripetizione che resta è FORUM-IT-010, e **non è una ripetizione**:
+*"fusibile bruciato"* e *"contattore non tira"* sono due cause **dello
+stesso effetto** (la fase che manca). È la catena — l'altro difetto, quello
+che resta aperto, e lo stesso del guasto vero di Romeo.
+
+Test: `rocco_v2/neural/test/forme_causa.test.js` — 33 asserzioni in quattro
+direzioni, perché **una fusione sbagliata è peggio di una ripetizione**: una
+ripetizione fa perdere tempo, una fusione sbagliata fa sparire una causa.
+
 ### La famiglia POMPA — la prima lacuna colmata dal metodo (12/10)
 
 La lacuna trovata dal primo guasto vero era dichiarata e vuota: **`sommers*`**

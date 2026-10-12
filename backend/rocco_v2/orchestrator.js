@@ -36,6 +36,7 @@ try { deviceKb = require("../modules/rocco_university/device_kb"); }
 catch (e) { /* banca dispositivi non disponibile */ }
 var narrator = require("./narrator");
 var checkPhrasing = require("./check_phrasing");
+var formeCausa = require("./forme_causa");
 var runtimeTrace = require("./runtime_trace");
 var memory = require("./memory");
 var contracts = require("./contracts");
@@ -2157,6 +2158,98 @@ function verifyConclusion(cs) {
 // quinta, l'utente legge "CONFERMATO" senza vedere cosa è confermato.
 var CONFIDENCE_RANK = { confirmed: 3, probable: 2, possible: 1, unlikely: 0 };
 
+// ============================================================
+// FONDERE LE RIPETIZIONI
+// ============================================================
+//
+// Quattro fonti (motore, banca dispositivi, simulatore, curriculum) dicono
+// la stessa causa con parole diverse, e la deduplica di `ragiona()` confronta
+// stringhe: su FORUM-IT-013 l'elettricista leggeva quattro righe che dicono
+// "dispersione". Misurato sui 21 casi: 21 ipotesi stampate su 84 ridicono
+// quella di sopra.
+//
+// Gira **dopo** l'ordinamento finale, e non prima, per una ragione: resta
+// la meglio piazzata, cioè quella che la graduatoria del motore — pertinenza,
+// conferma per misura, probabilità, precedente — ha messo davanti. Fonderle
+// prima avrebbe tenuto la prima **dichiarata**, che è un ordine di comodo.
+//
+// Quel che l'assorbita diceva in più non si butta: va nell'etichetta dopo
+// " — anche: ", e la sua catena e i suoi test passano a quella che resta.
+// Lo stato diventa `merged`, non `rejected`: non è un'ipotesi esclusa, è la
+// stessa ipotesi. Chi stampa filtra `active`, quindi sparisce da sé.
+function fondiRipetizioni(cs) {
+  var MAX_FRAMMENTI = 2;
+  var MAX_LUNGHEZZA = 150;
+  var tenute = {};
+  var fuse = 0;
+
+  arr(cs.hypotheses).forEach(function(h) {
+    if (!h || h.status !== "active" || !h.label) return;
+
+    // Un'ipotesi CONFERMATA non si fonde, né assorbe né viene assorbita.
+    // La conferma vale su una **tesi precisa** — è la regola che
+    // `hypothesisClaim()` già applica alle confirm rules — e un CONFERMATO
+    // su un'etichetta che dice un'altra cosa manda l'elettricista nel posto
+    // sbagliato, che è peggio di un DA VERIFICARE. Misurato su FORUM-IT-007:
+    // la conferma sul guasto di isolamento della stringa DC finiva dentro
+    // "dispersione DC verso terra — pannelli, cavi, inverter", e il
+    // connettore MC4 spariva dalla riga confermata.
+    if (h.confidence === "confirmed") return;
+    var k = formeCausa.chiaveCausa(h.label);
+    if (!k) return;
+
+    // La pertinenza entra nella chiave, e non è un dettaglio: è la **prima**
+    // chiave del comparatore, e si legge sull'etichetta — che la fusione
+    // cambia. Senza, un'ipotesi retrocessa perché fuori contesto poteva
+    // assorbirne una pertinente (o prestarle le proprie parole), e l'ordine
+    // "prima le pertinenti" si rompeva: misurato su FORUM-IT-005, dove il
+    // dimmer LED tornava davanti. Chi fonde non deve cambiare la graduatoria.
+    k += isOutOfDomain(h.label, cs.problem_summary) ? "|fuori" : "|dentro";
+
+    var resta = tenute[k];
+    if (!resta) { tenute[k] = h; h.fusi = 0; return; }
+
+    // Quel che l'assorbita porta non va perduto. Con un'eccezione: le
+    // righe che sono **annotazioni per ipotesi** e non passi di
+    // ragionamento — il valore atteso, la probabilità del simulatore, il
+    // riferimento normativo. Accodandole tutte, sotto una sola ipotesi si
+    // leggevano tre "Valore atteso" e due probabilità diverse. Una per tipo.
+    arr(h.catena).forEach(function(r) {
+      var tipo = String(r).match(/^(valore atteso|simulatore causale|riferimento|guasto noto)/i);
+      if (tipo) {
+        var gia = resta.catena.some(function(x) {
+          return new RegExp("^" + tipo[1], "i").test(String(x));
+        });
+        if (gia) return;
+      }
+      if (resta.catena.indexOf(r) < 0) resta.catena.push(r);
+    });
+    arr(h.confirm_tests).forEach(function(v) {
+      if (resta.confirm_tests.indexOf(v) < 0) resta.confirm_tests.push(v);
+    });
+    arr(h.supporting_evidence).forEach(function(v) {
+      if (resta.supporting_evidence.indexOf(v) < 0) resta.supporting_evidence.push(v);
+    });
+    if (h.esperienza && !resta.esperienza) resta.esperienza = h.esperienza;
+
+    var fr = formeCausa.frammento(h.label, resta.label);
+    if (fr && resta.fusi < MAX_FRAMMENTI && resta.label.length < MAX_LUNGHEZZA) {
+      resta.label += (resta.fusi ? ", " : " — anche: ") + fr;
+      resta.fusi++;
+    }
+
+    h.status = "merged";
+    h.merged_into = resta.label;
+    fuse++;
+  });
+
+  if (fuse) {
+    cs.hypotheses = arr(cs.hypotheses).filter(function(h) { return h.status !== "merged"; })
+      .concat(arr(cs.hypotheses).filter(function(h) { return h.status === "merged"; }));
+  }
+  return fuse;
+}
+
 function formatResponse(cs, percezione) {
   // L'ipotesi che la diagnosi nomina va in testa all'elenco: `final_diagnosis`
   // e la sezione IPOTESI devono raccontare la stessa cosa, altrimenti l'utente
@@ -3037,6 +3130,10 @@ function createOrchestrator(options) {
         if (a.status !== "active") return 0;
         return perOrdineFinale(a, b);
       });
+
+      // Una causa, una riga. Vedi fondiRipetizioni() e rocco_v2/forme_causa.js.
+      var fuse = fondiRipetizioni(cs);
+      if (fuse) runtimeTrace.record(cs, "ipotesi_fuse", { quante: fuse });
 
       // Sincronizza formato legacy
       cs.hypotheses_active = cs.hypotheses.filter(function(h) { return h.status === "active"; })

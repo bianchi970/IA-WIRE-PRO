@@ -267,6 +267,23 @@ var BASELINE = {
   // Vedi CLAUDE.md, "La scuola insegnava e il ragionamento non sapeva".
   causa_vera_stretta:         { valore: 21, verso: "max" },   // su 21
   rumore_fuori_contesto:      { valore: 0,  verso: "min" },
+  // Quante delle righe che l'elettricista legge **ridicono** una riga di
+  // sopra. Misurato a mano sulle 84 stampate il 12/10: 21 ripetizioni su
+  // 11 casi, perché quattro fonti dicono la stessa causa con parole diverse
+  // e la deduplica confrontava stringhe. Su FORUM-IT-013 tutte e quattro le
+  // righe dicevano "dispersione".
+  //
+  // Il metro qui è **lessicale e indipendente** da `forme_causa.js`, che è
+  // il modulo che fonde: due righe si ripetono se i due terzi delle parole
+  // della più corta stanno nell'altra. Misurare la fusione con la chiave
+  // che fonde darebbe zero per costruzione — si misurerebbe la definizione,
+  // non il risultato. Con questo metro: **12 → 1**.
+  //
+  // L'unica che resta è FORUM-IT-010, e non è una ripetizione: "fusibile
+  // bruciato" e "contattore non tira" sono due cause **dello stesso
+  // effetto** (la fase che manca). È la catena, che è l'altro difetto e
+  // un'altra storia.
+  ipotesi_ripetute:           { valore: 1,  verso: "min" },
   conferme_senza_misura:      { valore: 0,  verso: "min" },   // certezze regalate
   // ALZATA 9 → 10 l'11/10 sera: una previsione non elimina più una causa.
   // Il controfattuale mette `unlikely` — penalizzazione piena, l'ipotesi
@@ -614,6 +631,49 @@ function ipotesiStampate(answer) {
     .map(function (l) { return l.slice(2); });
 }
 
+// UNA RIGA RIDICE QUELLA DI SOPRA?
+//
+// Metro lessicale, **indipendente** da `rocco_v2/forme_causa.js`: quello è
+// il modulo che fonde, e misurare una fusione con la chiave che fonde dà
+// zero per costruzione. Qui si guardano soltanto le parole: due righe si
+// ripetono se i due terzi delle parole della più corta stanno nell'altra.
+//
+// Le parole di servizio si tolgono: "della", "sempre", "specifico",
+// "verso" compaiono ovunque e farebbero somigliare qualunque coppia.
+var PAROLE_DI_SERVIZIO = {
+  della: 1, dello: 1, delle: 1, degli: 1, sulla: 1, sullo: 1, nella: 1,
+  nello: 1, oppure: 1, sempre: 1, specifico: 1, verso: 1, anche: 1,
+  altro: 1, altra: 1, come: 1, questo: 1
+};
+
+function paroleUtili(t) {
+  return (norm(t).match(/[a-z]{4,}/g) || [])
+    .filter(function (w) { return !PAROLE_DI_SERVIZIO[w]; })
+    .map(function (w) { return w.slice(0, 6); });
+}
+
+function ridice(a, b) {
+  var pa = paroleUtili(a), pb = paroleUtili(b);
+  if (!pa.length || !pb.length) return false;
+  var corta = pa.length <= pb.length ? pa : pb;
+  var lunga = pa.length <= pb.length ? pb : pa;
+  var dentro = {};
+  lunga.forEach(function (w) { dentro[w] = true; });
+  var comuni = corta.filter(function (w) { return dentro[w]; }).length;
+  return comuni / corta.length >= 0.66;
+}
+
+/** Quante righe stampate ridicono una riga già stampata nello stesso caso. */
+function quanteRidicono(stampate) {
+  var n = 0;
+  for (var i = 1; i < stampate.length; i++) {
+    for (var j = 0; j < i; j++) {
+      if (ridice(stampate[i], stampate[j])) { n++; break; }
+    }
+  }
+  return n;
+}
+
 function attive(cs) {
   return (cs.hypotheses || []).filter(function (h) { return h.status === "active"; });
 }
@@ -623,7 +683,7 @@ function attive(cs) {
 var m = {
   componenti_rilevati: 0, componenti_fantasma: 0,
   causa_vera_stampata: 0, causa_vera_attiva: 0,
-  ipotesi_stampate: 0, rumore_fuori_contesto: 0,
+  ipotesi_stampate: 0, rumore_fuori_contesto: 0, ipotesi_ripetute: 0,
   conferme_senza_misura: 0,
   casi_conclusi_con_misura: 0, conferme_sbagliate: 0, chiusure_non_dovute: 0,
   sintomo_non_riconosciuto: 0, causa_vera_stretta: 0,
@@ -664,6 +724,12 @@ function primoTurno(caso) {
           dettagli.push(caso.id + ": ipotesi fuori contesto stampata — " + l.slice(0, 50));
         }
       });
+
+      var ridette = quanteRidicono(stampate);
+      if (ridette) {
+        m.ipotesi_ripetute += ridette;
+        dettagli.push(caso.id + ": " + ridette + " righe ridicono una causa già stampata");
+      }
 
       if (stampate.some(function (l) { return coerente(l, caso.causa_reale); })) m.causa_vera_stampata++;
       if (stampate.some(function (l) {
@@ -976,6 +1042,7 @@ catena.then(function () {
   ok = riga("causa_vera_stretta", m.causa_vera_stretta, casi.length) && ok;
   console.log("    ipotesi stampate in totale              " + String(m.ipotesi_stampate).padStart(4));
   ok = riga("rumore_fuori_contesto", m.rumore_fuori_contesto) && ok;
+  ok = riga("ipotesi_ripetute", m.ipotesi_ripetute) && ok;
 
   console.log("\nCERTEZZA");
   console.log("    1º turno, solo racconto:  " + JSON.stringify(m.certezza_t1));
