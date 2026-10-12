@@ -142,7 +142,13 @@ var NEGATIVI = [
   ["scatta dopo poco tempo",                     "riduce"],
   ["ho messo un inverter nuovo e funziona bene", "riduce"],
   ["la caldaia funziona bene",                   "non_parte"],
-  ["il quadro è a norma, nessun problema",       "in_blocco"]
+  ["il quadro è a norma, nessun problema",       "in_blocco"],
+  // Nomi di apparecchi che contengono un comportamento: `scalda` nudo
+  // matchava dentro "scaldabagno", e su FORUM-IT-013 il racconto risultava
+  // di surriscaldamento senza che nessuno avesse parlato di calore. Stesso
+  // difetto di `DIN` dentro "lampadina".
+  ["lo scaldabagno da 10 anni fa saltare il differenziale", "surriscalda"],
+  ["ho uno scaldacqua elettrico",                "surriscalda"]
 ];
 
 NEGATIVI.forEach(function (n) {

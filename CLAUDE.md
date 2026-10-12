@@ -1066,6 +1066,34 @@ nessun caso del corpus — vengono dalla fisica, non da una misura.
 
 ---
 
+### `scalda` dentro `scaldabagno` (12/10)
+
+Cercando perché su FORUM-IT-013 un'ipotesi risultasse «ripetizione del
+sintomo», è saltato fuori che il racconto — *"lo **scaldabagno** elettrico
+80L da 10 anni fa saltare il differenziale"* — veniva classificato
+**surriscaldamento**, senza che nessuno avesse parlato di calore.
+
+`scalda` nel pattern `surriscalda` di `forme_sintomo.js` non aveva confine
+di parola e matchava dentro **scalda**bagno e **scalda**cqua, che sono nomi
+di apparecchi. È il difetto delle sigle dentro le parole italiane (`DIN` in
+"lampa**din**a") e dei nomi d'agente (`bruciatore` collassato sul participio
+`bruciato`): **terza volta nello stesso codice, in un terzo posto.**
+
+Contate prima di correggere: nelle 21 domande e nei 370 guasti della banca
+`surriscald` compare **28 volte**, `scalda` come comportamento **zero** —
+l'unica occorrenza in tutto il materiale è dentro "scaldabagno". Il confine
+si tiene lo stesso (`scalda|scaldano`) e non si toglie la parola,
+perché *"il cavo scalda troppo"* è italiano vero che il corpus non ha
+ancora.
+
+Banco invariato — il sintomo di IT-013 non era fra quelli che decidono una
+metrica — ma una classificazione sbagliata del sintomo è la chiave con cui
+ROCCO apre le 9 tabelle dell'esperienza: sbagliarla è pescare nel cassetto
+sbagliato.
+
+Test: `forme_sintomo.test.js` §3 — 47 asserzioni, con i due nomi di
+apparecchio fra i falsi positivi.
+
 ### KR-14 — il cliente dice che non ci sono errori, e ROCCO ne afferma uno
 
 Su FORUM-SPEC-003 il cliente scrive *"i pannelli sembrano ok, **nessun

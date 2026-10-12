@@ -106,7 +106,19 @@ var COMPORTAMENTI = {
   // componente che scalda. Su FORUM-SPEC-005 faceva classificare una caldaia
   // in corto-ciclo come surriscaldamento. `temperatura` resta, perché la
   // aveva già `device_kb` e perché è la parola delle verifiche della banca.
-  surriscalda: /surriscald|\bcaldo\b|scalda|bruciat|brucia|\bfuma\b|odore|fuso|\bnero\b|temperatura|burning|smell|etincelle|funke|quemado|heiss/,
+  // E `scalda` vuole il **confine di parola**: senza, matcha dentro
+  // "**scalda**bagno" e "**scalda**cqua", che sono nomi di apparecchi e non
+  // comportamenti. È lo stesso difetto delle sigle dentro le parole italiane
+  // (`DIN` in "lampa**din**a") e dei nomi d'agente (`bruciatore` sul
+  // participio `bruciato`), già corretti nel riconoscitore di componenti.
+  // Misurato su FORUM-IT-013 — "lo **scaldabagno** da 10 anni fa saltare il
+  // differenziale" — dove il racconto risultava di surriscaldamento senza
+  // che nessuno avesse parlato di calore.
+  // Contate nel corpus e nei 370 guasti della banca: `surriscald` 28,
+  // `scalda` come comportamento **zero** — l'unica occorrenza è dentro
+  // "scaldabagno". Il confine si tiene lo stesso, perché "il cavo scalda
+  // troppo" è italiano vero che il corpus non ha ancora.
+  surriscalda: /surriscald|\bcaldo\b|\bscalda\b|\bscaldano\b|bruciat|brucia|\bfuma\b|odore|fuso|\bnero\b|temperatura|burning|smell|etincelle|funke|quemado|heiss/,
 
   // Due rumori diversi, e la banca dispositivi li tiene separati perché
   // portano a guasti diversi: il ronzio continuo (lamierature, vibrazione)
