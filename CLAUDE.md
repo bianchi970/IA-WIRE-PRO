@@ -970,6 +970,58 @@ senza soluzione. Per un **esame** servono le risposte, e i forum danno
 domande. La crescita vera del corpus viene dai casi che l'elettricista
 chiude, non dalla rete.
 
+### Una causa e le sue conseguenze (12/10)
+
+L'altro difetto che la misura aveva trovato, ed è **quello che Romeo aveva
+visto sul campo**: sul teleruttore della pompa sommersa ROCCO metteva in
+parallelo *fusibile aperto*, *manca una fase*, *la bobina ronza* — una
+causa e i suoi effetti, elencati come piste concorrenti. L'elettricista
+legge quattro strade dove ce n'è una. **8 coppie su 7 casi** nel corpus.
+
+`RELAZIONI_CAUSALI` in `rocco_v2/forme_causa.js` dichiara quali fenomeni ne
+producono altri. Quattro, e nient'altro: `infiltrazione → dispersione`
+(6 coppie sul corpus), `interruzione → mancanza_fase` (FORUM-IT-010, la
+forma del guasto vero), `contatto_resistivo → surriscaldamento`,
+`sovraccarico → surriscaldamento`.
+
+**Tre relazioni della prima stesura erano sbagliate, e non si vedeva dai
+numeri**: *"conduttore interrotto → protezione a monte scattata"* e
+*"→ assenza di rete"*. Un conduttore che si apre non fa scattare niente e
+non causa un blackout: quelle sono **cause alternative dello stesso
+sintomo**, non conseguenze. Le ha trovate la lettura riga per riga della
+prova a secco — 13 coppie di cui 4 false — e ora sono tre asserzioni
+negative in `forme_causa.test.js` §7.
+
+**Non esclude e non fonde.** L'effetto resta un'ipotesi viva: la dispersione
+esiste anche senz'acqua, e sopprimerla perché c'è un'ipotesi di infiltrazione
+toglierebbe una pista vera. Si aggiunge una riga alla catena della causa:
+
+```
+- fusibile bruciato, contatto aperto, cavo interrotto
+  → Spiegherebbe anche: mancanza di una fase (trifase)
+```
+
+Si cita la **tesi** dell'altra ipotesi e non l'etichetta intera: più corta,
+e non trascina nella bozza i numeri della specificazione — che il narratore
+rifiuterebbe come non ricavabili dai dati del caso, tornando alla bozza per
+una riga di nota.
+
+| metrica | valore |
+|---|---|
+| coppie causa → effetto fra le 4 righe stampate | **9 su 8 casi** |
+| coppie fra tutte le attive | 57 su 11 casi |
+| tutte le metriche del banco | **invariate, 0 regressioni** |
+
+**Il banco non si muove, ed è atteso**: nessuna metrica misura la catena, e
+non se n'è aggiunta una perché la dichiarazione non cambia *quali* ipotesi
+ROCCO fa — cambia quel che l'elettricista capisce leggendole. Il numero che
+la riguarda è la traccia `catene_dichiarate`.
+
+**Resta aperto**: la catena è **dichiarata, non usata per ordinare**.
+Un'ipotesi che ne spiega un'altra spiega più fatti, e questa è una ragione
+classica per metterla davanti — ma toccare `makeHypothesisComparator` va
+misurato a sé, e non è stato fatto qui.
+
 ### Una causa, una riga (12/10)
 
 Prima di toccare il ragionamento è stata misurata la cosa giusta: **le 84

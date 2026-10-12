@@ -84,6 +84,14 @@ var FENOMENI_CAUSA = [
     re: /tension[^.]{0,40}(bassa|insufficient|inadeguat)|sottotension|caduta di tension/ },
   { id: "infiltrazione",
     re: /umidit|infiltrazion|acqua|bagnat|pioggi/ },
+  // I due che seguono sono **effetti**: un'altra causa li produce. Servono
+  // alle RELAZIONI qui sotto, e come tutti gli altri valgono anche per
+  // l'identità. Contati: "manca una fase" 3 nelle 173 etichette del corpus
+  // e 8 nei 370 guasti della banca; il surriscaldamento 4 e 26.
+  { id: "mancanza_fase",
+    re: /manc[a-z]* di (una )?fase|perdita di (una )?fase|manca una fase|squilibrio (fra|tra) le fasi/ },
+  { id: "surriscaldamento",
+    re: /surriscald|temperatura elevat|si scalda|arco elettric/ },
   { id: "protezione_difettosa",
     re: /(rcd|differenzial\w*|mcb|magnetotermic\w*|diff|mt) (difettos|degradat|troppo sensibil|a fine vita)|a fine vita/ }
 ];
@@ -104,6 +112,41 @@ var APPARECCHI = [
   { id: "protezione",    re: /\brcd\b|differenzial\w*|\bmcb\b|magnetotermic\w*/ },
   { id: "illuminazione", re: /lampad\w*|\bled\b|faretto|plafonier\w*/ }
 ];
+
+// ── UNA CAUSA E LE SUE CONSEGUENZE ───────────────────────────────────
+//
+// Il difetto che il **primo guasto vero** ha fatto vedere: sul teleruttore
+// della pompa sommersa ROCCO metteva in parallelo *fusibile aperto*,
+// *bobina che ronza*, *manca una fase* — una causa e i suoi effetti,
+// elencati come piste concorrenti. L'elettricista legge quattro strade
+// dove ce n'è una.
+//
+// Misurato sui 21 casi italiani leggendo le 84 righe stampate: **8 coppie
+// su 7 casi** stanno in relazione causa → effetto.
+//
+// Qui si dichiara **solo** quello che è vero in fisica e che il corpus
+// esercita. Tre relazioni della prima stesura sono state tolte perché
+// sbagliate, e si vedevano solo leggendo le righe: *"conduttore interrotto
+// → protezione a monte scattata"* e *"→ assenza di rete"*. Quelle non sono
+// conseguenze di un conduttore tranciato: sono **cause alternative** dello
+// stesso sintomo. Un conduttore che si apre non fa scattare niente.
+//
+// La relazione **non esclude e non fonde**: aggiunge una riga alla catena
+// della causa ("spiegherebbe anche…"). Sopprimere l'effetto toglierebbe
+// un'ipotesi vera — la dispersione esiste anche senz'acqua.
+var RELAZIONI_CAUSALI = [
+  ["infiltrazione", "dispersione"],        // l'acqua è conduttrice: 6 coppie sul corpus
+  ["interruzione", "mancanza_fase"],       // FORUM-IT-010, la forma del guasto vero
+  ["contatto_resistivo", "surriscaldamento"], // effetto Joule su una giunzione cattiva
+  ["sovraccarico", "surriscaldamento"]
+];
+
+/** Il fenomeno di `a` è causa del fenomeno di `b`? */
+function spiegaAltra(a, b) {
+  var fa = fenomenoCausa(a), fb = fenomenoCausa(b);
+  if (!fa || !fb || fa === fb) return false;
+  return RELAZIONI_CAUSALI.some(function (r) { return r[0] === fa && r[1] === fb; });
+}
 
 /** La tesi dell'ipotesi: quel che afferma, prima della specificazione. */
 function tesi(label) {
@@ -170,6 +213,8 @@ function frammento(label, base) {
 
 module.exports = {
   FENOMENI_CAUSA: FENOMENI_CAUSA,
+  RELAZIONI_CAUSALI: RELAZIONI_CAUSALI,
+  spiegaAltra: spiegaAltra,
   APPARECCHI: APPARECCHI,
   tesi: tesi,
   fenomenoCausa: fenomenoCausa,

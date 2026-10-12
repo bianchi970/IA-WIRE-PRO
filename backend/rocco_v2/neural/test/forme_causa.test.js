@@ -201,6 +201,42 @@ Object.keys(conteggio).sort(function (a, b) { return conteggio[b] - conteggio[a]
 check("nessun fenomeno riconosce più di metà delle etichette di prova",
   Object.keys(conteggio).every(function (k) { return conteggio[k] <= TUTTE.length / 2; }));
 
+// ─── §7 Una causa e le sue conseguenze ────────────────────────────────
+console.log("\n§7 — la catena: chi spiega chi");
+
+// Quelle vere, prese dalle righe che ROCCO stampa davvero.
+[["umidità in cassetta di derivazione o morsettiera",
+  "Dispersione verso terra su carico o cavo sempre presente"],
+ ["Infiltrazione acqua nell isolamento o in scatole derivazione",
+  "Dispersione in uno specifico apparecchio o cavo"],
+ // FORUM-IT-010, ed è la forma del primo guasto vero: un fusibile aperto
+ // spiega la fase che manca.
+ ["fusibile bruciato, contatto aperto, cavo interrotto",
+  "mancanza di una fase (trifase)"],
+ ["morsetto allentato — connessione ad alta resistenza",
+  "surriscaldamento del morsetto superiore"]
+].forEach(function (c) {
+  check("spiega: «" + c[0].slice(0, 32) + "» → «" + c[1].slice(0, 32) + "»",
+    fc.spiegaAltra(c[0], c[1]));
+});
+
+// La relazione ha un verso. L'acqua spiega la dispersione, non viceversa.
+check("la relazione non vale all'indietro",
+  !fc.spiegaAltra("Dispersione verso terra su carico",
+                  "umidità in cassetta di derivazione"));
+check("un fenomeno non spiega sé stesso",
+  !fc.spiegaAltra("dispersione su carico", "dispersione a terra sul cavo"));
+
+// LE TRE TOLTE perché sbagliate, e si vedevano solo leggendo le righe: un
+// conduttore che si apre non fa scattare niente e non causa un blackout.
+// Sono **cause alternative** dello stesso sintomo, non conseguenze.
+check("un conduttore interrotto NON spiega una protezione scattata",
+  !fc.spiegaAltra("conduttore interrotto", "protezione a monte scattata"));
+check("un conduttore interrotto NON spiega l'assenza di rete",
+  !fc.spiegaAltra("conduttore interrotto", "assenza di rete (blackout o distacco)"));
+check("una dispersione NON spiega un differenziale difettoso",
+  !fc.spiegaAltra("dispersione su carico", "RCD difettoso o a fine vita"));
+
 console.log("\n============================================================");
 console.log("FORME CAUSA: " + pass + " passed, " + fail + " failed");
 console.log("============================================================");

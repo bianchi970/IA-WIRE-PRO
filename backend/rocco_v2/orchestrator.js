@@ -2250,6 +2250,45 @@ function fondiRipetizioni(cs) {
   return fuse;
 }
 
+// ============================================================
+// UNA CAUSA E LE SUE CONSEGUENZE
+// ============================================================
+//
+// Il difetto che il primo guasto vero ha fatto vedere: ROCCO metteva in
+// parallelo il fusibile aperto, la fase che manca e la bobina che ronza —
+// una causa e i suoi effetti, come se fossero piste concorrenti.
+//
+// Qui non si esclude e non si fonde: l'effetto resta un'ipotesi viva,
+// perché la dispersione esiste anche senz'acqua. Si **dichiara** che una
+// delle due spiegherebbe l'altra, ed è l'informazione che mancava.
+//
+// Si cita la **tesi** dell'altra ipotesi, non l'etichetta intera: più
+// corta da leggere, e non trascina nella bozza i numeri della
+// specificazione — che il narratore rifiuterebbe come non ricavabili dai
+// dati del caso, tornando alla bozza per una riga di nota.
+function dichiaraCatene(cs) {
+  var MAX_PER_IPOTESI = 2;
+  var attive = arr(cs.hypotheses).filter(function(h) {
+    return h && h.status === "active" && h.label;
+  });
+  var quante = 0;
+
+  attive.forEach(function(causa) {
+    var dette = 0;
+    attive.forEach(function(effetto) {
+      if (causa === effetto || dette >= MAX_PER_IPOTESI) return;
+      if (!formeCausa.spiegaAltra(causa.label, effetto.label)) return;
+      var riga = "Spiegherebbe anche: " + formeCausa.tesi(effetto.label).trim();
+      if (causa.catena.indexOf(riga) >= 0) return;
+      causa.catena.push(riga);
+      causa.spiega = arr(causa.spiega).concat([effetto.label]);
+      dette++;
+      quante++;
+    });
+  });
+  return quante;
+}
+
 function formatResponse(cs, percezione) {
   // L'ipotesi che la diagnosi nomina va in testa all'elenco: `final_diagnosis`
   // e la sezione IPOTESI devono raccontare la stessa cosa, altrimenti l'utente
@@ -3134,6 +3173,10 @@ function createOrchestrator(options) {
       // Una causa, una riga. Vedi fondiRipetizioni() e rocco_v2/forme_causa.js.
       var fuse = fondiRipetizioni(cs);
       if (fuse) runtimeTrace.record(cs, "ipotesi_fuse", { quante: fuse });
+
+      // Una causa e le sue conseguenze: si dichiara, non si sopprime.
+      var catene = dichiaraCatene(cs);
+      if (catene) runtimeTrace.record(cs, "catene_dichiarate", { quante: catene });
 
       // Sincronizza formato legacy
       cs.hypotheses_active = cs.hypotheses.filter(function(h) { return h.status === "active"; })
