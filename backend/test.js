@@ -25,6 +25,20 @@ function log(name, ok, detail) {
   if (ok) passed++; else failed++;
 }
 
+// Nessuna chiamata resta appesa per sempre.
+//
+// Questa è l'unica suite che parla col servizio vero — provider remoti e
+// ping al database — e `req()` non aveva alcun timeout: con il Postgres di
+// Render scaduto e un provider lento, `npm test` è rimasto appeso **da 2 a
+// 20 minuti** a seconda della giornata, sempre sulla stessa chiamata, e le
+// altre 38 suite stanno insieme in ~40 secondi.
+//
+// Un servizio che non risponde entro il tempo è un **esito**, non un motivo
+// per non finire: la chiamata fallisce, il test la segna rossa, la batteria
+// prosegue. È la stessa dottrina del ripiego agganciato al fallimento della
+// query invece che a `if (!pool)`.
+var TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 60000);
+
 function req(opts, body) {
   return new Promise(function (resolve, reject) {
     var reqBody = body ? JSON.stringify(body) : null;
@@ -46,6 +60,9 @@ function req(opts, body) {
       });
     });
     r.on("error", reject);
+    r.setTimeout(TIMEOUT_MS, function () {
+      r.destroy(new Error("nessuna risposta entro " + (TIMEOUT_MS / 1000) + "s"));
+    });
     if (reqBody) r.write(reqBody);
     r.end();
   });

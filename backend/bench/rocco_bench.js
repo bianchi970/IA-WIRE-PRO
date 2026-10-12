@@ -256,6 +256,19 @@ var BASELINE = {
   causa_vera_stampata:        { valore: 21, verso: "max" },   // su 21
   causa_vera_attiva:          { valore: 21, verso: "max" },
   //
+  // La riga che l'elettricista legge per prima. `causa_vera_stampata` è
+  // saturo a 21/21 e non distingue più niente: la causa vera c'è sempre
+  // fra le quattro, ma in quale posizione non lo diceva nessuno — e la
+  // prima riga è quella su cui si va a lavorare.
+  //
+  // Misurata il 12/10 leggendo le prime righe dei 21 casi: **15/21**, e
+  // la differenza l'ha fatta la catena nel comparatore. I tre numeri
+  // della stessa sera, nello stesso ordine in cui sono stati provati:
+  // senza la catena 14, con la catena **senza freno 11** (peggio: su una
+  // lavatrice metteva in testa l'umidità, che spiegherebbe la dispersione
+  // ma che il racconto non nomina), con il freno **15**.
+  causa_vera_in_testa:        { valore: 15, verso: "max" },   // su 21
+  //
   // Il controllo di onestà sul numero sopra: quante volte il credito sta su
   // una parola che il cliente **non** aveva già detto. 20 su 21 — l'unica
   // eccezione è FORUM-SPEC-003, dichiarata in SINTOMI_SENZA_CHIAVE. Se un
@@ -682,7 +695,7 @@ function attive(cs) {
 
 var m = {
   componenti_rilevati: 0, componenti_fantasma: 0,
-  causa_vera_stampata: 0, causa_vera_attiva: 0,
+  causa_vera_stampata: 0, causa_vera_attiva: 0, causa_vera_in_testa: 0,
   ipotesi_stampate: 0, rumore_fuori_contesto: 0, ipotesi_ripetute: 0,
   conferme_senza_misura: 0,
   casi_conclusi_con_misura: 0, conferme_sbagliate: 0, chiusure_non_dovute: 0,
@@ -732,6 +745,10 @@ function primoTurno(caso) {
       }
 
       if (stampate.some(function (l) { return coerente(l, caso.causa_reale); })) m.causa_vera_stampata++;
+      if (stampate.length && coerente(stampate[0], caso.causa_reale)) m.causa_vera_in_testa++;
+      else if (stampate.length) {
+        dettagli.push(caso.id + ": in testa non c'è la causa vera — " + stampate[0].slice(0, 50));
+      }
       if (stampate.some(function (l) {
         return coerenteStretto(l, caso.causa_reale, caso.domanda);
       })) m.causa_vera_stretta++;
@@ -1039,6 +1056,7 @@ catena.then(function () {
   console.log("\nIPOTESI");
   ok = riga("causa_vera_stampata", m.causa_vera_stampata, casi.length) && ok;
   ok = riga("causa_vera_attiva", m.causa_vera_attiva, casi.length) && ok;
+  ok = riga("causa_vera_in_testa", m.causa_vera_in_testa, casi.length) && ok;
   ok = riga("causa_vera_stretta", m.causa_vera_stretta, casi.length) && ok;
   console.log("    ipotesi stampate in totale              " + String(m.ipotesi_stampate).padStart(4));
   ok = riga("rumore_fuori_contesto", m.rumore_fuori_contesto) && ok;

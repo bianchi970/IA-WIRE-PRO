@@ -1017,10 +1017,69 @@ non se n'è aggiunta una perché la dichiarazione non cambia *quali* ipotesi
 ROCCO fa — cambia quel che l'elettricista capisce leggendole. Il numero che
 la riguarda è la traccia `catene_dichiarate`.
 
-**Resta aperto**: la catena è **dichiarata, non usata per ordinare**.
-Un'ipotesi che ne spiega un'altra spiega più fatti, e questa è una ragione
-classica per metterla davanti — ma toccare `makeHypothesisComparator` va
-misurato a sé, e non è stato fatto qui.
+**E ora ordina — ma con un freno, e il freno è tutto.**
+
+Il banco non lo vedeva: sull'italiano è saturo (21/21 ovunque) e **non
+esisteva una metrica per «la causa vera è la PRIMA riga»** — che è quella
+su cui l'elettricista va a lavorare. Aggiunta: `causa_vera_in_testa`.
+
+| versione | causa vera in testa |
+|---|---|
+| la catena non ordina | 14/21 |
+| la catena ordina, **senza freno** | **11/21** — peggio |
+| la catena ordina **solo se l'ipotesi ha una prova** | **15/21** |
+
+**Perché senza freno peggiora**, ed è il punto da ricordare: la relazione è
+un **condizionale** — *se ci fosse dell'acqua, spiegherebbe la dispersione*
+— e metterla in testa la trasforma in un'affermazione. Su FORUM-IT-001
+(lavatrice), IT-013 (scaldabagno) e IT-015 (bulloni dello statore) usciva
+in prima riga *"umidità in cassetta di derivazione"*, che il racconto non
+nomina. ROCCO preferiva una causa che **nessuno aveva suggerito** solo
+perché avrebbe spiegato un'altra: la tautologia già scartata altrove, in
+una forma nuova.
+
+Il freno è una riga: la chiave conta **solo se l'ipotesi che spiega ha a sua
+volta una prova** (`supporting_evidence`). Allora l'acqua vince su IT-009
+(«il differenziale scatta quando piove forte» — l'acqua è nel racconto) e
+non vince sulla lavatrice.
+
+La chiave sta **sotto il precedente verificato e sopra la probabilità**:
+spiegare di più è una *deduzione* su questo caso, il precedente è un fatto
+accaduto su un impianto vero, `probabilita` è un a priori. Stessa dottrina
+con cui `esperienza` sta sopra `probabilita`.
+
+**Il guadagno, caso per caso**: entra FORUM-IT-010 — *"fusibile bruciato,
+contatto aperto, cavo interrotto"* passa dalla quarta riga alla prima, con
+sotto *"Spiegherebbe anche: mancanza di una fase"*. È la forma esatta del
+guasto vero di Romeo, ed è la prima volta che ROCCO la mette in testa.
+
+**L'ordine dei passi conta**: `rilevaCatene → ordinamento → fusione →
+scriviCatene`. `spiega` deve esistere prima che si ordini perché il
+comparatore lo legge — anche per la sort di `verifyConclusion`, altrimenti
+la diagnosi nominata e la prima riga delle IPOTESI non sarebbero più la
+stessa cosa; e il testo si scrive dopo la fusione, altrimenti una riga
+citerebbe un'ipotesi che nel frattempo è stata assorbita.
+
+**Resta aperto**: le altre tre relazioni (`contatto_resistivo →
+surriscaldamento`, `sovraccarico → surriscaldamento`) non sono esercitate da
+nessun caso del corpus — vengono dalla fisica, non da una misura.
+
+---
+
+### Lo smoke test non resta più appeso (12/10)
+
+`test.js` è l'unica suite che parla col servizio vero — provider remoti e
+ping al database — e `req()` **non aveva alcun timeout**. Col Postgres di
+Render scaduto e un provider lento, `npm test` è rimasto appeso **da 2 a 20
+minuti** a seconda della giornata, sempre sulla stessa chiamata, mentre le
+altre 38 suite stanno insieme in ~40 secondi. In una sera sono state cinque
+corse da venti minuti.
+
+`r.setTimeout(60s)` e la chiamata fallisce invece di appendersi
+(`SMOKE_TIMEOUT_MS` per cambiarlo). Un servizio che non risponde entro il
+tempo è un **esito**, non un motivo per non finire: il test la segna rossa e
+la batteria prosegue. È la stessa dottrina del ripiego agganciato al
+fallimento della query invece che a `if (!pool)`.
 
 ### Una causa, una riga (12/10)
 

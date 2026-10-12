@@ -1997,6 +1997,21 @@ function makeHypothesisComparator(cs) {
     var eb = b.esperienza && typeof b.esperienza.somiglianza === "number" ? b.esperienza.somiglianza : 0;
     if (eb !== ea) return eb - ea;
 
+    // L'ipotesi che ne spiega un'altra spiega **più fatti dello stesso
+    // caso**: su FORUM-IT-010 il fusibile aperto rende conto anche della
+    // fase che manca, mentre il rotore bloccato spiega solo sé stesso. È
+    // la ragione classica per preferirla, ed è esattamente il difetto che
+    // il primo guasto vero aveva mostrato — quattro piste in parallelo
+    // dove ce n'era una che le teneva insieme.
+    //
+    // Sta SOTTO il precedente verificato e sopra la probabilità: spiegare
+    // di più è una **deduzione** su questo caso, il precedente è un fatto
+    // accaduto su un impianto vero, e `probabilita` è un a priori. Stessa
+    // dottrina con cui `esperienza` è stata messa sopra `probabilita`.
+    var sa = arr(a.spiega).length && arr(a.supporting_evidence).length ? 1 : 0;
+    var sb = arr(b.spiega).length && arr(b.supporting_evidence).length ? 1 : 0;
+    if (sb !== sa) return sb - sa;
+
     // La stima del simulatore prima del conteggio delle prove: vedi sopra.
     var pa = typeof a.probabilita === "number" ? a.probabilita : 0;
     var pb = typeof b.probabilita === "number" ? b.probabilita : 0;
@@ -2266,23 +2281,51 @@ function fondiRipetizioni(cs) {
 // corta da leggere, e non trascina nella bozza i numeri della
 // specificazione — che il narratore rifiuterebbe come non ricavabili dai
 // dati del caso, tornando alla bozza per una riga di nota.
-function dichiaraCatene(cs) {
-  var MAX_PER_IPOTESI = 2;
-  var attive = arr(cs.hypotheses).filter(function(h) {
+// Il rilevamento e la scrittura sono due passi distinti, e l'ordine fra
+// loro non è un dettaglio:
+//
+//   rilevaCatene → ordinamento → fusione → scriviCatene
+//
+// `spiega` deve esistere **prima** che si ordini, perché il comparatore lo
+// legge; il testo si scrive **dopo** la fusione, altrimenti una riga
+// citerebbe un'ipotesi che nel frattempo è stata assorbita in un'altra e
+// non compare più da sola.
+var MAX_CATENE_PER_IPOTESI = 2;
+
+function attiveConEtichetta(cs) {
+  return arr(cs.hypotheses).filter(function(h) {
     return h && h.status === "active" && h.label;
   });
-  var quante = 0;
+}
 
+/** Marca quali ipotesi ne spiegherebbero altre. Idempotente. */
+function rilevaCatene(cs) {
+  var attive = attiveConEtichetta(cs);
+  var quante = 0;
+  attive.forEach(function(h) { h.spiega = []; });
   attive.forEach(function(causa) {
-    var dette = 0;
     attive.forEach(function(effetto) {
-      if (causa === effetto || dette >= MAX_PER_IPOTESI) return;
+      if (causa === effetto || causa.spiega.length >= MAX_CATENE_PER_IPOTESI) return;
       if (!formeCausa.spiegaAltra(causa.label, effetto.label)) return;
-      var riga = "Spiegherebbe anche: " + formeCausa.tesi(effetto.label).trim();
+      causa.spiega.push(effetto.label);
+      quante++;
+    });
+  });
+  return quante;
+}
+
+/** Scrive nella catena della causa quel che spiegherebbe. */
+function scriviCatene(cs) {
+  var attive = attiveConEtichetta(cs);
+  var vive = {};
+  attive.forEach(function(h) { vive[h.label] = true; });
+  var quante = 0;
+  attive.forEach(function(causa) {
+    arr(causa.spiega).forEach(function(label) {
+      if (!vive[label]) return;   // assorbita dalla fusione: non si cita
+      var riga = "Spiegherebbe anche: " + formeCausa.tesi(label).trim();
       if (causa.catena.indexOf(riga) >= 0) return;
       causa.catena.push(riga);
-      causa.spiega = arr(causa.spiega).concat([effetto.label]);
-      dette++;
       quante++;
     });
   });
@@ -3068,6 +3111,11 @@ function createOrchestrator(options) {
         // aggiunto ipotesi dopo il passo 6a: anche quelle vanno misurate
         // contro le soglie. È idempotente.
         applyConfirmRules(cs);
+        // Prima di ordinare: chi spiegherebbe chi. Il comparatore lo legge,
+        // quindi deve esistere anche per la sort di verifyConclusion —
+        // altrimenti la diagnosi nominata e la prima riga delle IPOTESI
+        // non sarebbero più la stessa cosa.
+        rilevaCatene(cs);
         verifyConclusion(cs);
         // ═══ 10. DECIDERE — qual è la prossima azione migliore? ═══
         cs.next_action = selectBestAction(cs);
@@ -3175,7 +3223,9 @@ function createOrchestrator(options) {
       if (fuse) runtimeTrace.record(cs, "ipotesi_fuse", { quante: fuse });
 
       // Una causa e le sue conseguenze: si dichiara, non si sopprime.
-      var catene = dichiaraCatene(cs);
+      // Il rilevamento è già avvenuto prima dell'ordinamento; qui si scrive,
+      // a fusione fatta, così non si cita una riga che non esiste più.
+      var catene = scriviCatene(cs);
       if (catene) runtimeTrace.record(cs, "catene_dichiarate", { quante: catene });
 
       // Sincronizza formato legacy
