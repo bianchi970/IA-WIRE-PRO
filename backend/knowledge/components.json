@@ -1617,6 +1617,50 @@
         "4) Verificare regolazione soglie: tensione min/max e asimmetria %",
         "5) Testare contatto uscita con multimetro: commuta in stato di allarme"
       ]
+    },
+    {
+      "id": "pompa-sommersa",
+      "category": "submersible_pump",
+      "brand": null,
+      "model": null,
+      "keywords": [
+        "pompa sommersa",
+        "sommersa",
+        "sommergibile",
+        "elettropompa",
+        "pozzo",
+        "autoclave",
+        "drenaggio",
+        "acque nere",
+        "pozzetto",
+        "galleggiante",
+        "sonda di livello"
+      ],
+      "visual_cues": [
+        "corpo cilindrico in acciaio inox calato nel pozzo: in opera non si vede, si vede solo il cavo",
+        "cavo di alimentazione lungo, spesso con una giunzione nel pozzetto a bordo pozzo",
+        "quadretto di comando in superficie con teleruttore, protezione e condensatore (monofase)",
+        "galleggiante o sonda di livello contro la marcia a secco",
+        "tubo di mandata metallico o in polietilene che risale dal pozzo"
+      ],
+      "functions": [
+        "solleva l'acqua lavorando immersa, in fondo a un cavo lungo: è questa la configurazione, non l'uso (pozzo, drenaggio, acque nere, autoclave, irrigazione)",
+        "il motore è raffreddato dall'acqua in cui lavora: fuori dall'acqua si surriscalda",
+        "viene comandata da un teleruttore in superficie, con galleggiante o pressostato a dare il consenso"
+      ],
+      "typical_faults": [
+        "il differenziale scatta all'avviamento e non si riarma: acqua entrata negli avvolgimenti o nel cavo, isolamento verso terra crollato",
+        "la protezione scatta dopo qualche secondo di marcia: avvolgimento in corto o rotore frenato dal fango — da distinguere dalla caduta di tensione sul cavo lungo",
+        "scatta dopo le piogge e poi riparte da asciutto: umidità nella giunzione del cavo nel pozzetto, non nella pompa",
+        "il teleruttore ronza e la centralina segnala mancanza di fase: fusibile aperto su una fase — la bobina non chiude, ronza e finisce per bruciarsi"
+      ],
+      "field_checks": [
+        "1) Sezionare, scollegare la pompa dal quadro e misurare l'isolamento di ciascun conduttore verso terra (o verso il tubo di mandata) col megger: su una sommersa che ha imbarcato acqua l'isolamento è crollato rispetto a quello di una pompa asciutta — confrontare con il valore di targa o del manuale, non con un numero a memoria",
+        "2) A impianto fuori tensione, misurare la resistenza fra le tre fasi al quadro con la pompa scollegata: devono risultare uguali fra loro — uno squilibrio indica l'avvolgimento, un valore aperto indica l'avvolgimento interrotto. Misurare poi la tensione ai morsetti CON la pompa in marcia: se cala molto rispetto al quadro, è la caduta sul cavo lungo e non il motore",
+        "3) Aprire il pozzetto di giunzione, asciugare e ripetere l'isolamento sulla sola giunzione: se risale, il guasto è nella giunzione e non nella pompa",
+        "4) A impianto fuori tensione, controllare i fusibili di linea a monte del teleruttore e la continuità della bobina A1-A2: bobina aperta = bruciata. Un fusibile aperto su una fase spiega insieme la fase mancante, il ronzio e la bobina che si brucia restando in quello stato"
+      ],
+      "notes": "La pompa sommersa non è un modello, è una configurazione: motore immerso in fondo a un cavo lungo. I guasti del motore in sé (avvolgimento, rotore, perdita di fase) stanno in MOTORE e non si duplicano qui. Non avviare mai a secco: fuori dall'acqua il motore non è raffreddato. Prima di estrarre la pompa sezionare e verificare l'assenza di tensione; l'isolamento si misura con la pompa scollegata dal quadro, altrimenti si misura l'impianto."
     }
   ]
 }

@@ -84,6 +84,11 @@ const FAMIGLIA_PATTERNS = [
   { famiglia: 'RCCB',        pattern: /\b(rccb|differenzial\w*|salvavita|rcd)\b/i },
   { famiglia: 'MCCB',        pattern: /\b(mccb|scatolat\w*)/i },
   { famiglia: 'FOTOVOLTAICO', pattern: /\b(fotovoltaic\w*|pannell\w*|stringa|stringhe|\bfv\b|mc4|irraggiament\w*)/i },
+  // Prima di MOTORE e di TERMICO: una sommersa e` un motore, e chi la nomina
+  // dice spesso "il motore della pompa" - ma la famiglia che la descrive e`
+  // quella della configurazione. Pattern stretto: "pompa di calore" e
+  // "pompa di circolazione" devono restare a TERMICO.
+  { famiglia: 'POMPA',       pattern: /(pompa sommersw*|pompe sommersw*|sommergibilw*|elettropompw*|pompa (da|di|del) pozzo|pozzo artesianw*|autoclave|acque nere|pompa di drenaggio)/i },
   { famiglia: 'MOTORE',      pattern: /\b(motore|motori|asincron\w*|compressor\w*|ventilator\w*|avvolgiment\w*|statore|rotore)/i },
   { famiglia: 'CONTATTORE',  pattern: /\b(contattor\w*|teleruttor\w*)/i },
   { famiglia: 'TRASFORMATORE', pattern: /\b(trasformator\w*|trafo|\bta\b)/i },

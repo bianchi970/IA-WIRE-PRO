@@ -139,6 +139,9 @@ var CATEGORIA_FAMIGLIA = {
   battery_storage: "FOTOVOLTAICO", generator: "GENERAZIONE", ats: "GENERAZIONE",
   ups: "UPS", power_supply: "ALIMENTATORE",
   heating: "TERMICO", pump: "TERMICO", heat_pump: "TERMICO",
+  // POMPA non e` un prodotto, e` una configurazione: motore immerso in fondo
+  // a un cavo lungo. Il circolatore del riscaldamento resta TERMICO.
+  submersible_pump: "POMPA",
   motorized_valve: "TERMICO", pressure_switch: "TERMICO",
   sensor: "SENSORE", temp_sensor: "SENSORE", pir_sensor: "DOMOTICA",
   dimmer: "DOMOTICA", twilight_switch: "DOMOTICA", timer: "DOMOTICA",

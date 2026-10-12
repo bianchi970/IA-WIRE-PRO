@@ -234,6 +234,14 @@ var ENGINE_INTERNAL_PREFIXES = [
   // alla risposta offline, che compongono i COMPONENTI da un'altra lista);
   // qui si scarta perché duplica.
   "componente riconosciuto",
+  // "matched_keyword" e "matched_pattern" entrano in facts_confirmed come
+  // slug nudi, senza valore: dicono che il motore ha trovato qualcosa, non
+  // che cosa. Quel che hanno trovato e` gia` nelle due righe che seguono
+  // ("Keyword tecniche rilevate", "Componente riconosciuto"), scartate
+  // perche' duplicano. Restavano fuori dai sei posti solo finche' c'era
+  // un'osservazione di troppo a coprirli.
+  "matched_keyword",
+  "matched_pattern",
   "safety:",
   "azione immediata:",
   "ipotesi:"

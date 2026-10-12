@@ -970,6 +970,76 @@ senza soluzione. Per un **esame** servono le risposte, e i forum danno
 domande. La crescita vera del corpus viene dai casi che l'elettricista
 chiude, non dalla rete.
 
+### La famiglia POMPA — la prima lacuna colmata dal metodo (12/10)
+
+La lacuna trovata dal primo guasto vero era dichiarata e vuota: **`sommers*`**
+**= 0 occorrenze** nelle due fonti (`knowledge/components.json`,
+`data/encyclopedia.json`), famiglia POMPA inesistente. Per questo su una pompa
+sommersa da pozzo ROCCO scriveva *"Pompa di circolazione"*: non era un
+iperonimo sbagliato, era **l'unica pompa che avesse**.
+
+Colmata nella **fonte**, non in una regola, e rigenerata:
+`components.json` → `pompa-sommersa` (`category: "submersible_pump"`),
+`CATEGORIA_FAMIGLIA` → POMPA, `device_kb.FAMIGLIA_PATTERNS` → un pattern
+stretto **prima di MOTORE e TERMICO** (chi la nomina dice spesso "il motore
+della pompa", ma la famiglia che la descrive è quella della configurazione;
+"pompa di calore" e "pompa di circolazione" devono restare a TERMICO).
+**366 → 370 guasti, 36 → 37 famiglie.**
+
+**Quattro voci, confermate da Romeo**, e solo ciò che dipende dall'essere
+immersa in fondo a un cavo lungo — avvolgimento, rotore e perdita di fase
+restano in MOTORE e non si duplicano: acqua negli avvolgimenti; protezione che
+scatta dopo qualche secondo (con la caduta sul cavo lungo da distinguere);
+umidità nella giunzione del pozzetto; fusibile aperto che fa ronzare la bobina
+del teleruttore. La quarta è il caso di Romeo, che come **esperienza** era già
+nelle tre memorie e qui entra come **conoscenza generale**.
+
+**Nessun valore assoluto, per decisione sua.** I numeri d'isolamento di una
+sommersa si trovavano solo in riassunti di ricerca, e non esiste una `fonte`
+che valga "letto di sfuggita". Le verifiche prescrivono il **criterio
+relativo**, che è anche l'unico che generalizza senza marche: *le tre
+resistenze uguali fra loro*, *isolamento con la pompa scollegata dal quadro*,
+*bobina aperta = bruciata*, *confrontare con la targa*. La lacuna resta quindi
+dichiarata, ma cambiata di natura: da "la famiglia intera: nessuna fonte la
+copre" a `POMPA · manca: valori di riferimento`.
+
+**Due cose scoperte dalla prova, non dai numeri** — la risposta si guarda, non
+si conta:
+
+1. **"pompa di circolazione" usciva accanto a "pompa sommersa".** La keyword
+   generica `pompa` del circolatore ha ora la sua `SENSE_RULE`, come già
+   `interruttore`: pretende il suo contesto (`circolatore`, `riscaldamento`,
+   `girante`, `prevalenza`…) e si ritira davanti a `sommersa`, `pozzo`,
+   `autoclave`, `drenaggio`. Le parole **proprie** del circolatore non passano
+   di qui: restano riconoscibili da sole. Finché la banca aveva solo il
+   circolatore quella regola non si poteva scrivere — sarebbe stato togliere
+   l'unica risposta disponibile.
+2. **`matched_keyword` e `matched_pattern` davanti all'elettricista.** Due slug
+   nudi, senza valore: dicono che il motore ha trovato qualcosa, non che cosa —
+   e quel che ha trovato è già nelle due righe che seguono, scartate perché
+   duplicano. Stavano fuori dai sei posti di `cleanFacts` **solo finché c'era
+   un'osservazione di troppo a coprirli**: tolta quella, sono emersi. In
+   `lexicon.ENGINE_INTERNAL_PREFIXES`.
+
+| metrica | prima | dopo |
+|---|---|---|
+| occorrenze di `sommers*` nelle fonti | 0 | **11** |
+| guasti noti nella banca | 366 | **370** |
+| famiglie | 36 | **37** |
+| pompa sbagliata sul caso vero | "pompa di circolazione" | **"pompa sommersa"** |
+| tutte le metriche del banco | — | **invariate, 0 regressioni** |
+
+**Il banco non si muove, ed è atteso**: il corpus dei 21 casi italiani non
+contiene pompe sommerse. Questo blocco non migliora un voto, allarga ciò che
+ROCCO **sa** — e la prova è il guasto vero, non la pagella.
+
+**Resta aperto, misurato qui**: su *"la pompa sommersa non **manda** acqua"* il
+circolatore ricompare per la keyword `mandata`, pescata dal prefix matching su
+"manda" (difetto di stem, non di iperonimo). E il difetto più grosso del caso
+vero **non è toccato**: ROCCO mette in parallelo *fusibile aperto*, *bobina che
+ronza* e *bobina bruciata*, che sono **una causa e le sue conseguenze**. È
+ragionamento, non conoscenza.
+
 ### La verifica discriminante — il numero a metà, chiuso
 
 `esame_verifica_proposta` è **48/48** e dice soltanto che *una* verifica

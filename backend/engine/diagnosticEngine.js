@@ -1179,7 +1179,19 @@ var SENSE_RULES = [
   { keyword: "magnetotermico",
     excludedBy: /(?=[\s\S]*(?:\bluce\b|\bluci\b|lampadin\w*|faretto|faretti|plafonier\w*|abat))(?![\s\S]*magnetoterm)/,
     unless: /scatt\w*|salt\w*|riarm\w*|non resta su|ricade|intervien\w*|quadro elettric\w*|\bmcb\b/,
-    reason: "interruttore come tasto a muro, non come magnetotermico di quadro" }
+    reason: "interruttore come tasto a muro, non come magnetotermico di quadro" },
+
+  // "pompa" da sola non e` il circolatore del riscaldamento. Finche' la
+  // banca aveva solo quello, su una **sommersa da pozzo** ROCCO scriveva
+  // "pompa di circolazione": non era un iperonimo sbagliato, era l'unica
+  // pompa che avesse. Ora che la famiglia POMPA esiste, la keyword generica
+  // del circolatore pretende il suo contesto, come gia` fa "interruttore".
+  // Le parole proprie del circolatore (circolatore, girante, prevalenza,
+  // cavitazione...) non passano di qui: restano riconoscibili da sole.
+  { keyword: "pompa", component: "pompa-circolatore",
+    excludedBy: /sommersw*|sommergibilw*|elettropompw*|pozzo|pozzetto|autoclave|drenaggw*|acque nere|irrigazionw*/,
+    unless: /circolatorw*|circolazionw*|riscaldamentw*|caldaia|termosifonw*|radiatorw*|girante|prevalenza|cavitazionw*/,
+    reason: "pompa sommersa o da pozzo, non il circolatore del riscaldamento" }
 ];
 
 // I nomi d'agente italiani: chi/che fa l'azione.

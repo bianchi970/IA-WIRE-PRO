@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generato_il": "2026-10-11",
+ "generato_il": "2026-10-12",
  "generato_da": "knowledge/build_dispositivi.js",
  "avvertenza": "File generato: non modificarlo a mano. Si corregge la fonte e si rigenera.",
  "fonti": {
@@ -2170,6 +2170,41 @@
     "morsetti per le 3 fasi L1, L2, L3 e neutro opzionale",
     "contatto di uscita relè SPDT per comando o allarme",
     "potenziometri di regolazione soglie e ritardi su alcuni modelli"
+   ],
+   "fonte": "components"
+  },
+  {
+   "codice": "CMP-POMPA-SOMMERSA",
+   "famiglia": "POMPA",
+   "sottofamiglia": "submersible_pump",
+   "nome": "pompa sommersa",
+   "marca": null,
+   "tensione_nominale_V": null,
+   "corrente_nominale_A": null,
+   "potere_interruzione_kA": null,
+   "corrente_differenziale_mA": null,
+   "tipo_differenziale": null,
+   "applicazione": "solleva l'acqua lavorando immersa, in fondo a un cavo lungo: è questa la configurazione, non l'uso (pozzo, drenaggio, acque nere, autoclave, irrigazione)",
+   "note_normative": "La pompa sommersa non è un modello, è una configurazione: motore immerso in fondo a un cavo lungo. I guasti del motore in sé (avvolgimento, rotore, perdita di fase) stanno in MOTORE e non si duplicano qui. Non avviare mai a secco: fuori dall'acqua il motore non è raffreddato. Prima di estrarre la pompa sezionare e verificare l'assenza di tensione; l'isolamento si misura con la pompa scollegata dal quadro, altrimenti si misura l'impianto.",
+   "parole_chiave": [
+    "pompa sommersa",
+    "sommersa",
+    "sommergibile",
+    "elettropompa",
+    "pozzo",
+    "autoclave",
+    "drenaggio",
+    "acque nere",
+    "pozzetto",
+    "galleggiante",
+    "sonda di livello"
+   ],
+   "segni_visivi": [
+    "corpo cilindrico in acciaio inox calato nel pozzo: in opera non si vede, si vede solo il cavo",
+    "cavo di alimentazione lungo, spesso con una giunzione nel pozzetto a bordo pozzo",
+    "quadretto di comando in superficie con teleruttore, protezione e condensatore (monofase)",
+    "galleggiante o sonda di livello contro la marcia a secco",
+    "tubo di mandata metallico o in polietilene che risale dal pozzo"
    ],
    "fonte": "components"
   },
@@ -5768,6 +5803,58 @@
    "fonte": "components"
   },
   {
+   "dispositivo_codice": "CMP-POMPA-SOMMERSA",
+   "famiglia": "POMPA",
+   "sintomo": "il differenziale scatta all'avviamento e non si riarma",
+   "causa_probabile": "acqua entrata negli avvolgimenti o nel cavo, isolamento verso terra crollato",
+   "probabilita": "Media",
+   "verifica": "1) Sezionare, scollegare la pompa dal quadro e misurare l'isolamento di ciascun conduttore verso terra (o verso il tubo di mandata) col megger: su una sommersa che ha imbarcato acqua l'isolamento è crollato rispetto a quello di una pompa asciutta — confrontare con il valore di targa o del manuale, non con un numero a memoria",
+   "strumento": "megaohmetro 500V",
+   "valore_atteso": "non specificato nella fonte",
+   "rischio": null,
+   "riferimento_norma": null,
+   "fonte": "components"
+  },
+  {
+   "dispositivo_codice": "CMP-POMPA-SOMMERSA",
+   "famiglia": "POMPA",
+   "sintomo": "la protezione scatta dopo qualche secondo di marcia",
+   "causa_probabile": "avvolgimento in corto o rotore frenato dal fango — da distinguere dalla caduta di tensione sul cavo lungo",
+   "probabilita": "Media",
+   "verifica": "2) A impianto fuori tensione, misurare la resistenza fra le tre fasi al quadro con la pompa scollegata: devono risultare uguali fra loro — uno squilibrio indica l'avvolgimento, un valore aperto indica l'avvolgimento interrotto. Misurare poi la tensione ai morsetti CON la pompa in marcia: se cala molto rispetto al quadro, è la caduta sul cavo lungo e non il motore",
+   "strumento": "multimetro",
+   "valore_atteso": "non specificato nella fonte",
+   "rischio": null,
+   "riferimento_norma": null,
+   "fonte": "components"
+  },
+  {
+   "dispositivo_codice": "CMP-POMPA-SOMMERSA",
+   "famiglia": "POMPA",
+   "sintomo": "scatta dopo le piogge e poi riparte da asciutto",
+   "causa_probabile": "umidità nella giunzione del cavo nel pozzetto, non nella pompa",
+   "probabilita": "Media",
+   "verifica": "3) Aprire il pozzetto di giunzione, asciugare e ripetere l'isolamento sulla sola giunzione: se risale, il guasto è nella giunzione e non nella pompa",
+   "strumento": "megaohmetro 500V",
+   "valore_atteso": "non specificato nella fonte",
+   "rischio": null,
+   "riferimento_norma": null,
+   "fonte": "components"
+  },
+  {
+   "dispositivo_codice": "CMP-POMPA-SOMMERSA",
+   "famiglia": "POMPA",
+   "sintomo": "il teleruttore ronza e la centralina segnala mancanza di fase",
+   "causa_probabile": "fusibile aperto su una fase — la bobina non chiude, ronza e finisce per bruciarsi",
+   "probabilita": "Media",
+   "verifica": "4) A impianto fuori tensione, controllare i fusibili di linea a monte del teleruttore e la continuità della bobina A1-A2: bobina aperta = bruciata. Un fusibile aperto su una fase spiega insieme la fase mancante, il ronzio e la bobina che si brucia restando in quello stato",
+   "strumento": "multimetro",
+   "valore_atteso": "non specificato nella fonte",
+   "rischio": null,
+   "riferimento_norma": null,
+   "fonte": "components"
+  },
+  {
    "dispositivo_codice": "ENC-LEGRAND-DX3-6000",
    "famiglia": "RCCB",
    "sintomo": "scatta immediatamente dopo riarmo",
@@ -8190,10 +8277,10 @@
   }
  ],
  "copertura": {
-  "dispositivi": 109,
-  "guasti": 366,
+  "dispositivi": 110,
+  "guasti": 370,
   "misure_attese": 39,
-  "famiglie": 36,
+  "famiglie": 37,
   "per_famiglia": {
    "MCB": {
     "dispositivi": 10,
@@ -8330,6 +8417,11 @@
     "guasti": 9,
     "misure": 0
    },
+   "POMPA": {
+    "dispositivi": 1,
+    "guasti": 4,
+    "misure": 0
+   },
    "RETE": {
     "dispositivi": 5,
     "guasti": 8,
@@ -8376,7 +8468,7 @@
     "misure": 2
    }
   },
-  "guasti_senza_valore_atteso": 323,
+  "guasti_senza_valore_atteso": 327,
   "guasti_senza_verifica": 0
  },
  "lacune": [
@@ -8466,6 +8558,11 @@
    "dispositivi": 2
   },
   {
+   "famiglia": "POMPA",
+   "manca": "valori di riferimento",
+   "dispositivi": 1
+  },
+  {
    "famiglia": "QUADRO",
    "manca": "valori di riferimento",
    "dispositivi": 3
@@ -8544,12 +8641,6 @@
    "famiglia": "UPS",
    "manca": "valori di riferimento",
    "dispositivi": 1
-  },
-  {
-   "famiglia": "POMPA",
-   "manca": "la famiglia intera: nessuna fonte la copre",
-   "dispositivi": 0,
-   "perche": "pompa elettrica che lavora immersa e in fondo a un cavo lungo (sommersa da pozzo, sommergibile per drenaggio o acque nere, autoclave, irrigazione). Non è il modello che conta: è la configurazione. I guasti del motore (avvolgimento, rotore bloccato, perdita di fase) sono già in MOTORE e NON vanno duplicati; quello che manca è ciò che dipende dall'essere immersa e distante: acqua negli avvolgimenti, giunzione del cavo nel pozzetto, caduta di tensione sulla lunghezza del cavo, marcia a secco."
   }
  ]
 }
