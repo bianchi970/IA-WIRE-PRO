@@ -1229,7 +1229,31 @@ var KILL_RULES = [
     signals: [/ho (?:sostituit|cambiat)\w*|appena (?:sostituit|cambiat|install|mess)\w*|nuovo di fabbrica|(?:lampadin|lampad|interruttor|differenzial|magnetotermic|pres|cav|sensor|termostat|sched|motor|pomp|valvol|resistenz|fusibil|rel|contattor|batteri|alimentator)\w*\s+nuov[oaie]/,
               /(?:ma|e)\s+(?:il problema|lo stesso|uguale|non cambia|continua|persiste|scatta ancora|sempre)|continua\s+(?:uguale|identic\w*|lo stesso|come prima)|non cambia (?:niente|nulla)|resta uguale/],
     kills: /difettoso|a fine vita|guasto interno al dispositivo|dispositivo guasto/,
-    reason: "Componente sostituito e sintomo invariato: il dispositivo non era la causa" }
+    reason: "Componente sostituito e sintomo invariato: il dispositivo non era la causa" },
+
+  // L'apparecchio NON segnala nulla, e ROCCO gli attribuiva un errore.
+  //
+  // Su FORUM-SPEC-003 il cliente scrive *"i pannelli sembrano ok, **nessun
+  // errore sull'inverter**"* e la prima riga della risposta era "inverter in
+  // errore o spento": ROCCO contraddiceva il cliente nella riga che si legge
+  // per prima. Non è conoscenza sbagliata — quella causa è la più probabile
+  // della tabella `fotovoltaico_non_produce` (0.30) — è una causa che
+  // **questo** racconto esclude.
+  //
+  // Il dato c'era già ai due capi e nessuno li univa, la ventunesima volta:
+  // `USER_EXCLUSION_PATTERNS` ha la riga `nessunw* errore|allarme…` scritta
+  // proprio per questo caso, quindi la frase arriva fra le **prove**; e il
+  // simulatore dichiara `cosa_esclude: "inverter acceso e funzionante senza
+  // errori"`. Mancava la regola che legge l'una e applica l'altra.
+  //
+  // Uccide solo ciò che **afferma una segnalazione**: un apparecchio può
+  // benissimo essere guasto senza segnalare niente — è anzi il caso di
+  // SPEC-003, dove il guasto c'è e l'inverter tace. Per questo non tocca
+  // "guasto", "degradato", "sporco", ma solo errore, allarme, blocco.
+  { id: "KR-14",
+    signals: [/nessun[a-z]*\s+(?:errore|errori|allarme|allarmi|anomalia|anomalie|segnalazion[ei]|codice)|non (?:segnala|da|dà) (?:errori|allarmi)|senza (?:errori|allarmi|segnalazioni)/],
+    kills: /in errore|in allarme|in blocco|va in blocco|codice (?:di )?errore|segnala(?: un)? (?:errore|allarme)|allarme attivo/,
+    reason: "Il cliente dichiara che l'apparecchio non segnala errori: non è un'ipotesi di allarme" }
 ];
 
 // Conversione a MOhm: l'utente può scrivere kOhm, Ohm o MOhm.

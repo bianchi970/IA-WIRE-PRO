@@ -67,7 +67,7 @@ function statusOf(cs, label) {
 
 section("1. Tutte le regole sono ben formate");
 
-ok(orch.KILL_RULES.length === 13, "13 regole caricate (ne risultano " + orch.KILL_RULES.length + ")");
+ok(orch.KILL_RULES.length === 14, "14 regole caricate (ne risultano " + orch.KILL_RULES.length + ")");
 orch.KILL_RULES.forEach(function (r) {
   ok(!!r.id && !!r.reason && !!r.kills, r.id + ": ha id, motivo e bersaglio");
   ok(!!(r.when || r.fact || r.signal || (r.signals && r.signals.length)),
@@ -134,6 +134,15 @@ ok(fires("KR-13", "Ho sostituito il differenziale ma il problema continua identi
   "componente sostituito e sintomo invariato");
 ok(fires("KR-13", "Il differenziale scatta e il problema continua.") === false,
   "senza sostituzione la regola non si applica");
+
+// KR-14 — l'apparecchio non segnala nulla, e ROCCO gli attribuiva un errore.
+// La frase di innesco è quella vera di FORUM-SPEC-003, non una di comodo.
+ok(fires("KR-14", "I pannelli sembrano ok, nessun errore sull'inverter.") === true,
+  "il cliente dichiara che non ci sono errori segnalati");
+ok(fires("KR-14", "L'inverter segna errore ISO e non produce piu niente.") === false,
+  "l'errore c'è davvero: la regola non si applica (FORUM-IT-007)");
+ok(fires("KR-14", "La caldaia va in blocco dopo 3 secondi.") === false,
+  "un blocco dichiarato non è una dichiarazione di assenza di allarmi");
 
 section("7. killImpossible sul case_state — l'ipotesi giusta sopravvive");
 

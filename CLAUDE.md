@@ -1066,6 +1066,52 @@ nessun caso del corpus — vengono dalla fisica, non da una misura.
 
 ---
 
+### KR-14 — il cliente dice che non ci sono errori, e ROCCO ne afferma uno
+
+Su FORUM-SPEC-003 il cliente scrive *"i pannelli sembrano ok, **nessun
+errore sull'inverter**"* e la prima riga della risposta era **"inverter in
+errore o spento"**: ROCCO contraddiceva il cliente nella riga che si legge
+per prima.
+
+**Non era conoscenza sbagliata.** Quella causa è la più probabile della
+tabella `fotovoltaico_non_produce` del simulatore (0.30), ed è giusta in
+generale: è *questo* racconto a escluderla.
+
+**Il dato c'era già ai due capi e nessuno li univa** — la ventunesima volta
+che questo codice presenta lo stesso difetto:
+
+- `USER_EXCLUSION_PATTERNS` ha la riga `nessunw* (errore|allarme…)`,
+  **scritta apposta per questo caso** (il commento dice *«caso 13»*): la
+  frase arriva regolarmente fra le **prove**;
+- il simulatore dichiara `cosa_esclude: "inverter acceso e funzionante senza
+  errori"`;
+- mancava la regola che legge l'una e applica l'altra.
+
+`KR-14` uccide **solo ciò che afferma una segnalazione** — `in errore`, `in
+allarme`, `in blocco`, `codice errore`. Non tocca `guasto`, `degradato`,
+`sporco`: un apparecchio può benissimo essere guasto **senza segnalare
+niente**, ed è proprio il caso di SPEC-003, dove il guasto c'è (hot spot,
+diodo bypass) e l'inverter tace. Confondere le due cose avrebbe tolto la
+causa vera.
+
+| | prima | dopo |
+|---|---|---|
+| prima riga di FORUM-SPEC-003 | *"inverter in errore o spento"* | *"stringa ombreggiata, modulo degradato, MPPT"* |
+| ipotesi smentite dal racconto fra le stampate | 1 | **0** |
+| tutte le metriche del banco | — | **invariate** |
+
+**Il banco non si muove, e qui non c'è metrica da aggiungere**: l'unico
+metro sarebbe la regola stessa, e misurare una regola con sé stessa dà zero
+per costruzione. La prova sta dove stanno le altre kill rule — una frase che
+deve scattare e due che non devono, prese dai casi veri: *"l'inverter segna
+errore ISO"* (FORUM-IT-007, l'errore c'è davvero) e *"la caldaia va in
+blocco dopo 3 secondi"* (un blocco dichiarato non è una dichiarazione di
+assenza di allarmi).
+
+**E il corpus la esercita una volta sola.** È poco, ed è dichiarato: la
+regola nasce da un caso, non da una statistica. Vale perché la frase di
+innesco è quella vera del cliente e perché il bersaglio è stretto.
+
 ### Lo smoke test non resta più appeso (12/10)
 
 `test.js` è l'unica suite che parla col servizio vero — provider remoti e
