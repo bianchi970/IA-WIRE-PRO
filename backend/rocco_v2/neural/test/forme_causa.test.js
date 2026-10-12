@@ -63,7 +63,14 @@ var UGUALI = [
    "Differenziale degradato con soglia effettiva scesa sotto il valore nominale"],
   // L'infiltrazione, due nomi per la stessa scatola.
   ["Infiltrazione acqua nell isolamento o in scatole derivazione",
-   "umidità in cassetta di derivazione o morsettiera"]
+   "umidità in cassetta di derivazione o morsettiera"],
+  // Dal GUASTO VERO (teleruttore su pompa sommersa, 12/10): la banca dice
+  // tre volte la stessa cosa sulla bobina, e l'elettricista leggeva tre
+  // righe. È il caso che ha portato qui il fenomeno `tensione_insufficiente`.
+  ["Tensione bobina bassa oppure nucleo magnetico sporco o usurato",
+   "tensione bobina insufficiente o contatti usurati"],
+  ["Tensione bobina bassa oppure nucleo magnetico sporco o usurato",
+   "tensione di alimentazione bobina bassa (<85% Ub)"]
 ];
 
 UGUALI.forEach(function (c) {
@@ -93,7 +100,12 @@ var DIVERSE = [
   ["sovraccarico — troppi apparecchi sullo stesso circuito",
    "Cortocircuito — resistenza quasi zero tra i conduttori"],
   // L'interruzione del conduttore non è la protezione scattata.
-  ["Conduttore interrotto nel percorso", "Protezione a monte scattata o aperta"]
+  ["Conduttore interrotto nel percorso", "Protezione a monte scattata o aperta"],
+  // Dal guasto vero: il fusibile di potenza e quello di comando sono due
+  // fusibili, in due posti. Nessuno dei due nomina un fenomeno dichiarato,
+  // quindi restano per sé — ed è la scelta giusta.
+  ["Fusibile bruciato su una fase del circuito di potenza",
+   "Fusibile del circuito di controllo bruciato"]
 ];
 
 DIVERSE.forEach(function (c) {

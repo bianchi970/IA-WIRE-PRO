@@ -73,6 +73,15 @@ var FENOMENI_CAUSA = [
     re: /morsett\w* (allentat|non serrat)|serraggi|contatto allentat|connession\w* (lenta|allentat|scadent)|alta resistenza|resistenza di contatt|ossidat/ },
   { id: "interruzione",
     re: /interrott|interruzion|conduttore apert|circuito apert|tranciat|filo staccat/ },
+  // Aggiunta il 12/10 dal **guasto vero**: sul teleruttore della pompa
+  // sommersa uscivano tre righe — "tensione bobina bassa", "tensione bobina
+  // insufficiente", "tensione di alimentazione bobina bassa (<85% Ub)" — che
+  // sono la stessa causa detta tre volte dalla banca. Contata prima di
+  // scriverla: 15 occorrenze nei 370 guasti della banca, 2 nelle 173
+  // etichette del corpus. Sta DOPO `interruzione` perché "neutro interrotto
+  // …: tensione instabile" è un'interruzione, non una tensione bassa.
+  { id: "tensione_insufficiente",
+    re: /tension[^.]{0,40}(bassa|insufficient|inadeguat)|sottotension|caduta di tension/ },
   { id: "infiltrazione",
     re: /umidit|infiltrazion|acqua|bagnat|pioggi/ },
   { id: "protezione_difettosa",

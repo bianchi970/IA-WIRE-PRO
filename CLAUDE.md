@@ -1060,6 +1060,17 @@ si misurerebbe la definizione, non il risultato.
 | causa vera stampata · attiva · stretta | 21/21 | invariate |
 | tutto il resto del banco | — | invariato, 0 regressioni |
 
+**E il guasto vero ha trovato subito la forma che mancava.** Rigirandolo, la
+banca diceva tre volte la stessa cosa sulla bobina del teleruttore —
+*"tensione bobina bassa"*, *"tensione bobina insufficiente"*, *"tensione di
+alimentazione bobina bassa (<85% Ub)"* — e nessuna si fondeva: il fenomeno
+**non era nel vocabolario**. Contato prima di scriverlo, come prescrive il
+metodo: 15 occorrenze nei 370 guasti della banca, 2 nelle 173 etichette del
+corpus. Aggiunto `tensione_insufficiente`, le tre righe diventano una e sul
+caso vero le fusioni passano da 1 a 3. È il ciclo *lacuna → competenza*
+applicato a una **regola** invece che a una conoscenza: il corpus non
+l'aveva mostrato, il guasto vero sì.
+
 L'unica ripetizione che resta è FORUM-IT-010, e **non è una ripetizione**:
 *"fusibile bruciato"* e *"contattore non tira"* sono due cause **dello
 stesso effetto** (la fase che manca). È la catena — l'altro difetto, quello
