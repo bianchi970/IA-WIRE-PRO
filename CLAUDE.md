@@ -1071,6 +1071,73 @@ nessun caso del corpus — vengono dalla fisica, non da una misura.
 
 ---
 
+### La banca accoppia le verifiche PER POSIZIONE — misurato, non spedito (13/10)
+
+**Questo blocco non ha un commit: il codice è stato rimesso come era.** È
+qui perché la misura vale più della modifica, e perché la decisione che
+serve è di mestiere.
+
+`knowledge/build_dispositivi.js` accoppia `typical_faults` e `field_checks`
+**per indice** (`verifiche[i] || verifiche[0]`). Ma in `components.json`
+sono due liste indipendenti: la prima sono coppie "sintomo: causa", la
+seconda è la **procedura del dispositivo** — e lo dichiara da sé, **tutte e
+238 le voci hanno il prefisso numerato "1) 2) 3) 4)"** e si leggono in
+ordine.
+
+| misura | valore |
+|---|---|
+| componenti dove le due liste hanno lunghezza **diversa** | **19 su 51** |
+| guasti da `components` | 223 su 370 della banca (60%) |
+| verifiche senza **nessuna radice in comune** col proprio guasto | **126 (57%)** |
+| la stessa misura sulle altre cinque fonti | **14 su 147 (10%)** |
+
+Cinque volte e mezzo: le altre fonti scrivono la verifica accanto alla
+causa, questa le accosta. E `dedurreStrumento` legge quella verifica,
+quindi il guasto arriva all'elettricista con **due** righe false — sul
+percorso vivo, dove al passo 5c-bis un guasto noto *è* un'ipotesi con
+verifica, strumento, valore atteso e norma. Il caso che l'ha fatto vedere:
+l'interruttore crepuscolare, dove *"oscillazione acceso/spento al
+crepuscolo: isteresi insufficiente"* riceveva *"3) Misurare tensione al
+carico: 230VAC quando contatto chiuso"*.
+
+**Tre varianti provate, col loro numero** (base: in testa 18/21, verifica
+giusta 11/18):
+
+| variante | in testa | verifica giusta |
+|---|---|---|
+| A — la verifica si dichiara mancante per tutti i 223 | 16/21 | 11/18 |
+| B — si tiene la voce che **parla** del guasto (radici in comune) | **17/21** | 11/18 |
+| C — si tengono **tutte** le voci che ne parlano, unite con " · " | 17/21 | **10/18** |
+
+**B è la migliore e costa comunque un caso**, FORUM-IT-008. Il perché è il
+reperto: la riga della banca è *"bruciatore non parte | **elettrodi di
+accensione sporchi, valvola gas non apre**"* — **due cause in una riga**.
+L'indice le dava *"6) Controllare elettrodi"* **per fortuna**; il senso
+preferisce la valvola (3 radici in comune contro 2) e perde l'elettrodo,
+che è la causa vera del caso.
+
+E `verifica_giusta` **non si muove** togliendo o cambiando 223 verifiche:
+quelle verifiche non stavano decidendo il passo di nessuno.
+
+**La radice sotto**: **80 righe su 223 dichiarano più di una causa**.
+Spezzarle è la dottrina "una causa, una riga", ma non si fa a macchina —
+fra i frammenti separati dalla virgola ci sono cause vere, **rimedi**
+("sostituire", "sostituire modulo"), **verifiche** ("verificare con
+tester") e **conseguenze** ("caldo", "caduta di tensione al carico").
+Spezzando sulla virgola si otterrebbero ipotesi intestate "sostituire".
+
+**Perché non è stato spedito**: la regola di questo repo è che *una metrica
+non si abbassa per far passare una modifica*, e l'unica eccezione è quando
+il numero era **gonfiato da un difetto**. Qui metà lo era — la testa di
+IT-008 veniva da una coincidenza di indice — e metà no: la causa in testa
+era giusta e con la correzione non lo è più. Le tre strade, in ordine di
+preferenza: (1) classificare i frammenti delle 80 righe e **poi** applicare
+B, così IT-008 torna per il motivo giusto; (2) scrivere la verifica accanto
+al guasto **nella fonte** dove la procedura non la copre (39 guasti su 223
+non trovano nessuna voce che parli di loro); (3) accettare B con 18 → 17.
+
+---
+
 ### La circostanza — "cosa è successo prima" era scritto e nessuno lo leggeva (13/10)
 
 La prima domanda di un elettricista è *«cosa è cambiato?»*, e ROCCO non la
@@ -1292,8 +1359,23 @@ perdere FORUM-IT-001 e FORUM-IT-009, che erano corretti. La nota sta in
 
 **I 7 che restano, divisi per natura** — e sono tre cose diverse, non sette
 difetti:
-- **2 conoscenza mancante**: IT-005 (prescrive solo controlli manuali in
-  cassetta), SPEC-001 (relè crepuscolare — nessun candidato lo nomina);
+- **1 conoscenza mancante**: IT-005 (prescrive solo controlli manuali in
+  cassetta);
+- **1 strada mancante, non conoscenza** — e qui mi ero sbagliato di nuovo,
+  corretto il 13/10: avevo scritto *"SPEC-001, relè crepuscolare: nessun
+  candidato lo nomina"* come lacuna. **La banca lo ha**, e con lui il timer
+  e il sensore PIR: `crepuscolar` compare 8 volte in `dispositivi.json`,
+  famiglia DOMOTICA. Non ci arriva perché `rileveFamigliaInTesto` cerca la
+  famiglia **solo nelle parole del cliente**, e il cliente non può nominare
+  un crepuscolare che non sa di avere — la verifica che il caso prescrive è
+  letteralmente *"verificare **se c'è** un relè crepuscolare"*. E
+  `spontaneo` è mappato nella chiave `intermittente`
+  (`neural_simulator:598`), cioè nel cassetto dei contatti ballerini: un
+  circuito che si alimenta da sé **coi tasti spenti** è comandato da
+  qualcosa, non è un contatto che va e viene. Serve una strada
+  **sintomo → famiglia**, da misurare (`spontaneo` scatta su 2 casi
+  italiani su 21). Terza volta che in questo file "non lo sa" era
+  **"lo sa e non ci arriva"**;
 - **3 graduatoria delle ipotesi, non del passo**: su SPEC-002/004/005 il test
   giusto appartiene a un'ipotesi che non è in testa. È la **stessa radice** di
   `causa_vera_in_testa` 16/21 — IT-003 e SPEC-004 hanno entrambi *"protezione
