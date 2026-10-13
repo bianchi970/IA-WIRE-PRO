@@ -346,6 +346,81 @@ var ESPERIENZA = {
     }
   ],
 
+  // ── LA CALDAIA CHE FA CORTO-CICLO ─────────────────────────────────────
+  //
+  // Parte, sale di temperatura in fretta, il bruciatore spegne, e da capo:
+  // 3-4 cicli al minuto, con la casa che non si scalda. **Non è una
+  // mancata accensione** — la caldaia si accende benissimo — e per questo
+  // non va sotto `caldaia_non_accende`, le cui cinque cause parlano di
+  // elettrodo, valvola gas, pressione, scheda, ventilatore: su un
+  // corto-ciclo sarebbero cinque piste sbagliate con probabilità alte.
+  //
+  // È un fenomeno **idraulico letto da un termostato**: se l'acqua non
+  // circola, il calore non va via dallo scambiatore, la mandata raggiunge
+  // il set point in pochi secondi e il bruciatore si spegne.
+  //
+  // La catena, dettata da Romeo il 13/10/2026:
+  //
+  //   condensatore degradato
+  //   → circolatore non parte bene / coppia di spunto insufficiente
+  //   → portata ridotta
+  //   → la mandata sale troppo rapidamente
+  //   → il bruciatore spegne
+  //   → corto-ciclo
+  //
+  // **La provenienza di ogni causa, perché qui non si inventa niente:**
+  //  · il condensatore degradato è di Romeo (`pratica`), ed è il motivo per
+  //    cui questa chiave esiste: lui chiede che sia una causa **distinta**,
+  //    non nascosta dentro il generico "circolatore guasto". Un circolatore
+  //    che non parte **affatto** è un altro guasto; questo parte male;
+  //  · girante bloccata o che slitta e aria nel circuito vengono da
+  //    `knowledge/components.json` (`pompa-circolatore`, `caldaia-riscaldamento`);
+  //  · la valvola deviatrice viene da `components.json` (`valvola-motorizzata`:
+  //    "rumore ma nessun flusso: valvola bloccata dal calcare", "valvola non
+  //    apre: attuatore guasto"). **Non dal corpus**: FORUM-SPEC-005 è una
+  //    domanda d'esame e ROCCO non si addestra sulle sue risposte.
+  //
+  // **Le probabilità sono uguali, e non è pigrizia.** Nessuna delle fonti
+  // dichiara una frequenza, e il progetto ha una regola per questo: la
+  // scuola non dichiara probabilità e non se ne inventa una. Con quattro
+  // cause a pari merito l'ordine lo decidono le altre chiavi del
+  // comparatore — la circostanza, il precedente, la misura. Quando Romeo
+  // dirà quale vede più spesso, si scrive il suo numero con la sua firma.
+  "caldaia_corto_ciclo": [
+    {
+      causa: "condensatore del circolatore degradato — coppia di spunto insufficiente",
+      probabilita: 0.25,
+      come_verifico: "a pompa alimentata senti se ronza senza girare; a pompa disalimentata verifica che albero e rotore girino liberi; misura la capacità del condensatore e confrontala con la targa, e l'assorbimento con la pinza",
+      cosa_esclude: "circolatore che parte subito e silenzioso, capacità e assorbimento nei valori di targa",
+      tempo_tipico: "il circolatore ronza o fatica a partire, la mandata sale in fretta",
+      componenti: ["carico", "condensatore"]
+    },
+    {
+      causa: "girante del circolatore bloccata o che slitta sull'albero",
+      probabilita: 0.25,
+      come_verifico: "sblocca la girante con la vite di sblocco e verifica che giri libera; con la pompa in marcia controlla se l'acqua circola davvero",
+      cosa_esclude: "girante libera e circolazione presente a pompa in marcia",
+      tempo_tipico: "la pompa gira ma l'acqua non si muove",
+      componenti: ["carico"]
+    },
+    {
+      causa: "valvola deviatrice bloccata dal calcare o attuatore guasto",
+      probabilita: 0.25,
+      come_verifico: "verifica che l'attuatore commuti e che la valvola si muova davvero; a valvola alimentata, rumore senza flusso indica che è bloccata",
+      cosa_esclude: "valvola che commuta e flusso presente su entrambe le vie",
+      tempo_tipico: "rumore dall'attuatore ma nessun flusso",
+      componenti: ["carico"]
+    },
+    {
+      causa: "aria nel circuito o portata insufficiente nell'impianto",
+      probabilita: 0.25,
+      come_verifico: "sfiata i radiatori e lo scambiatore, poi senti se i radiatori si scaldano; controlla che le valvole di intercettazione siano aperte",
+      cosa_esclude: "radiatori che si scaldano uniformemente, nessun gorgoglio",
+      tempo_tipico: "gorgoglio nei tubi, radiatori tiepidi o freddi in cima",
+      componenti: ["carico"]
+    }
+  ],
+
   "fotovoltaico_non_produce": [
     {
       causa: "inverter in errore o spento",
@@ -546,15 +621,25 @@ var CATENE = [
 // comportamenti. Si scorre in ordine, i casi specifici prima, e se una riga
 // trova l'oggetto ma non il comportamento si **continua** con la prossima.
 //
-// Una riga che manca di proposito: **la caldaia che fa corto-ciclo.**
-// Su FORUM-SPEC-005 ("parte e si ferma continuamente, 3-4 cicli al minuto")
-// il corpus dichiara `caldaia_non_accende`, ma le cinque cause che ROCCO ha
-// sotto quella chiave parlano di **mancata accensione** — elettrodo, valvola
-// gas, pressione, scheda, ventilatore. Il corto-ciclo è un altro fenomeno
-// (circolazione, valvola a 3 vie, portata) e ROCCO non lo sa. Mappare lì
-// quel caso gli darebbe cinque cause sbagliate con probabilità alte: è
-// **peggio** del non riconoscere. È una lacuna di conoscenza da colmare
-// nella fonte, non un riconoscimento da forzare.
+// **La caldaia che fa corto-ciclo: lacuna colmata il 13/10/2026.**
+// Per mesi questa riga mancava di proposito, e il commento diceva perché:
+// su FORUM-SPEC-005 ("parte e si ferma continuamente, 3-4 cicli al minuto")
+// ROCCO non aveva il fenomeno, e mapparlo su `caldaia_non_accende` gli
+// avrebbe dato cinque cause di **mancata accensione** — elettrodo, valvola
+// gas, pressione, scheda, ventilatore — con probabilità alte su una caldaia
+// che si accende benissimo. Era peggio del silenzio, e il silenzio veniva
+// dichiarato (`sintomo_non_riconosciuto`).
+//
+// La conoscenza l'ha data Romeo, con la catena del condensatore del
+// circolatore: vedi `caldaia_corto_ciclo` in ESPERIENZA.
+//
+// **La riga sta DOPO `caldaia_non_accende`, e l'ordine è la regola.**
+// Il corto-ciclo si riconosce dalla ripetizione, ma una caldaia che "va in
+// blocco ogni tanto" ripete **e** si blocca: quella è mancata accensione.
+// Lasciando passare prima `non_parte`/`in_blocco`/`assente`, alla
+// ripetizione arriva solo ciò che non è nessuna delle tre — cioè una
+// caldaia che parte davvero e si ferma. Nessuna parola nuova nel
+// vocabolario: lo decide l'ordine.
 // Gli apparecchi che hanno una chiave di esperienza **loro**: motore,
 // caldaia e fotovoltaico. Se il cliente ne nomina uno e il comportamento
 // della sua riga non c'è, ROCCO **non sa** che sintomo sia — e deve dirlo,
@@ -571,8 +656,17 @@ var RICONOSCIMENTO_SINTOMI = [
   // SPECIFICI PRIMA — motore, caldaia, FV hanno priorità sul generico
   { chiave: "motore_non_parte",
     oggetto: "motore",         comportamenti: ["non_parte"] },
+  // `cessa` mancava, e si vedeva con una frase di tre parole: *"la caldaia
+  // non si accende più"* tornava `null`, cioè ROCCO dichiarava di non
+  // sapere che fenomeno fosse sulla forma più comune con cui si racconta
+  // una caldaia morta. `non_parte` copre "non parte" e "bloccata", non la
+  // cessazione. Trovato il 13/10 provando il riconoscimento del
+  // corto-ciclo, e non dal corpus: nessuna delle 48 domande la dice così.
   { chiave: "caldaia_non_accende",
-    oggetto: "caldaia",        comportamenti: ["non_parte", "in_blocco", "assente"] },
+    oggetto: "caldaia",        comportamenti: ["non_parte", "in_blocco", "assente", "cessa"] },
+  // Si accende e si rispegne: è un altro fenomeno. Vedi la nota sopra.
+  { chiave: "caldaia_corto_ciclo",
+    oggetto: "caldaia",        comportamenti: ["ripete"] },
   { chiave: "fotovoltaico_non_produce",
     oggetto: "fotovoltaico",   comportamenti: ["riduce", "non_parte", "assente", "cessa"] },
 

@@ -545,6 +545,7 @@
         "non parte: alimentazione assente, condensatore guasto (monofase), girante bloccata",
         "rumore (cigolamento/grattamento): cuscinetti usurati, cavitazione, corpo estraneo",
         "non sposta acqua: senso di rotazione errato, aria nel circuito, girante slittata",
+      "portata ridotta o nulla con il motore alimentato: condensatore del circolatore degradato — coppia di spunto insufficiente, il rotore fatica a partire o resta fermo e ronza; la mandata sale in fretta e la caldaia va in corto-ciclo",
         "surriscalda e scatta: sovraccarico, fluido troppo caldo, mancata refrigerazione"
       ],
       "field_checks": [
@@ -552,7 +553,10 @@
         "2) Per pompa monofase: misurare capacità condensatore con tester (confrontare con targa)",
         "3) Sbloccare manualmente la girante tramite vite di sblocco/sfiatatore",
         "4) Misurare corrente assorbita con pinza: confrontare con targa",
-        "5) Verificare senso di rotazione (freccia sul corpo) — invertire 2 fasi se errato"
+        "5) Verificare senso di rotazione (freccia sul corpo) — invertire 2 fasi se errato",
+      "6) Ascoltare la pompa alimentata: un ronzio senza rotazione indica coppia di spunto mancante",
+      "7) Verificare a mano che albero e rotore girino liberi, a pompa disalimentata",
+      "8) Controprova: sostituito il condensatore, la circolazione deve tornare normale"
       ],
       "notes": "Prima di intervenire su pompa idraulica: chiudere le valvole di intercettazione e sfiatare la pressione. Non avviare mai a secco (senza fluido nel corpo pompa)."
     },

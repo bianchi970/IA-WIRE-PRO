@@ -374,7 +374,7 @@ var BASELINE = {
   // smentisce (`check_phrasing.PREMESSE`). È la prima delle GOLDEN_RULES —
   // "non dare per scontato che la tensione a monte arrivi a valle" — che il
   // percorso vivo non applicava, perché `rocco_v2` non legge `policies.js`.
-  verifica_giusta:            { valore: 11, verso: "max" },   // sui casi non in arresto
+  verifica_giusta:            { valore: 12, verso: "max" },   // sui casi non in arresto
   conferme_sbagliate:         { valore: 0,  verso: "min" },   // causa vera NON fra le confermate
   contesto_perso_multi_turn:  { valore: 0,  verso: "min" },
   // Apprendimento (misurato il 2026-10-11): il caso chiuso torna utile al
@@ -514,22 +514,28 @@ var CORPUS_NON_CHIUDIBILE = {
 //    non diventavano ipotesi. Collegati, SPEC-003 stampa la causa vera e il
 //    metro stretto passa a 21/21. **Uscito da questo elenco.**
 //
-//  - **FORUM-SPEC-005** (caldaia che fa 3-4 cicli al minuto; causa reale:
-//    circolatore bloccato o valvola a 3 vie inceppata). Avevo scritto che
-//    ROCCO ha solo le cause della mancata accensione. Falso: la banca ha
-//    *"caldaia parte e poi si spegne → circolatore non funzionante (impianto
-//    a circuito chiuso)"*, famiglia TERMICO, e arriva fra le ipotesi.
-//    Resta qui per una ragione **diversa e vera**: fra le 9 chiavi di
-//    esperienza del simulatore il corto-ciclo non c'è, e nessuna delle 9 è
-//    quella giusta — `caldaia_non_accende` parlerebbe di elettrodo, valvola
-//    gas e pressione. Perciò `riconosciSintomo` torna `null` di proposito:
-//    è una lacuna della **tassonomia dei sintomi**, non della conoscenza.
-//    Si colma aggiungendo la chiave al simulatore con le sue cause.
+//  - **FORUM-SPEC-005** (caldaia che fa 3-4 cicli al minuto). Fra le 9
+//    chiavi di esperienza del simulatore il corto-ciclo non esisteva, e
+//    `riconosciSintomo` tornava `null` di proposito: mapparlo su
+//    `caldaia_non_accende` avrebbe dato cinque cause di mancata accensione
+//    — elettrodo, valvola gas, pressione — su una caldaia che si accende
+//    benissimo. Era una lacuna della **tassonomia dei sintomi**.
+//    **Colmata il 13/10/2026**: la chiave `caldaia_corto_ciclo` esiste con
+//    quattro cause, e la conoscenza l'ha data Romeo — la catena del
+//    condensatore del circolatore: coppia di spunto insufficiente, portata
+//    ridotta, la mandata sale in fretta, il bruciatore spegne. ROCCO ora
+//    riconosce il fenomeno e propone la verifica che lui prescrive, e
+//    `verifica_giusta` passa da 11 a 12/18. **Uscito da questo elenco.**
+//
+//    **Resta aperto, e va guardato**: la prima riga che l'elettricista
+//    legge è ancora un guasto della banca di famiglia TERMICO e non una
+//    causa del corto-ciclo, perche' la banca dichiara "Alta"/"Media"
+//    (0.5/0.3) mentre le quattro cause nuove stanno a **pari merito**
+//    0.25: nessuna fonte dichiara una frequenza e non se ne inventa una.
+//    Con l'ordine di Romeo quelle righe passano davanti.
 var SINTOMI_SENZA_CHIAVE = {
-  "FORUM-SPEC-005":
-    "corto-ciclo di caldaia: la causa è nella banca (TERMICO, circolatore) " +
-    "ma fra le 9 chiavi del simulatore non esiste il fenomeno. Tacere è " +
-    "giusto finché la chiave non c'è."
+  // Vuoto: la sola voce che c'era e' stata colmata nella fonte. Se un caso
+  // torna senza chiave, `sintomo_non_riconosciuto` lo dichiara da se'.
 };
 
 var METRO_CIECO = {

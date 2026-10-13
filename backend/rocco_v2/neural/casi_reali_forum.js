@@ -340,7 +340,15 @@ var CASI_FORUM = [
     id: "FORUM-SPEC-005",
     domanda: "La mia caldaia parte e si ferma continuamente, fa 3-4 cicli al minuto. Il termostato è impostato a 21 ma in casa ci sono 18 gradi.",
     lingua: "it",
-    sintomo_atteso: "caldaia_non_accende",
+    sintomo_atteso: "caldaia_corto_ciclo",
+    // Corretto il 13/10/2026: era `caldaia_non_accende`, e contraddiceva la
+    // sua stessa `causa_reale`. Questa caldaia **si accende** - fa 3-4 cicli
+    // al minuto - e circolatore bloccato o valvola deviatrice inceppata sono
+    // cause di **circolazione**, non di mancata accensione. L'etichetta era
+    // un compromesso di quando la chiave `caldaia_corto_ciclo` non esisteva:
+    // il fenomeno non stava nella tassonomia e si era scelto il parente piu
+    // vicino. Ora la chiave c'e - conoscenza di Romeo, la catena del
+    // condensatore del circolatore - e l'etichetta dice il fenomeno vero.
     causa_reale: "pompa circolatore bloccata o valvola a 3 vie inceppata — l'acqua non circola",
     componenti: ["carico", "sensore"],
     verifiche: ["verificare che la pompa giri", "controllare la valvola a 3 vie", "sentire se i radiatori si scaldano"],

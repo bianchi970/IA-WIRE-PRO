@@ -562,9 +562,9 @@ su 21 esempi senza accorgersene.
 | causa reale fra le ipotesi stampate · attive | **21/21 · 21/21** |
 | causa reale col **metro stretto** | **21/21** |
 | **causa reale in prima riga** | **18/21** |
-| sintomo non riconosciuto | 0 (+2 lacune dichiarate) |
+| sintomo non riconosciuto | 0 (+1 lacuna dichiarata) |
 | casi conclusi con la misura | 11/21 (su 14 che la prescrivono) |
-| verifica giusta (il passo è quello prescritto) | **11/18** |
+| verifica giusta (il passo è quello prescritto) | **12/18** |
 | precedente riusato · in testa · perso | **18/21 · 18/21 · 0** |
 | precedente sbagliato | 0 |
 | esame 48 casi: causa corretta | **34/48** (it **21/21**) |
@@ -1068,6 +1068,97 @@ citerebbe un'ipotesi che nel frattempo è stata assorbita.
 **Resta aperto**: le altre tre relazioni (`contatto_resistivo →
 surriscaldamento`, `sovraccarico → surriscaldamento`) non sono esercitate da
 nessun caso del corpus — vengono dalla fisica, non da una misura.
+
+---
+
+### Il corto-ciclo della caldaia — la prima lacuna colmata da Romeo (13/10)
+
+Il fenomeno non esisteva. Fra le 9 chiavi di esperienza del simulatore non
+c'era la caldaia che **si accende e si rispegne**, e `riconosciSintomo`
+tornava `null` di proposito: mapparla su `caldaia_non_accende` avrebbe dato
+cinque cause di mancata accensione — elettrodo, valvola gas, pressione,
+scheda, ventilatore — con probabilità alte su una caldaia che si accende
+benissimo. Era **peggio del silenzio**, e il silenzio veniva dichiarato
+(`sintomo_non_riconosciuto`, `SINTOMI_SENZA_CHIAVE`).
+
+**La conoscenza l'ha data Romeo**, ed è la catena che ROCCO ora sa:
+
+```
+condensatore del circolatore degradato
+→ coppia di spunto insufficiente: il rotore fatica o resta fermo e ronza
+→ portata ridotta
+→ la mandata sale troppo rapidamente
+→ il bruciatore spegne
+→ corto-ciclo
+```
+
+La sua richiesta precisa: *"questa è una causa concreta e distinta, non va
+nascosta dentro il generico «circolatore guasto»"*. Un circolatore che non
+parte **affatto** è un altro guasto — quello la banca lo aveva. Questo
+**parte male**, e non c'era in nessuna riga delle fonti.
+
+**Due posti, due nature:**
+- `knowledge/components.json` → `pompa-circolatore`: la causa nuova
+  (*"portata ridotta o nulla con il motore alimentato: condensatore
+  degradato…"*) più le tre verifiche che la procedura non aveva — ascoltare
+  il ronzio, provare albero e rotore a mano, e la **controprova** dopo la
+  sostituzione. Le altre tre che Romeo prescrive c'erano già (capacità
+  contro targa, assorbimento con la pinza, alimentazione ai morsetti): la
+  conoscenza mancante era la **causa**, non le misure.
+- `rocco_v2/neural/neural_simulator.js` → la chiave `caldaia_corto_ciclo`
+  con quattro cause, ognuna con la sua provenienza dichiarata nel codice:
+  il condensatore è di Romeo (`pratica`); girante bloccata e aria nel
+  circuito vengono da `components.json`; la valvola deviatrice da
+  `valvola-motorizzata` — **non dal corpus**, perché FORUM-SPEC-005 è una
+  domanda d'esame e ROCCO non si addestra sulle sue risposte.
+
+**Le probabilità sono a pari merito, e non è pigrizia**: nessuna fonte
+dichiara una frequenza, e la regola del progetto è che non se ne inventa
+una. Con quattro cause uguali l'ordine lo decidono le altre chiavi del
+comparatore. Quando Romeo dirà quale vede più spesso, si scrive il suo
+numero con la sua firma.
+
+**L'ordine della riga di riconoscimento è la regola**: `caldaia_corto_ciclo`
+sta **dopo** `caldaia_non_accende`. Il corto-ciclo si riconosce dalla
+ripetizione, ma una caldaia che *"va in blocco ogni tanto"* ripete **e** si
+blocca, e quella è mancata accensione. Lasciando passare prima
+`non_parte`/`in_blocco`/`assente`, alla ripetizione arriva solo ciò che non
+è nessuna delle tre — una caldaia che parte davvero e si ferma. **Nessuna
+parola nuova nel vocabolario**: lo decide l'ordine.
+
+**Un difetto trovato provando, non dai numeri**: `"la caldaia non si accende
+più"` tornava `null`. Alla riga della caldaia mancava la classe `cessa` —
+`non_parte` copre "non parte" e "bloccata", non la cessazione. È la forma
+più comune con cui si racconta una caldaia morta, e nessuna delle 48 domande
+d'esame la dice così: il corpus non poteva mostrarlo.
+
+**L'etichetta del corpus era sbagliata, ed è stata corretta.**
+FORUM-SPEC-005 dichiarava `sintomo_atteso: "caldaia_non_accende"`
+contraddicendo la propria `causa_reale`: circolatore bloccato e valvola
+inceppata sono cause di **circolazione**, e quella caldaia si accende. Era
+un compromesso di quando la chiave non esisteva — si era scelto il parente
+più vicino. Due suite erano rosse per questo, non per ROCCO.
+
+| metrica | prima | dopo |
+|---|---|---|
+| **verifica giusta** (il passo è quello prescritto) | 11/18 | **12/18** |
+| fenomeni riconosciuti dal simulatore | 9 | **10** |
+| guasti noti nella banca | 370 | **371** |
+| lacune di tassonomia dichiarate | 1 | **0** |
+| tutto il resto del banco | — | **invariato, 0 regressioni** |
+
+Su FORUM-SPEC-005 il PROSSIMO PASSO è ora la verifica di Romeo: *"a pompa
+alimentata senti se ronza senza girare; a pompa disalimentata verifica che
+albero e rotore girino liberi; misura la capacità del condensatore e
+confrontala con la targa, e l'assorbimento con la pinza"*.
+
+**Resta aperto, e va guardato**: la **prima riga** che l'elettricista legge è
+ancora un guasto della banca di famiglia TERMICO (*"contatto relè interno
+usurato"*) e non una causa del corto-ciclo, perché la banca dichiara
+"Alta"/"Media" → 0.5/0.3 mentre le quattro cause nuove stanno a 0.25. La
+banca è cercata per **famiglia**, e dentro la famiglia le sue righe non
+sanno a quale fenomeno appartengono. Con l'ordine di frequenza di Romeo le
+righe giuste passano davanti.
 
 ---
 

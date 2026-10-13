@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generato_il": "2026-10-12",
+ "generato_il": "2026-10-13",
  "generato_da": "knowledge/build_dispositivi.js",
  "avvertenza": "File generato: non modificarlo a mano. Si corregge la fonte e si rigenera.",
  "fonti": {
@@ -3868,11 +3868,24 @@
   {
    "dispositivo_codice": "CMP-POMPA-CIRCOLATORE",
    "famiglia": "TERMICO",
-   "sintomo": "surriscalda e scatta",
-   "causa_probabile": "sovraccarico, fluido troppo caldo, mancata refrigerazione",
+   "sintomo": "portata ridotta o nulla con il motore alimentato",
+   "causa_probabile": "condensatore del circolatore degradato — coppia di spunto insufficiente, il rotore fatica a partire o resta fermo e ronza; la mandata sale in fretta e la caldaia va in corto-ciclo",
    "probabilita": "Media",
    "verifica": "4) Misurare corrente assorbita con pinza: confrontare con targa",
    "strumento": "pinza amperometrica",
+   "valore_atteso": "non specificato nella fonte",
+   "rischio": null,
+   "riferimento_norma": null,
+   "fonte": "components"
+  },
+  {
+   "dispositivo_codice": "CMP-POMPA-CIRCOLATORE",
+   "famiglia": "TERMICO",
+   "sintomo": "surriscalda e scatta",
+   "causa_probabile": "sovraccarico, fluido troppo caldo, mancata refrigerazione",
+   "probabilita": "Media",
+   "verifica": "5) Verificare senso di rotazione (freccia sul corpo) — invertire 2 fasi se errato",
+   "strumento": "non specificato nella fonte",
    "valore_atteso": "non specificato nella fonte",
    "rischio": null,
    "riferimento_norma": null,
@@ -8278,7 +8291,7 @@
  ],
  "copertura": {
   "dispositivi": 110,
-  "guasti": 370,
+  "guasti": 371,
   "misure_attese": 39,
   "famiglie": 37,
   "per_famiglia": {
@@ -8364,7 +8377,7 @@
    },
    "TERMICO": {
     "dispositivi": 13,
-    "guasti": 40,
+    "guasti": 41,
     "misure": 0
    },
    "UPS": {
@@ -8468,7 +8481,7 @@
     "misure": 2
    }
   },
-  "guasti_senza_valore_atteso": 327,
+  "guasti_senza_valore_atteso": 328,
   "guasti_senza_verifica": 0
  },
  "lacune": [
