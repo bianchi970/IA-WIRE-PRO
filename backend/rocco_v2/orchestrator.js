@@ -37,6 +37,7 @@ catch (e) { /* banca dispositivi non disponibile */ }
 var narrator = require("./narrator");
 var checkPhrasing = require("./check_phrasing");
 var formeCausa = require("./forme_causa");
+var formeSintomo = require("./forme_sintomo");
 var runtimeTrace = require("./runtime_trace");
 var memory = require("./memory");
 var contracts = require("./contracts");
@@ -2011,6 +2012,16 @@ function makeHypothesisComparator(cs) {
     return cache[k];
   }
 
+  var cacheCirc = {};
+  function circostanzaNominata(h) {
+    var nota = h && h.circostanza_nota;
+    if (!nota) return 0;
+    if (cacheCirc[nota] === undefined) {
+      cacheCirc[nota] = formeSintomo.stessaCircostanza(story, nota) ? 1 : 0;
+    }
+    return cacheCirc[nota];
+  }
+
   var cacheEco = {};
   function ridiceIlSintomo(h) {
     var k = s(h && h.label);
@@ -2064,6 +2075,30 @@ function makeHypothesisComparator(cs) {
     var ea = a.esperienza && typeof a.esperienza.somiglianza === "number" ? a.esperienza.somiglianza : 0;
     var eb = b.esperienza && typeof b.esperienza.somiglianza === "number" ? b.esperienza.somiglianza : 0;
     if (eb !== ea) return eb - ea;
+
+    // La circostanza: il cliente ha nominato l'evento che questa causa si
+    // porta dietro. *"Ho forato il muro"* contro *"dopo lavori, chiodi,
+    // tasselli"* — l'evento è nel racconto e la conoscenza lo dichiara.
+    //
+    // È la prima domanda di un elettricista, e ROCCO non la faceva: sui
+    // casi dove nessun'altra chiave discrimina decideva `probabilita`, cioè
+    // un a priori generico. Su FORUM-IT-003 (il muro forato) e
+    // FORUM-SPEC-004 (i lavori sul palo) la prima riga era *"protezione a
+    // monte scattata"* — la causa più frequente di `niente_tensione` in
+    // generale, e nessuna delle due storie l'ha nominata.
+    //
+    // Sta SOPRA `spiega` e sotto il precedente verificato: `spiega` è un
+    // **condizionale** — *se ci fosse dell'acqua, spiegherebbe la
+    // dispersione* — e per questo ha bisogno del freno delle prove, mentre
+    // l'evento è un **fatto che il cliente dichiara**. E sta sotto
+    // l'esperienza perché un caso chiuso su un impianto vero conta più di
+    // una coincidenza di circostanza.
+    //
+    // Nessun freno serve: la chiave è inerte dove il racconto non nomina
+    // nessun evento, e lo è **per costruzione** — non per fortuna.
+    var qa = circostanzaNominata(a);
+    var qb = circostanzaNominata(b);
+    if (qb !== qa) return qb - qa;
 
     // L'ipotesi che ne spiega un'altra spiega **più fatti dello stesso
     // caso**: su FORUM-IT-010 il fusibile aperto rende conto anche della
@@ -2298,7 +2333,7 @@ function fondiRipetizioni(cs) {
     // riferimento normativo. Accodandole tutte, sotto una sola ipotesi si
     // leggevano tre "Valore atteso" e due probabilità diverse. Una per tipo.
     arr(h.catena).forEach(function(r) {
-      var tipo = String(r).match(/^(valore atteso|simulatore causale|riferimento|guasto noto)/i);
+      var tipo = String(r).match(/^(valore atteso|simulatore causale|riferimento|guasto noto|coerente con il racconto)/i);
       if (tipo) {
         var gia = resta.catena.some(function(x) {
           return new RegExp("^" + tipo[1], "i").test(String(x));
@@ -2314,6 +2349,13 @@ function fondiRipetizioni(cs) {
       if (resta.supporting_evidence.indexOf(v) < 0) resta.supporting_evidence.push(v);
     });
     if (h.esperienza && !resta.esperienza) resta.esperienza = h.esperienza;
+    // La circostanza dichiarata segue la stessa regola dell'esperienza: la
+    // fusione dice che le due righe parlano della **stessa causa**, e
+    // l'evento che quella causa si porta dietro appartiene alla causa, non
+    // alla formulazione che è sopravvissuta.
+    if (h.circostanza_nota && !resta.circostanza_nota) {
+      resta.circostanza_nota = h.circostanza_nota;
+    }
 
     var fr = formeCausa.frammento(h.label, resta.label);
     if (fr && resta.fusi < MAX_FRAMMENTI && resta.label.length < MAX_LUNGHEZZA) {
@@ -2396,6 +2438,30 @@ function scriviCatene(cs) {
       causa.catena.push(riga);
       quante++;
     });
+  });
+  return quante;
+}
+
+// La circostanza che ha deciso l'ordine va **detta**, non solo usata.
+//
+// La chiave `circostanzaNominata` mette in prima riga una causa perché il
+// cliente ha nominato l'evento che quella causa si porta dietro. Senza
+// questa riga l'elettricista legge la prima ipotesi e non sa perché sia
+// prima — e su FORUM-SPEC-004 non lo poteva nemmeno indovinare, perché la
+// catena non nominava i lavori. Stessa dottrina di `scriviCatene`: una
+// chiave che riordina si dichiara in chiaro.
+function scriviCircostanze(cs) {
+  var quante = 0;
+  attiveConEtichetta(cs).forEach(function(h) {
+    if (!h.circostanza_nota) return;
+    var comuni = formeSintomo.circostanzeInComune(s(cs.problem_summary), h.circostanza_nota);
+    if (!comuni.length) return;
+    var riga = "Coerente con il racconto: " + comuni.map(function(k) {
+      return formeSintomo.etichettaCircostanza(k);
+    }).join(", ");
+    if (h.catena.indexOf(riga) >= 0) return;
+    h.catena.push(riga);
+    quante++;
   });
   return quante;
 }
@@ -2776,6 +2842,13 @@ function createOrchestrator(options) {
                   ["Simulatore causale: probabilità " + Math.round(ip.probabilita * 100) + "%"]
                 );
                 hSim.probabilita = typeof ip.probabilita === "number" ? ip.probabilita : null;
+                // La circostanza in cui quella causa si presenta: il
+                // simulatore la dichiara, e fino a qui veniva buttata.
+                // Non è una previsione e non è una misura — è il campo con
+                // cui il comparatore riconosce che il cliente ha nominato
+                // l'evento che questa causa si porta dietro. Vedi
+                // `forme_sintomo.CIRCOSTANZE`.
+                hSim.circostanza_nota = ip.tempo_tipico || null;
                 cs.hypotheses.push(hSim);
               }
             });
@@ -3295,6 +3368,11 @@ function createOrchestrator(options) {
       // a fusione fatta, così non si cita una riga che non esiste più.
       var catene = scriviCatene(cs);
       if (catene) runtimeTrace.record(cs, "catene_dichiarate", { quante: catene });
+
+      // Anche la circostanza si scrive a fusione fatta: l'evento appartiene
+      // alla causa, e la fusione lo consegna all'etichetta che resta.
+      var circ = scriviCircostanze(cs);
+      if (circ) runtimeTrace.record(cs, "circostanze_dichiarate", { quante: circ });
 
       // Sincronizza formato legacy
       cs.hypotheses_active = cs.hypotheses.filter(function(h) { return h.status === "active"; })

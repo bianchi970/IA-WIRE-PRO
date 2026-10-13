@@ -548,22 +548,27 @@ blocco: senza una pagella stabile non si vede né un miglioramento né una
 regressione, e con 21 casi il rischio non è sbagliare una regola — è tararla
 su 21 esempi senza accorgersene.
 
-**Linea di base (2026-10-11, deterministica — ROCCO da solo, senza provider):**
+**Linea di base (2026-10-13, deterministica — ROCCO da solo, senza provider).**
+È la pagella corrente: `npm run bench` esce ≠ 0 se una di queste scende.
 
 | metrica | valore |
 |---|---|
 | componenti inesistenti | 0 |
 | ipotesi fuori contesto stampate | 0 |
-| certezze senza misura | 0 |
-| conferme fuori bersaglio | 0 |
+| ipotesi che ridicono una riga già stampata | 1 |
+| certezze senza misura · conferme fuori bersaglio | 0 · 0 |
+| chiusure non dovute | 0 |
 | contesto multi-turn perso | 0 |
-| causa reale fra le ipotesi stampate | **15/21** |
-| causa reale fra le attive | **16/21** |
-| casi conclusi con la misura | 9/21 (su 13 che la prescrivono) |
-| precedente riusato · in testa | **17/21 · 17/21** |
-| esperienza persa | 0 |
-| esame 48 casi: causa corretta | **28/48** |
-| esame 48 casi: verifica proposta | **45/48** |
+| causa reale fra le ipotesi stampate · attive | **21/21 · 21/21** |
+| causa reale col **metro stretto** | **21/21** |
+| **causa reale in prima riga** | **18/21** |
+| sintomo non riconosciuto | 0 (+2 lacune dichiarate) |
+| casi conclusi con la misura | 11/21 (su 14 che la prescrivono) |
+| verifica giusta (il passo è quello prescritto) | **11/18** |
+| precedente riusato · in testa · perso | **18/21 · 18/21 · 0** |
+| precedente sbagliato | 0 |
+| esame 48 casi: causa corretta | **34/48** (it **21/21**) |
+| esame 48 casi: verifica proposta | **48/48** |
 
 **Si alzano quando una misura le supera, non si abbassano per far passare
 una modifica.** Se una scende è una regressione: va spiegata.
@@ -1063,6 +1068,114 @@ citerebbe un'ipotesi che nel frattempo è stata assorbita.
 **Resta aperto**: le altre tre relazioni (`contatto_resistivo →
 surriscaldamento`, `sovraccarico → surriscaldamento`) non sono esercitate da
 nessun caso del corpus — vengono dalla fisica, non da una misura.
+
+---
+
+### La circostanza — "cosa è successo prima" era scritto e nessuno lo leggeva (13/10)
+
+La prima domanda di un elettricista è *«cosa è cambiato?»*, e ROCCO non la
+faceva. Su **FORUM-IT-003** — *"Ho forato il muro per appendere un quadro e
+adesso non funziona più la presa del soggiorno"* — la prima riga della
+risposta era **"protezione a monte scattata"**; su **FORUM-SPEC-004** —
+*"Dopo che l'ENEL ha fatto i lavori sul palo…"* — la stessa. È la causa più
+frequente di `niente_tensione` **in generale** (p = 0.35), e nessuna delle
+due storie l'ha nominata: vinceva perché nessun'altra chiave discriminava e
+l'ultima parola restava a `probabilita`, che è un a priori.
+
+**La conoscenza c'era.** Le 41 cause di `neural_simulator.ESPERIENZA`
+portano ognuna un `tempo_tipico`, e tre dichiarano un **evento**: *"dopo
+lavori, chiodi, tasselli"* (conduttore interrotto), *"dopo lavori recenti"*,
+*"dopo manutenzione o temporale"*. Quel campo viaggia intatto fino
+all'orchestratore (`generaIpotesi` lo copia) e al passo 5c-bis veniva
+**buttato**: il ventiduesimo *dato calcolato e mai letto* di questo repo, e
+la variante in cui il dato arriva fino al consumatore e il consumatore lo
+ignora.
+
+**Misurato prima di scrivere la regola, e le prime due letture sono state
+scartate.** Metro esterno: la `causa_reale` del corpus.
+
+| lettura di `tempo_tipico` | scatti | giuste | precisione |
+|---|---|---|---|
+| tutte le parole distintive del campo | 21 | 10 | **48%** |
+| le classi di COMPORTAMENTO in comune | 15 | 8 | **53%** |
+| **il solo evento che precede** | 2 | 2 | **100%** |
+
+Testa o croce, come la vecchia chiave dei precedenti — e la ragione è che
+`tempo_tipico` fa **tre mestieri in un campo**: l'evento che precede ("dopo
+lavori"), il segno concomitante ("luci deboli o che lampeggiano", "ronza ma
+non gira") e la tempistica pura, che nel racconto non si vede ("improvviso",
+"peggiora nel tempo"). Letto a parole i falsi positivi venivano dalle parole
+di servizio: *"scatta anche **senza** carichi"* sbagliava da sola quattro
+casi. **Si legge solo l'evento**, che è l'unica delle tre nature che il
+cliente dichiara come un fatto.
+
+`forme_sintomo.CIRCOSTANZE` — una **terza natura** accanto a OGGETTO ×
+COMPORTAMENTO, nello stesso file e con lo stesso meccanismo di
+`stessoSintomo`: due classi (`lavori`, `temporale`), e l'evento deve stare
+nelle **due parti** — la conoscenza lo dichiara e il cliente l'ha detto.
+Per questo non premia la tautologia già scartata tre volte: `tempo_tipico`
+non è l'etichetta dell'ipotesi, è un campo di conoscenza scritto a parte.
+
+**Il conteggio nelle fonti ne ha tenute fuori tre che sembravano ovvie**, ed
+è il metodo che ha funzionato: `sostitui` (94 volte in `dispositivi.json`, 39
+nei pattern) e `installa` (16 e 22) sono le parole dei **rimedi**;
+`intervent` (12) è l'*intervento della protezione*, cioè uno scatto.
+Prenderle avrebbe fatto scattare la circostanza su mezza banca. E
+`\blavori\b` al plurale, non `lavor`: "i lavori" sono quelli sull'impianto,
+"lavoro" è il mestiere di chi scrive e "lavora" è la macchina che funziona —
+la stessa cautela dei confini di parola che qui è già costata `scalda` dentro
+"scaldabagno".
+
+**Nel comparatore sta sopra `spiega` e sotto il precedente verificato.**
+`spiega` è un **condizionale** (*se ci fosse dell'acqua, spiegherebbe la
+dispersione*) e per questo ha bisogno del freno delle prove; l'evento è un
+**fatto che il cliente dichiara**, e non ha bisogno di freno. Sotto
+l'esperienza perché un caso chiuso su un impianto vero conta più di una
+coincidenza di circostanza. **L'ablazione non si può fare su questo corpus,
+e il perché è un reperto**: sui due casi che la esercitano nessuna ipotesi ha
+`spiega` né `esperienza`, quindi le due posizioni danno lo stesso numero —
+la collocazione è ragionata, non misurata, ed è dichiarata così.
+
+**E si dichiara in chiaro.** Una chiave che riordina va detta, come
+`scriviCatene` dice la catena: sotto l'ipotesi in testa compare *"Coerente
+con il racconto: un intervento recente sull'impianto o nel muro"*. Si cita
+la **classe** e non il campo grezzo, perché su SPEC-004 stampare *"dopo
+lavori, chiodi, tasselli"* nominerebbe chiodi e tasselli che nessuno ha
+visto — stessa ragione per cui `lexicon.js` traduce gli slug invece di
+stamparli.
+
+| metrica | prima | dopo |
+|---|---|---|
+| **causa vera in testa** | 16/21 | **18/21** |
+| prima riga di IT-003 e SPEC-004 | *"protezione a monte scattata"* | *"conduttore interrotto"* |
+| tutte le altre metriche del banco | — | **invariate, 0 regressioni** |
+
+**Il corpus la esercita su 2 casi su 21, ed è poco: dichiarato.** Come KR-14,
+questa forma nasce da casi veri e non da una statistica. Vale perché le frasi
+d'innesco sono quelle vere del cliente, perché il bersaglio è strettissimo —
+3 cause su 41 — e perché **dove il racconto non nomina nessun evento la
+chiave è inerte per costruzione**, non per fortuna: è la ragione per cui non
+poteva fare danno sulle altre 19.
+
+**Metà guadagno, e va detto quale.** Su IT-003 la prima riga è ora la causa
+vera (*"conduttore tranciato dal tassello"*) e il prossimo passo è la prova
+di continuità che il caso prescrive. Su SPEC-004 la causa vera è *"neutro
+interrotto"* e ROCCO dice *"conduttore interrotto"*: il neutro **è** un
+conduttore, quindi il metro lo accetta anche nella versione stretta, ma
+l'ipotesi specifica resta in fondo (p = 0.05, e il suo `tempo_tipico` —
+"luci deboli o che lampeggiano" — è smentito dal racconto, che dice che le
+luci funzionano). `verifica_giusta` su quel caso **non si muove**, e resta un
+aperto.
+
+**Resta aperto**: `temporale` non è esercitata da nessun caso del corpus —
+viene dalla conoscenza del simulatore, non da una misura. E la negazione non
+copre *"non ho fatto lavori"*: `PAROLE_NEGANTI` ha "non ha" e non "non ho",
+difetto del modulo condiviso che tocca tre consumatori e va misurato a parte.
+
+Test: `forme_sintomo.test.js` §7 — 80 asserzioni in tutto (erano 60), nelle
+due direzioni, più i tre falsi positivi del conteggio (`sostituito`,
+`interviene`, `installato`) e due numeri che diventano rossi se qualcuno
+svuota il vocabolario: 2 casi su 48 e 3 cause su 41.
 
 ---
 

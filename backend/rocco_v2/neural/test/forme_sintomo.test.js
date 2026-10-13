@@ -304,6 +304,93 @@ check("la firma dichiara le due nature separate",
   check("richiamo migliore della chiave scartata (13%)", richiamo > 0.13);
 })();
 
+// ─── §7 Le circostanze: l'evento che precede il guasto ────────────────
+//
+// La terza natura del racconto. Due direzioni, come per le altre: le frasi
+// vere dei clienti che devono scattare, e quelle che non devono — perché
+// qui il falso positivo non costa una riga in più, costa una **prima riga**:
+// la chiave `circostanzaNominata` del comparatore porta in testa la causa
+// che dichiara quell'evento.
+console.log("\n§7 — le circostanze (l'evento che precede)");
+
+// Le due frasi vere del corpus, e sono le sole due su 48 domande.
+check("il muro forato è un intervento (FORUM-IT-003)",
+  forme.circostanze("Ho forato il muro per appendere un quadro e adesso non funziona piu la presa").indexOf("lavori") >= 0);
+check("i lavori sul palo sono un intervento (FORUM-SPEC-004)",
+  forme.circostanze("Dopo che l ENEL ha fatto i lavori sul palo, la lavatrice ha smesso di funzionare").indexOf("lavori") >= 0);
+check("il tassello e il trapano pure",
+  forme.circostanze("ho messo un tassello col trapano").indexOf("lavori") >= 0);
+check("il temporale è una circostanza a sé",
+  forme.circostanze("dopo il temporale di ieri non produce piu").indexOf("temporale") >= 0);
+check("e il fulmine con lui",
+  forme.circostanze("un fulmine è caduto vicino a casa").indexOf("temporale") >= 0);
+
+// I falsi positivi, e sono i tre che il conteggio nelle fonti ha tenuto
+// fuori: `sostitui` (94 volte in dispositivi.json) e `installa` sono le
+// parole dei rimedi, `intervent` è l'intervento della protezione.
+check("sostituire un componente non è una circostanza",
+  forme.circostanze("ho sostituito la lampadina e continua uguale").length === 0);
+check("l'intervento della protezione non è un intervento sull'impianto",
+  forme.circostanze("il differenziale interviene ogni mattina").length === 0);
+check("installare non basta",
+  forme.circostanze("l impianto è installato a norma").length === 0);
+check("la macchina che lavora non sono i lavori",
+  forme.circostanze("la lavatrice mentre lavora fa saltare il salvavita").length === 0);
+check("il mio lavoro nemmeno",
+  forme.circostanze("torno dal lavoro e trovo tutto spento").length === 0);
+
+// Il confronto vuole l'evento nelle DUE parti: conoscenza e racconto.
+check("il racconto nomina l'evento che la conoscenza dichiara",
+  forme.stessaCircostanza("Ho forato il muro per appendere un quadro", "dopo lavori, chiodi, tasselli"));
+check("conoscenza senza evento: non scatta",
+  !forme.stessaCircostanza("Ho forato il muro", "improvviso"));
+check("racconto senza evento: non scatta",
+  !forme.stessaCircostanza("il differenziale scatta la mattina", "dopo lavori, chiodi, tasselli"));
+check("una nota vuota non scatta",
+  !forme.stessaCircostanza("Ho forato il muro", null));
+check("eventi diversi non si incontrano",
+  !forme.stessaCircostanza("dopo il temporale", "dopo lavori, chiodi, tasselli"));
+
+// Quel che si SCRIVE all'elettricista è la classe, non il campo grezzo:
+// su FORUM-SPEC-004 citare "dopo lavori, chiodi, tasselli" nominerebbe
+// chiodi e tasselli che nessuno ha visto.
+check("si cita la classe in comune, non la nota intera",
+  (function () {
+    var c = forme.circostanzeInComune("i lavori sul palo", "dopo lavori, chiodi, tasselli");
+    if (c.length !== 1) return false;
+    var t = forme.etichettaCircostanza(c[0]);
+    return t.indexOf("chiod") < 0 && t.indexOf("tassell") < 0 && t.length > 10;
+  })());
+
+// Quante volte il corpus la esercita: è poco, ed è dichiarato. Una forma
+// che scattasse su mezzo corpus sarebbe rumore, non una circostanza.
+(function () {
+  var quanti = 0;
+  corpus.CASI_FORUM.forEach(function (c) {
+    if (forme.circostanze(c.domanda).length) quanti++;
+  });
+  console.log("    casi del corpus che nominano un evento: " + quanti + " su " + corpus.CASI_FORUM.length);
+  check("la circostanza non scatta su mezzo corpus", quanti <= 6);
+  check("e il corpus la esercita almeno due volte", quanti >= 2);
+})();
+
+// Le cause del simulatore che dichiarano un evento: tre su 41. Se qualcuno
+// ne aggiunge una, questo numero lo dice; se il vocabolario smette di
+// riconoscerle, va a zero e il test diventa rosso.
+(function () {
+  var sim = require("../neural_simulator.js");
+  var tot = 0, conEvento = 0;
+  Object.keys(sim.ESPERIENZA).forEach(function (k) {
+    sim.ESPERIENZA[k].forEach(function (c) {
+      tot++;
+      if (forme.circostanze(c.tempo_tipico).length) conEvento++;
+    });
+  });
+  console.log("    cause del simulatore che dichiarano un evento: " + conEvento + " su " + tot);
+  check("qualche causa dichiara un evento", conEvento >= 3);
+  check("ma non tutte — sarebbe un campo svuotato di senso", conEvento < tot / 3);
+})();
+
 console.log("\n============================================================");
 console.log("FORME SINTOMO: " + pass + " passed, " + fail + " failed");
 console.log("============================================================");

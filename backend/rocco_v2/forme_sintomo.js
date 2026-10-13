@@ -176,6 +176,74 @@ var OGGETTI = {
   impianto: /tensione|corrente|impianto|circuito|luce|luci|presa|prese|elettrodomestic/
 };
 
+// ── LE CIRCOSTANZE — che cosa è successo prima ────────────────────────
+//
+// Una terza natura, e non è né un oggetto né un comportamento: l'**evento
+// che precede il guasto**. "Ho forato il muro", "dopo che l'ENEL ha fatto i
+// lavori sul palo". Non dice che apparecchio è né che cosa fa — dice
+// perché è cominciato, ed è la prima cosa che un elettricista chiede.
+//
+// **La conoscenza c'era e nessuno la leggeva.** Le 41 cause del simulatore
+// portano ognuna un campo `tempo_tipico`, e tre di loro dichiarano un
+// evento: *"dopo lavori, chiodi, tasselli"* (conduttore interrotto),
+// *"dopo lavori recenti"*, *"dopo manutenzione o temporale"*. Quel campo
+// arriva intatto fino all'orchestratore e lì veniva buttato: il
+// ventiduesimo dato calcolato e mai letto di questo repo.
+//
+// **Perché solo l'evento, e non tutto `tempo_tipico`.** Misurato sui 21
+// casi italiani, con metro esterno la `causa_reale` del corpus:
+//
+//   lettura di `tempo_tipico`              scatti  giuste  precisione
+//   tutte le parole distintive del campo     21      10       48%
+//   le classi di COMPORTAMENTO in comune     15       8       53%
+//
+// Testa o croce, come la vecchia chiave dei precedenti. La ragione è che
+// `tempo_tipico` fa **tre mestieri in un campo**: l'evento che precede
+// ("dopo lavori"), il segno concomitante ("luci deboli o che lampeggiano",
+// "ronza ma non gira") e la tempistica pura, che nel racconto non si vede
+// ("improvviso", "peggiora nel tempo"). Letto a parole, i falsi positivi
+// vengono dalle parole di servizio: *"scatta anche **senza** carichi"*
+// sbagliava da sola quattro casi. Qui si legge **solo** l'evento, che è
+// l'unica delle tre nature che il cliente dichiara come un fatto.
+//
+// **Da dove vengono le parole**, contate nelle fonti prima di scriverle —
+// e il conteggio ne ha tenute fuori tre che sembravano ovvie: `sostitui`
+// (94 volte in `dispositivi.json`, 39 nei pattern) e `installa` (16 e 22)
+// sono le parole dei **rimedi**, non degli eventi; `intervent` (12) è
+// l'*intervento della protezione*, cioè uno scatto. Prenderle avrebbe
+// fatto scattare la circostanza su mezza banca.
+//
+// `\blavori\b` al plurale e non `lavor`: in italiano "i lavori" sono quelli
+// sull'impianto o sulla strada, mentre "lavoro" è quasi sempre il mestiere
+// di chi scrive e "lavora" è la macchina che funziona. È la stessa cautela
+// dei confini di parola che in questo file è già costata `scalda` dentro
+// "scaldabagno".
+//
+// Il corpus la esercita su **2 casi su 21** (FORUM-IT-003 e FORUM-SPEC-004),
+// ed è poco: come KR-14, questa forma nasce da casi veri e non da una
+// statistica. Vale perché le frasi d'innesco sono quelle vere del cliente,
+// perché il bersaglio è strettissimo — tre cause su 41 dichiarano un
+// evento — e perché dove il racconto non nomina nessun evento la chiave è
+// **inerte per costruzione**, non per fortuna.
+var CIRCOSTANZE = {
+  // Qualcuno ha messo le mani nell'impianto o nel muro, poco prima.
+  lavori: /\blavori\b|forat|forar|\bfora\b|trapan|chiod|tassell|\bmuro\b|manutenzion|ristruttur/,
+  // Il temporale: la sovratensione di origine atmosferica.
+  temporale: /temporal|fulmin|scarica atmosferic/
+};
+
+// Come si dice la circostanza all'elettricista. Serve perché la riga va
+// **scritta** nel referto, e il campo grezzo della conoscenza elenca tre
+// cose di cui il cliente ne ha detta una: su FORUM-SPEC-004 — i lavori sul
+// palo — citare *"dopo lavori, chiodi, tasselli"* nomina chiodi e tasselli
+// che nessuno ha visto. Si cita la **classe**, cioè quel che le due parti
+// hanno davvero in comune. Stessa ragione per cui `lexicon.js` traduce gli
+// slug invece di stamparli.
+var ETICHETTE_CIRCOSTANZA = {
+  lavori: "un intervento recente sull'impianto o nel muro",
+  temporale: "un temporale"
+};
+
 // La negazione: un marcatore di comportamento dentro una negazione non
 // afferma niente. Su FORUM-SPEC-003 — "i pannelli sembrano ok, **nessun
 // errore** sull'inverter" — la parola "errore" faceva classificare il
@@ -222,6 +290,41 @@ function haComportamento(testo, classe) {
 function haOggetto(testo, classe) {
   var re = OGGETTI[classe];
   return !!re && negazione.hasUnnegatedMatch(normalizza(testo), re);
+}
+
+/** Le classi di circostanza dichiarate (non negate) nel testo. */
+function circostanze(testo) {
+  var t = normalizza(testo);
+  var out = [];
+  Object.keys(CIRCOSTANZE).forEach(function (k) {
+    if (negazione.hasUnnegatedMatch(t, CIRCOSTANZE[k])) out.push(k);
+  });
+  return out;
+}
+
+// Il racconto nomina un evento che questa conoscenza dichiara come proprio?
+// `nota` è il `tempo_tipico` della causa, `racconto` sono le parole del
+// cliente: serve che l'evento stia nelle **due** — la conoscenza lo
+// dichiara e il cliente l'ha detto. Una sola delle due non basta, ed è il
+// motivo per cui questa chiave non premia la tautologia: `nota` non è
+// l'etichetta dell'ipotesi, è un campo di conoscenza scritto a parte.
+function stessaCircostanza(racconto, nota) {
+  if (!nota) return false;
+  return inComune(circostanze(racconto), circostanze(nota));
+}
+
+/** Le classi di circostanza che racconto e conoscenza hanno in comune. */
+function circostanzeInComune(racconto, nota) {
+  if (!nota) return [];
+  var dellaNota = circostanze(nota);
+  return circostanze(racconto).filter(function (k) {
+    return dellaNota.indexOf(k) >= 0;
+  });
+}
+
+/** Come si dice una classe di circostanza all'elettricista. */
+function etichettaCircostanza(classe) {
+  return ETICHETTE_CIRCOSTANZA[classe] || classe;
 }
 
 // ── La firma del sintomo: due racconti parlano della stessa cosa? ──────
@@ -282,11 +385,17 @@ function stessoSintomo(testoA, testoB) {
 module.exports = {
   COMPORTAMENTI: COMPORTAMENTI,
   OGGETTI: OGGETTI,
+  CIRCOSTANZE: CIRCOSTANZE,
+  ETICHETTE_CIRCOSTANZA: ETICHETTE_CIRCOSTANZA,
   normalizza: normalizza,
   comportamenti: comportamenti,
   oggetti: oggetti,
   haComportamento: haComportamento,
   haOggetto: haOggetto,
+  circostanze: circostanze,
+  stessaCircostanza: stessaCircostanza,
+  circostanzeInComune: circostanzeInComune,
+  etichettaCircostanza: etichettaCircostanza,
   firma: firma,
   stessoSintomo: stessoSintomo
 };

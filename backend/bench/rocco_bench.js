@@ -271,7 +271,14 @@ var BASELINE = {
   // Su FORUM-IT-007 la prima riga era "inverter in errore o spento" per un
   // cliente che aveva appena scritto che l'inverter segna errore ISO. Ora è
   // "umidità in connettore MC4", che è la causa reale del caso.
-  causa_vera_in_testa:        { valore: 16, verso: "max" },   // su 21
+  // ALZATA 16 → 18 il 13/10: la **circostanza**. Su FORUM-IT-003 ("ho
+  // forato il muro") e FORUM-SPEC-004 ("dopo i lavori sul palo") la prima
+  // riga era "protezione a monte scattata" — la causa più frequente di
+  // `niente_tensione` in generale, nominata da nessuna delle due storie.
+  // Il simulatore dichiara per ogni causa la circostanza in cui si
+  // presenta (`tempo_tipico`) e nessuno la leggeva. Ora in testa c'è
+  // "conduttore interrotto". Vedi `forme_sintomo.CIRCOSTANZE`.
+  causa_vera_in_testa:        { valore: 18, verso: "max" },   // su 21
   //
   // Il controllo di onestà sul numero sopra: quante volte il credito sta su
   // una parola che il cliente **non** aveva già detto. 20 su 21 — l'unica
